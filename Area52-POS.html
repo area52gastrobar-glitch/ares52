@@ -537,7 +537,7 @@ function renderMesas(){
       +';background:'+c+'18;border-color:'+c
       +';box-shadow:'+(mesaActiva&&mesaActiva.id===m.id?'0 0 20px '+c+'99':'0 0 6px '+c+'33')
       +';z-index:3"'
-      +' onclick="clickMesa('+m.id+')" ondblclick="dblMesa('+m.id+')" data-mesaid="'+m.id+'">'
+      +' data-mesaid="'+m.id+'">'
       +'<div style="color:#fff;font-weight:800;font-size:11px;text-align:center;line-height:1.3;padding:0 4px;word-break:break-word">'
       +(m.nombre||('Mesa '+m.num))+'</div>'
       +'<div style="color:var(--muted);font-size:10px">👤'+m.cap+'</div>'
@@ -727,15 +727,25 @@ function bindMapaEvents(){
   var el=document.getElementById('mapa-wrap');
   if(!el||el._bound)return;
   el._bound=true;
+
+  // Click delegation for mesa nodes (handles both mouse and touch)
+  el.addEventListener('click',function(e){
+    var mn=e.target.closest('.mesa-node');
+    if(!mn)return;
+    var mid=parseInt(mn.getAttribute('data-mesaid'));
+    if(modoEdicion){dblMesa(mid);return;}
+    clickMesa(mid);
+  });
+
   el.addEventListener('mousedown',function(e){
-    // Paredes drawing
+    // Paredes drawing - only on non-mesa background
     if(modoParedes){
       if(e.target.closest('.mesa-node')||e.target.closest('#paredes-ui'))return;
       var r=el.getBoundingClientRect();
       _paredDibujando={x1:e.clientX-r.left,y1:e.clientY-r.top,x2:e.clientX-r.left,y2:e.clientY-r.top};
       e.preventDefault();return;
     }
-    // Mesa drag (edit mode)
+    // Mesa drag (edit mode only)
     var mn=e.target.closest('.mesa-node');
     if(mn&&modoEdicion){
       var mid=parseInt(mn.getAttribute('data-mesaid'));
@@ -782,6 +792,30 @@ function bindMapaEvents(){
   el.addEventListener('mouseleave',function(){
     if(dragState){fbSet('mesas',mesasObj());dragState=null;}
     _paredDibujando=null;
+  });
+
+  // Touch support for mobile drag (edit mode)
+  el.addEventListener('touchstart',function(e){
+    var mn=e.target.closest('.mesa-node');
+    if(mn&&modoEdicion){
+      var t=e.touches[0];
+      var mid=parseInt(mn.getAttribute('data-mesaid'));
+      dragState={id:mid,sx:t.clientX,sy:t.clientY};
+    }
+  },{passive:true});
+  el.addEventListener('touchmove',function(e){
+    if(!dragState)return;
+    var t=e.touches[0];
+    var dx=t.clientX-dragState.sx,dy=t.clientY-dragState.sy;
+    dragState.sx=t.clientX;dragState.sy=t.clientY;
+    var m=mesas.find(function(m){return m.id===dragState.id;});
+    if(m){m.x=Math.max(0,m.x+dx);m.y=Math.max(0,m.y+dy);}
+    var node=document.getElementById('mn-'+dragState.id);
+    if(node&&m){node.style.left=m.x+'px';node.style.top=m.y+'px';}
+    e.preventDefault();
+  },{passive:false});
+  el.addEventListener('touchend',function(){
+    if(dragState){fbSet('mesas',mesasObj());dragState=null;}
   });
 }
 
