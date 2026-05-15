@@ -4,9 +4,44 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>AREA 52 — Gastro Bar POS</title>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// Load external scripts dynamically so app works even if they fail (file:// mode)
+function _loadScript(src, cb){
+  var s=document.createElement('script');
+  s.src=src;
+  s.onload=function(){cb(true);};
+  s.onerror=function(){console.warn('Could not load: '+src);cb(false);};
+  document.head.appendChild(s);
+}
+window._fbReady=false;
+window._xlsxReady=false;
+// Load XLSX
+_loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',function(ok){window._xlsxReady=ok;});
+// Load Firebase (chain: app then database)
+_loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',function(ok){
+  if(!ok){window._fbReady=false;return;}
+  _loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',function(ok2){
+    if(!ok2){window._fbReady=false;return;}
+    window._fbReady=true;
+    // Init firebase now that scripts are loaded
+    try{
+      var cfg={
+        apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",
+        authDomain:"area52bar-a36aa.firebaseapp.com",
+        databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",
+        projectId:"area52bar-a36aa",
+        storageBucket:"area52bar-a36aa.firebasestorage.app",
+        messagingSenderId:"79314921682",
+        appId:"1:79314921682:web:abfa44eefbd0df7441250b"
+      };
+      if(!firebase.apps.length) firebase.initializeApp(cfg);
+      window._db=firebase.database();
+      // If user is already logged in, start sync
+      if(window._usuarioActivoGlobal) iniciarSync();
+    }catch(e){console.warn('Firebase init failed:',e.message);}
+  });
+});
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -213,25 +248,9 @@ select.inp{cursor:pointer}
 
 <script>
 /* ═══════════════ FIREBASE ═══════════════ */
-var db = null;
-(function(){
-  function loadScript(src,cb){var s=document.createElement('script');s.src=src;s.onload=cb;s.onerror=cb;document.head.appendChild(s);}
-  // Already loaded via head scripts - just init
-  try{
-    var cfg={
-      apiKey:"AIzaSyPlaceholderKeyArea52Bar",
-      authDomain:"area52bar-a36aa.firebaseapp.com",
-      databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",
-      projectId:"area52bar-a36aa",
-      storageBucket:"area52bar-a36aa.appspot.com",
-      messagingSenderId:"000000000000",
-      appId:"1:000000000000:web:000000000000000000"
-    };
-    if(!firebase.apps.length) firebase.initializeApp(cfg);
-    db = firebase.database();
-  }catch(e){console.warn('Firebase offline mode:', e.message);}
-})();
-function ref(path){return db?db.ref(path):null;}
+// db is set by the dynamic loader in <head> once Firebase scripts load
+function getDb(){return window._db||null;}
+function ref(path){var d=getDb();return d?d.ref(path):null;}
 function fbSet(path,val){var r=ref(path);if(r)r.set(val);}
 function fbPush(path,val){var r=ref(path);if(r)r.push(val);}
 function fbOn(path,cb){var r=ref(path);if(r)r.on('value',function(s){cb(s.val());});return r;}
@@ -336,7 +355,15 @@ function totalGastosHoy(){return gastos.filter(function(g){return fmtDate(g.ts)=
 
 /* ═══════════════ SYNC ═══════════════ */
 function iniciarSync(){
-  if(!db){console.warn('Sin Firebase - modo local');return;}
+  if(!getDb()){
+    console.warn('Sin Firebase - modo local');
+    // Update sync indicator to show offline
+    var dot=document.getElementById('sync-dot');
+    if(dot){dot.style.background='#f5a623';dot.title='Modo local - sin sincronización';}
+    return;
+  }
+  var dot=document.getElementById('sync-dot');
+  if(dot){dot.style.background='#22c55e';dot.title='Conectado a Firebase';}
   fbOn('pedidos',function(v){
     pedidos=v||{};
     Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=[];});
@@ -417,6 +444,7 @@ function verificarPin(){
   if(!usuarioSelLogin){backToUsers();return;}
   if(pinBuffer===usuarioSelLogin.pin){
     usuarioActivo=usuarioSelLogin;
+  window._usuarioActivoGlobal=usuarioActivo;
     document.getElementById('login-screen').style.display='none';
     document.getElementById('header').style.display='flex';
     document.getElementById('tabs').style.display='flex';
@@ -433,7 +461,7 @@ function verificarPin(){
   }
 }
 function cerrarSesion(){
-  ['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos'].forEach(fbOff);
+  if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos'].forEach(fbOff);
   usuarioActivo=null;mesaActiva=null;tabActual='mesas';
   document.getElementById('header').style.display='none';
   document.getElementById('tabs').style.display='none';
@@ -1820,7 +1848,7 @@ function renderCaja(){
   var histCierres='<div class="card">'
     +'<div class="section-title">Historial de cierres anteriores</div>'
     +(cierres.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin cierres registrados</div>'
-      :[...cierres].reverse().map(function(c){
+      :cierres.slice().reverse().map(function(c){
         var uid=usuarios.find(function(u){return u.id===c.uid;});
         return'<div class="cierre-hist-item" onclick="verCierre(\''+c.id+'\')">'
           +'<div class="flex-between">'
@@ -2232,7 +2260,7 @@ function imprimirTicket(mesa,ped,total,fpId){
 
 /* ═══════════════ EXCEL ═══════════════ */
 function exportarExcel(){
-  if(!window.XLSX){alert('Espera un momento e intenta de nuevo.');return;}
+  if(!window.XLSX){alert('La librería Excel no está disponible. Verifica tu conexión a internet e intenta de nuevo.');return;}
   var X=window.XLSX,wb=X.utils.book_new();
   // Detalle ventas
   var det=[];
@@ -2299,6 +2327,7 @@ document.addEventListener('click',function(e){
 });
 
 /* ═══════════════ INIT ═══════════════ */
+
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',renderLogin);}else{renderLogin();}
 </script>
 </body>
