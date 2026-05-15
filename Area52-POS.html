@@ -725,15 +725,28 @@ function actualizarColorMesas(){
 /* ═══════════════ MAPA EVENTS ═══════════════ */
 function bindMapaEvents(){
   var el=document.getElementById('mapa-wrap');
-  if(!el||el._bound)return;
-  el._bound=true;
+  if(!el)return;
+  // Always remove old listeners by cloning the element
+  var newEl=el.cloneNode(true);
+  el.parentNode.replaceChild(newEl,el);
+  el=newEl;
 
-  // Click delegation for mesa nodes (handles both mouse and touch)
+  // TOUCH: primary method for mobile
+  el.addEventListener('touchend',function(e){
+    var mn=e.target.closest('.mesa-node');
+    if(!mn)return;
+    e.preventDefault();
+    var mid=parseInt(mn.getAttribute('data-mesaid'));
+    if(modoEdicion){abrirEditorMesa(mid);return;}
+    clickMesa(mid);
+  });
+
+  // CLICK: for desktop
   el.addEventListener('click',function(e){
     var mn=e.target.closest('.mesa-node');
     if(!mn)return;
     var mid=parseInt(mn.getAttribute('data-mesaid'));
-    if(modoEdicion){dblMesa(mid);return;}
+    if(modoEdicion){abrirEditorMesa(mid);return;}
     clickMesa(mid);
   });
 
