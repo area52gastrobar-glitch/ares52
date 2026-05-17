@@ -247,6 +247,30 @@ select.inp{cursor:pointer}
 <div id="content"></div>
 <div id="modal1" class="modal-bg" style="display:none"></div>
 <div id="modal2" class="modal-bg" style="display:none"></div>
+<div id="paredes-panel" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:200;background:#0d0d18;border:1px solid #38bdf844;border-radius:14px;padding:12px 14px;box-shadow:0 4px 24px #000a">
+  <div style="color:#38bdf8;font-weight:800;font-size:12px;margin-bottom:10px;letter-spacing:1px">✏️ MODO PAREDES — Clic y arrastra para trazar</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <span style="color:#888;font-size:11px">Color:</span>
+    <div class="pc" data-pcolor="#f5a623" style="width:22px;height:22px;border-radius:50%;background:#f5a623;cursor:pointer;border:2px solid transparent"></div>
+    <div class="pc" data-pcolor="#ef4444" style="width:22px;height:22px;border-radius:50%;background:#ef4444;cursor:pointer;border:2px solid transparent"></div>
+    <div class="pc" data-pcolor="#22c55e" style="width:22px;height:22px;border-radius:50%;background:#22c55e;cursor:pointer;border:2px solid transparent"></div>
+    <div class="pc" data-pcolor="#38bdf8" style="width:22px;height:22px;border-radius:50%;background:#38bdf8;cursor:pointer;border:2px solid transparent"></div>
+    <div class="pc" data-pcolor="#a855f7" style="width:22px;height:22px;border-radius:50%;background:#a855f7;cursor:pointer;border:2px solid transparent"></div>
+    <div class="pc" data-pcolor="#ffffff" style="width:22px;height:22px;border-radius:50%;background:#ffffff;cursor:pointer;border:2px solid transparent"></div>
+    <div class="pc" data-pcolor="#888888" style="width:22px;height:22px;border-radius:50%;background:#888888;cursor:pointer;border:2px solid transparent"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+    <span style="color:#888;font-size:11px">Grosor:</span>
+    <button class="pg" data-pgrosor="3" style="background:#1a1a2e;color:#888;border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer">3px</button>
+    <button class="pg" data-pgrosor="6" style="background:#1a1a2e;color:#888;border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer">6px</button>
+    <button class="pg" data-pgrosor="10" style="background:#38bdf8;color:#000;border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer">10px</button>
+    <button class="pg" data-pgrosor="16" style="background:#1a1a2e;color:#888;border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer">16px</button>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button id="btn-deshacer-pared" style="flex:1;background:#1a1a2e;color:#888;border:1px solid #333;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">↩ Deshacer</button>
+    <button id="btn-limpiar-pared" style="flex:1;background:#ef444422;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">🗑 Limpiar todo</button>
+  </div>
+</div>
 
 <script>
 /* ═══════════════ FIREBASE ═══════════════ */
@@ -585,19 +609,7 @@ function renderMesas(){
     paredesSvg='<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2">'+lines+'</svg>';
   }
 
-  var paredesUI=modoParedes?'<div style="position:absolute;bottom:42px;left:12px;z-index:10;background:#0d0d18ee;border:1px solid var(--border);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
-    +'<div style="color:#38bdf8;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase">🧱 Dibujar paredes</div>'
-    +'<div class="flex"><span style="color:var(--muted);font-size:11px">Color:</span>'
-    +['#f5a623','#ef4444','#22c55e','#38bdf8','#a855f7','#fff','#888'].map(function(c){
-      return '<div data-pcolor="'+c+'" style="width:22px;height:22px;border-radius:50%;background:'+c+';cursor:pointer;border:'+(c===_colorPared?'3px solid #fff':'2px solid transparent')+';flex-shrink:0"></div>';
-    }).join('')+'</div>'
-    +'<div class="flex"><span style="color:var(--muted);font-size:11px">Grosor:</span>'
-    +[3,6,10,16].map(function(g){return'<button data-pgrosor="'+g+'" style="background:'+(g===_grosorPared?'#38bdf8':'var(--card)')+';color:'+(g===_grosorPared?'#000':'var(--muted)')+';border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer">'+g+'px</button>';}).join('')+'</div>'
-    +'<div style="color:var(--muted);font-size:10px">Clic y arrastra para trazar</div>'
-    +'<div class="flex">'
-    +'<button data-pact="deshacer" style="flex:1;background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:5px;font-size:11px;font-weight:700;cursor:pointer">↩ Deshacer</button>'
-    +'<button data-pact="limpiar" style="flex:1;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:5px;font-size:11px;font-weight:700;cursor:pointer">🗑 Limpiar</button>'
-    +'</div></div>':'';
+  var paredesUI='';  // Panel moved outside mapa
 
   var leyenda='<div style="position:absolute;bottom:10px;right:14px;display:flex;gap:14px;z-index:4">'
     +[['#22c55e','Libre'],['#f5a623','Ocupada'],['#38bdf8','Activa']].map(function(x){
@@ -629,7 +641,7 @@ function renderMesas(){
     +svgBg+paredesSvg
     +'<div style="position:absolute;top:10px;left:14px;color:'+(zona?zona.color:'#fff')+';font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;opacity:.5;z-index:4">'+(zona?zona.emoji+' '+zona.label:'')+'</div>'
     +(modoEdicion?'<div style="position:absolute;top:8px;right:14px;background:#f5a62318;color:#f5a623;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid #f5a62333;z-index:5">Arrastra · Doble clic = editar</div>':'')
-    +mesaNodes+leyenda+paredesUI
+    +mesaNodes+leyenda
     +'</div>'
     +panelPedido+'</div>';
 }
@@ -869,19 +881,7 @@ function bindMapaEvents(){
     _paredDibujando=null;
   });
   el.addEventListener('click',function(e){
-    // Paredes UI controls
-    var pc=e.target.closest('[data-pcolor]');
-    if(pc){selColorP(pc.getAttribute('data-pcolor'));return;}
-    var pg=e.target.closest('[data-pgrosor]');
-    if(pg){selGrosorP(parseInt(pg.getAttribute('data-pgrosor')));return;}
-    var pa=e.target.closest('[data-pact]');
-    if(pa){
-      var act=pa.getAttribute('data-pact');
-      if(act==='deshacer')deshacerPared();
-      if(act==='limpiar')borrarParedes();
-      return;
-    }
-    // Mesa click
+    // Mesa click only - paredes handled by document listener
     if(modoParedes)return;
     var mn=e.target.closest('.mesa-node');
     if(!mn)return;
@@ -912,9 +912,31 @@ function dblMesa(id){if(!modoEdicion)return;abrirEditorMesa(id);}
 function cerrarPanel(){mesaActiva=null;render();}
 function cambiarZona(z){zonaActual=z;mesaActiva=null;render();}
 function toggleEdicion(){modoEdicion=!modoEdicion;modoParedes=false;mesaActiva=null;render();}
-function toggleParedes(){modoParedes=!modoParedes;modoEdicion=false;mesaActiva=null;render();}
-function selColorP(c){_colorPared=c;render();}
-function selGrosorP(g){_grosorPared=g;render();}
+function toggleParedes(){
+  modoParedes=!modoParedes;
+  modoEdicion=false;
+  mesaActiva=null;
+  var panel=document.getElementById('paredes-panel');
+  if(panel) panel.style.display=modoParedes?'block':'none';
+  actualizarParedesPanel();
+  render();
+}
+function actualizarParedesPanel(){
+  var panel=document.getElementById('paredes-panel');
+  if(!panel)return;
+  // Update selected color
+  panel.querySelectorAll('.pc').forEach(function(el){
+    el.style.border=el.getAttribute('data-pcolor')===_colorPared?'3px solid #fff':'2px solid transparent';
+  });
+  // Update selected grosor
+  panel.querySelectorAll('.pg').forEach(function(el){
+    var g=parseInt(el.getAttribute('data-pgrosor'));
+    el.style.background=g===_grosorPared?'#38bdf8':'#1a1a2e';
+    el.style.color=g===_grosorPared?'#000':'#888';
+  });
+}
+function selColorP(c){_colorPared=c;actualizarParedesPanel();}
+function selGrosorP(g){_grosorPared=g;actualizarParedesPanel();}
 function deshacerPared(){
   var k=zonaKey(zonaActual);
   var pa=paredesData[k];
@@ -2505,11 +2527,36 @@ document.addEventListener('click',function(e){
     var el=document.getElementById('ci-valor');
     if(el)el.value=qvBtn.getAttribute('data-qv');
   }
+  // Paredes UI controls - always active regardless of cloneNode
+  var pc=e.target.closest('[data-pcolor]');
+  if(pc){selColorP(pc.getAttribute('data-pcolor'));return;}
+  var pg=e.target.closest('[data-pgrosor]');
+  if(pg){selGrosorP(parseInt(pg.getAttribute('data-pgrosor')));return;}
+  var pa=e.target.closest('[data-pact]');
+  if(pa){
+    var act=pa.getAttribute('data-pact');
+    if(act==='deshacer')deshacerPared();
+    if(act==='limpiar')borrarParedes();
+    return;
+  }
 });
 
 /* ═══════════════ INIT ═══════════════ */
-
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',renderLogin);}else{renderLogin();}
+function initApp(){
+  // Wire paredes panel buttons ONCE at startup - they live in HTML body, never destroyed
+  var btnD=document.getElementById('btn-deshacer-pared');
+  var btnL=document.getElementById('btn-limpiar-pared');
+  if(btnD)btnD.onclick=function(){deshacerPared();};
+  if(btnL)btnL.onclick=function(){borrarParedes();};
+  document.querySelectorAll('.pc').forEach(function(el){
+    el.onclick=function(){selColorP(el.getAttribute('data-pcolor'));};
+  });
+  document.querySelectorAll('.pg').forEach(function(el){
+    el.onclick=function(){selGrosorP(parseInt(el.getAttribute('data-pgrosor')));};
+  });
+  renderLogin();
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initApp);}else{initApp();}
 </script>
 </body>
 </html>
