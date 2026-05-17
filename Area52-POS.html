@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
@@ -233,6 +233,8 @@ select.inp{cursor:pointer}
     <span id="sync-dot"></span><span style="color:var(--muted);font-size:10px">En vivo</span>
     <span class="tag" id="h-libres" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">— libres</span>
     <span class="tag" id="h-ocup" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333">— ocup.</span>
+    <span class="tag" id="h-cobrado" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">✅ $0</span>
+    <span class="tag" id="h-porcobrar" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333">⏳ $0</span>
     <span class="tag" id="h-total" style="background:#a855f718;color:#a855f7;border:1px solid #a855f733">💰 $0</span>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:99px;padding:5px 12px;display:flex;align-items:center;gap:8px">
       <span id="h-emoji" style="font-size:15px"></span>
@@ -516,9 +518,19 @@ function updateHeader(){
   if(!usuarioActivo)return;
   var lib=mesas.filter(function(m){return!(pedidos[m.id]&&pedidos[m.id].length>0);}).length;
   var ocp=mesas.length-lib;
+  // Cobrado en el turno
+  var cobrado=totalVentasHoy();
+  // Por cobrar: suma de pedidos activos en todas las mesas
+  var porCobrar=mesas.reduce(function(a,m){return a+totalPedido(m.id);},0);
+  var totalGen=cobrado+porCobrar;
   document.getElementById('h-libres').textContent=lib+' libres';
   document.getElementById('h-ocup').textContent=ocp+' ocup.';
-  document.getElementById('h-total').textContent='💰 '+fmt(totalVentasHoy());
+  var ec=document.getElementById('h-cobrado');
+  var ep=document.getElementById('h-porcobrar');
+  var et=document.getElementById('h-total');
+  if(ec)ec.textContent='✅ '+fmt(cobrado);
+  if(ep)ep.textContent='⏳ '+fmt(porCobrar);
+  if(et)et.textContent='💰 '+fmt(totalGen);
 }
 
 /* ═══════════════ MESAS ═══════════════ */
