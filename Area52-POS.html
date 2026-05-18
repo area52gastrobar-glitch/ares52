@@ -296,12 +296,12 @@ var FPAGO=[
   {id:'efectivo', label:'Efectivo',       color:'#22C55E',emoji:'💵'}
 ];
 var ROLES={
-  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','admin']},
-  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas']},
-  mesero:{label:'Mesero',       color:'#22c55e',tabs:['mesas','gastos']}
+  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','socios','admin']},
+  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','socios']},
+  mesero:{label:'Mesero',       color:'#22c55e',tabs:['mesas','gastos','socios']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
-  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',admin:'⚙️ Admin'};
+  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',socios:'🤝 Socios',admin:'⚙️ Admin'};
 var EMOJIS=['🍺','🍻','🥃','🍷','🥂','🍹','🥤','💧','🧀','🍗','🍟','🌭','🍕','🥗','☕','🎂','🫙','🧊','🥩','🍤'];
 var CATG_GASTOS=['Mercancía','Insumos','Servicios','Personal','Mantenimiento','Transporte','Otro'];
 
@@ -343,6 +343,9 @@ var cierres=[];      // [{fecha,ts,cajaInicial,efectivoFinal,ventas,gastos,porFP
 var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
+var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var _socioActivo='CARLOS';  // currently selected socio
+var _socCatFiltro='Todos';  // category filter in socios tab
 var ventaSinStock=false;  // admin toggle: allow selling without stock
 var combos=[];  // [{id,nombre,precio,emoji,ingredientes:[{prodId,cantidad}]}]
 var paredesData={antejardIn:[],piso1:[],piso2:[]};  // antejardIn = safe key for antejardín
@@ -421,6 +424,10 @@ function iniciarSync(){
   fbOn('cierres',function(v){cierres=v?Object.values(v):[];if(tabActual==='caja')render();});
   fbOn('cajaHoy',function(v){if(v)cajaHoy=v;if(tabActual==='caja')render();});
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
+  fbOn('consumoSocios',function(v){
+    consumoSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='socios')render();
+  });
 }
 
 /* ═══════════════ LOGIN ═══════════════ */
@@ -534,6 +541,7 @@ function render(){
   if(tabActual==='caja')      c.innerHTML=renderCaja();
   if(tabActual==='gastos')    c.innerHTML=renderGastos();
   if(tabActual==='ventas')    c.innerHTML=renderVentas();
+  if(tabActual==='socios')    c.innerHTML=renderSocios();
   if(tabActual==='admin')     c.innerHTML=renderAdmin();
   bindMapaEvents();
   setTimeout(bindComboEvents, 50);
@@ -1152,7 +1160,7 @@ function confirmarCobro(){
   };
   fbPush('ventas',venta);
   ped.forEach(function(it){
-    if(it.isCustom) return;  // no inventory to discount
+    if(it.isCustom) return;
     if(it.isCombo&&it.comboIngredientes){
       it.comboIngredientes.forEach(function(ing){
         var p=menu.find(function(m){return m.id===ing.prodId;});
@@ -1160,7 +1168,18 @@ function confirmarCobro(){
       });
     } else {
       var p=menu.find(function(m){return m.id===it.pid;});
-      if(p){var c=it.cubeta?it.qty*5:it.qty;p.stock=Math.max(0,p.stock-c);}
+      if(p){
+        var c=it.cubeta?it.qty*5:it.qty;
+        // Discount the product itself
+        p.stock=Math.max(0,p.stock-c);
+        // Also discount recipe ingredients if product has a recipe
+        if(p.receta&&p.receta.length){
+          p.receta.forEach(function(ri){
+            var ing=menu.find(function(m){return m.id==ri.pid;});
+            if(ing) ing.stock=Math.max(0,ing.stock-(ri.cantidad*c));
+          });
+        }
+      }
     }
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
@@ -1253,6 +1272,13 @@ function renderCarta(){
     var isNuevo=editandoProd==='nuevo';
     var p=isNuevo?{nombre:'',precio:'',cubeta:'',esCerveza:false,cat:'',emoji:'🍺',stock:'',und:'und'}:(menu.find(function(m){return m.id===editandoProd;})||{});
     var curEmoji=emojiSel||p.emoji||'🍺';
+  var _receta=(p&&p.receta)?p.receta:[];
+  var recetaRows=_receta.length
+    ?_receta.map(function(ri,rIdx){
+        var ing=menu.find(function(m){return m.id==ri.pid;});
+        return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'          +'<span style="font-size:16px">'+(ing?ing.emoji:'?')+'</span>'          +'<span style="flex:1;font-size:12px;font-weight:600">'+(ing?esc(ing.nombre):'Eliminado')+'</span>'          +'<span style="color:var(--muted);font-size:11px">×'+ri.cantidad+'</span>'          +'<button data-act="del-rec" data-ridx="'+rIdx+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px">✕</button>'          +'</div>';
+      }).join('')
+    :'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Sin ingredientes — producto simple</div>';
     var emojiButtons=EMOJIS.map(function(e,i){
       var sel=curEmoji===e;
       return'<button class="emj-btn" data-ei="'+i+'" style="font-size:22px;padding:4px;border:2px solid '+(sel?'#a855f7':'transparent')+';background:'+(sel?'#a855f722':'transparent')+';border-radius:8px;cursor:pointer;transition:all .15s">'+e+'</button>';
@@ -1290,8 +1316,8 @@ function renderCarta(){
         +'<div class="emoji-grid" id="emoji-picker">'+emojiButtons+'</div>'
         +'<input type="hidden" id="f-emoji" value="'+esc(curEmoji)+'"/>'
       +'</div>'
-      +'<div style="display:flex;gap:8px">'
-        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
+      // ── Recipe section ──
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'        +'<div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">🧾 Receta (ingredientes que descuenta al vender)</div>'        +'<div id="receta-rows">'+recetaRows+'</div>'        +'<div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">'          +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ingrediente</div>'            +'<select class="inp inp-sm" id="rec-ing-sel"><option value="">— Selecciona —</option>'            +menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
         +'<button class="btn btn-outline btn-full" onclick="cancelarProd()">Cancelar</button>'
       +'</div></div>';
   } else {
@@ -1303,7 +1329,7 @@ function renderCarta(){
         +'<span style="font-size:26px">'+p.emoji+'</span>'
         +'<div style="flex:1">'
           +'<div style="font-weight:700;font-size:13px">'+esc(p.nombre)+'</div>'
-          +'<div style="color:var(--accent);font-size:12px;font-weight:700">'+fmt(p.precio)+'</div>'
+          +'<div style="color:var(--accent);font-size:12px;font-weight:700">'+fmt(p.precio)+'</div>'          +(p.receta&&p.receta.length?'<div style="color:#38bdf8;font-size:10px;font-weight:700">🧾 Receta: '+p.receta.length+' ing.</div>':'')
           +(p.esCerveza&&p.cubeta?'<div style="color:#22c55e;font-size:11px">🪣 '+fmt(p.cubeta)+'</div>':'')
           +'<div style="color:var(--muted);font-size:11px">Stock: '+p.stock+' '+p.und+'</div>'
         +'</div>'
@@ -1345,6 +1371,24 @@ function bindAdminEvents(){
     var uid=btn.getAttribute('data-uid');
     if(act==='edituser'&&uid){editarUsuario(uid);return;}
     if(act==='deluser'&&uid){borrarUsuario(uid);return;}
+    if(act==='del-rec'){
+      var rIdx=parseInt(btn.getAttribute('data-ridx'));
+      var prod=editandoProd&&editandoProd!=='nuevo'?menu.find(function(m){return m.id===editandoProd;}):null;
+      if(prod&&prod.receta){
+        prod.receta.splice(rIdx,1);
+        var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+        render();
+      }
+      return;
+    }
+    var sid=btn.getAttribute('data-sid');
+    if(act==='delsocio'&&sid){
+      if(!confirm('¿Eliminar este consumo?'))return;
+      consumoSocios=consumoSocios.filter(function(c){return c.id!==sid;});
+      var r=ref('consumoSocios');
+      if(r)r.set(consumoSocios.length?consumoSocios:null);
+      render();return;
+    }
     if(act==='setfont'){
       ticketConfig.fontSize=parseInt(btn.getAttribute('data-fs'));
       render();
@@ -1567,6 +1611,31 @@ function bindEmojiPicker(){
   });
 }
 function toggleCubF(){var cf=document.getElementById('cubf');if(cf)cf.style.display=document.getElementById('f-cerveza').checked?'':'none';}
+var _recetaTemp=[];  // temp recipe while editing
+
+function agregarIngReceta(){
+  var sel=document.getElementById('rec-ing-sel');
+  var cant=parseFloat((document.getElementById('rec-ing-cant')||{}).value)||1;
+  if(!sel||!sel.value){alert('Selecciona un ingrediente.');return;}
+  var pid=parseInt(sel.value);
+  // Get current product receta
+  var prod=editandoProd&&editandoProd!=='nuevo'?menu.find(function(m){return m.id===editandoProd;}):null;
+  if(!prod&&editandoProd!=='nuevo'){alert('Guarda el producto primero.');return;}
+  var receta=prod?((prod.receta||[]).slice()):[_recetaTemp.slice()][0]||[];
+  var exist=receta.findIndex(function(r){return r.pid===pid;});
+  if(exist>=0) receta[exist].cantidad+=cant;
+  else receta.push({pid:pid,cantidad:cant});
+  if(prod){
+    prod.receta=receta;
+    var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+  } else {
+    _recetaTemp=receta;
+  }
+  sel.value='';
+  document.getElementById('rec-ing-cant').value=1;
+  render();
+}
+
 function guardarProd(){
   var nombre=(document.getElementById('f-nombre')||{}).value;nombre=nombre?nombre.trim():'';
   var precio=parseInt((document.getElementById('f-precio')||{}).value)||0;
@@ -1581,7 +1650,8 @@ function guardarProd(){
   if(!cat){alert('Escribe la categoría.');return;}
   if(editandoProd==='nuevo'){
     var maxId=0;menu.forEach(function(m){if(m.id>maxId)maxId=m.id;});
-    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,cat:cat,emoji:emoji,stock:stock,und:und});
+    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,cat:cat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[]});
+    _recetaTemp=[];
   } else {
     for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,cat:cat,emoji:emoji,stock:stock,und:und});break;}}
   }
@@ -2225,6 +2295,156 @@ function renderVentas(){
     +'</div>';
 }
 
+/* ═══════════════ SOCIOS ═══════════════ */
+// consumoSocios = [{id, ts, socio, items:[{pid,qty,nombre,emoji,precioBase,precioSocio}], total}]
+// Items are priced at 10% discount from carta price
+
+function renderSocios(){
+  var totalAcum=consumoSocios.reduce(function(a,c){return a+c.total;},0);
+  var totalCarlos=consumoSocios.filter(function(c){return c.socio==='CARLOS';}).reduce(function(a,c){return a+c.total;},0);
+  var totalJavier=consumoSocios.filter(function(c){return c.socio==='JAVIER';}).reduce(function(a,c){return a+c.total;},0);
+  var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+  var socioActivo=_socioActivo||'CARLOS';
+
+  // Carta por categorias
+  var cats=['Todos','🎁 Combos'].concat(menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort());
+  var catFiltro=_socCatFiltro||'Todos';
+  var catPills=cats.map(function(c){
+    var sel=c===catFiltro;
+    return'<button data-act="soc-cat" data-cat="'+esc(c)+'" style="background:'+(sel?'var(--accent)':'var(--card)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">'+c+'</button>';
+  }).join('');
+
+  var prodsFil=catFiltro==='Todos'?menu:menu.filter(function(m){return m.cat===catFiltro;});
+    var prodCards=prodsFil.map(function(p){
+    var ps=Math.round(p.precio*0.9);
+    var psCub=p.esCerveza&&p.cubeta?Math.round((p.cubeta||p.precio*5)*0.9):0;
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px">'
+      +'<div style="display:flex;align-items:center;gap:8px'+(p.esCerveza&&p.cubeta?';margin-bottom:6px':'')+'">'
+        +'<span style="font-size:20px">'+p.emoji+'</span>'
+        +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(p.nombre)+'</div>'
+        +'<div style="color:#22c55e;font-size:11px;font-weight:700">'+fmt(ps)+'</div></div>'
+        +'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="false" style="background:var(--accent)18;color:var(--accent);border:none;border-radius:7px;padding:4px 10px;font-size:14px;font-weight:900;cursor:pointer">+</button>'
+      +'</div>'
+      +(p.esCerveza&&p.cubeta
+        ?'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="true" style="width:100%;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:4px;font-size:11px;font-weight:700;cursor:pointer">🪣 Cubetazo ×5 — '+fmt(psCub)+'</button>'
+        :'')
+      +'</div>';
+  }).join('');
+  // Combos with 10% discount
+  var comboCards=(catFiltro==='Todos'||catFiltro==='🎁 Combos'?combos:[]).map(function(cb){
+    var psCb=Math.round(cb.precio*0.9);
+    return'<div data-act="soc-add-combo" data-cbid="'+cb.id+'" style="background:var(--bg);border:1px solid var(--gold)33;border-radius:10px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px">'
+      +'<span style="font-size:20px">'+cb.emoji+'</span>'
+      +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(cb.nombre)+'</div>'
+      +'<div style="color:#22c55e;font-size:11px;font-weight:700">'+fmt(psCb)+'</div>'
+      +'<div style="color:var(--gold);font-size:10px">🎁 Combo</div></div>'
+      +'<div style="background:var(--gold)18;color:var(--gold);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900">+</div>'
+      +'</div>';
+  }).join('');;
+
+  // History
+  var histRows=consumoSocios.slice().reverse().map(function(c){
+    var itemsHtml=c.items?(Array.isArray(c.items)?c.items:Object.values(c.items)).map(function(it){
+      return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:1px 0">'
+        +'<span>'+(it.emoji||'')+' '+esc(it.nombre||'?')+' ×'+it.qty+'</span>'
+        +'<span>'+fmt((it.precioSocio||0)*it.qty)+'</span></div>';
+    }).join(''):'';
+    var colorSocio=c.socio==='CARLOS'?'#38bdf8':'#a855f7';
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        +'<div><div style="font-weight:700;font-size:13px;color:'+colorSocio+'">'+esc(c.socio||'Socio')+'</div>'
+        +'<div style="color:var(--muted);font-size:11px">'+fmtDT(c.ts)+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px">'
+          +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(c.total)+'</span>'
+          +(esAdmin?'<button data-act="delsocio" data-sid="'+c.id+'" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>':'')
+        +'</div>'
+      +'</div>'
+      +(itemsHtml?'<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'+itemsHtml+'</div>':'')
+      +'</div>';
+  }).join('')||'<div style="color:var(--muted);text-align:center;padding:20px">Sin consumos registrados</div>';
+
+  return'<div>'
+    // KPIs socios
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">'
+      +'<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">'
+        +'<div style="color:var(--muted);font-size:10px;font-weight:700">TOTAL</div>'
+        +'<div style="color:var(--gold);font-weight:900;font-size:16px">'+fmt(totalAcum)+'</div>'
+      +'</div>'
+      +'<div style="background:var(--card);border:2px solid #38bdf844;border-radius:12px;padding:10px;text-align:center">'
+        +'<div style="color:#38bdf8;font-size:10px;font-weight:700">CARLOS</div>'
+        +'<div style="color:#38bdf8;font-weight:900;font-size:16px">'+fmt(totalCarlos)+'</div>'
+      +'</div>'
+      +'<div style="background:var(--card);border:2px solid #a855f744;border-radius:12px;padding:10px;text-align:center">'
+        +'<div style="color:#a855f7;font-size:10px;font-weight:700">JAVIER</div>'
+        +'<div style="color:#a855f7;font-weight:900;font-size:16px">'+fmt(totalJavier)+'</div>'
+      +'</div>'
+    +'</div>'
+    // Socio selector
+    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+      +'<button data-act="sel-socio" data-socio="CARLOS" style="flex:1;background:'+(socioActivo==='CARLOS'?'#38bdf8':'var(--card)')+';color:'+(socioActivo==='CARLOS'?'#000':'var(--muted)')+';border:2px solid '+(socioActivo==='CARLOS'?'#38bdf8':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 CARLOS</button>'
+      +'<button data-act="sel-socio" data-socio="JAVIER" style="flex:1;background:'+(socioActivo==='JAVIER'?'#a855f7':'var(--card)')+';color:'+(socioActivo==='JAVIER'?'#fff':'var(--muted)')+';border:2px solid '+(socioActivo==='JAVIER'?'#a855f7':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 JAVIER</button>'
+    +'</div>'
+    // Category pills
+    +'<div style="display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:10px;padding-bottom:4px">'+catPills+'</div>'
+    // Product grid
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+prodCards+'</div>'
+    +(comboCards?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'+comboCards+'</div>':'')
+    // Cierre mensual
+    +(esAdmin&&totalAcum>0
+      ?'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:10px;padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">'
+        +'<div><div style="color:#ef4444;font-weight:700;font-size:13px">🔒 Cierre mensual socios</div>'
+        +'<div style="color:var(--muted);font-size:11px">Total: '+fmt(totalAcum)+'</div></div>'
+        +'<button onclick="cerrarConsumoSocios()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer">Cerrar mes</button>'
+      +'</div>'
+      :'')
+    // History
+    +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">HISTORIAL</div>'
+    +histRows
+    +'</div>';
+}
+
+
+function agregarConsumoSocio(pid,esCubeta){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  var precioBase=esCubeta?(p.cubeta||p.precio*5):p.precio;
+  var precioSocio=Math.round(precioBase*0.9);
+  var nombre=(esCubeta?'🪣 Cubetazo ':'')+''+p.nombre;
+  var item={pid:pid,qty:1,cubeta:!!esCubeta,nombre:nombre,emoji:p.emoji,precioBase:precioBase,precioSocio:precioSocio};
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio};
+  consumoSocios.push(consumo);
+  var r=ref('consumoSocios');
+  if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
+  render();
+}
+
+function agregarConsumoSocioCombo(cbId){
+  var cb=combos.find(function(c){return c.id===cbId;});
+  if(!cb)return;
+  var precioSocio=Math.round(cb.precio*0.9);
+  var item={pid:'combo_'+cbId,qty:1,nombre:'🎁 '+cb.nombre,emoji:cb.emoji,precioBase:cb.precio,precioSocio:precioSocio};
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio};
+  consumoSocios.push(consumo);
+  var r=ref('consumoSocios');
+  if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
+  render();
+}
+
+function cerrarConsumoSocios(){
+  var total=consumoSocios.reduce(function(a,c){return a+c.total;},0);
+  if(!confirm('¿Confirmas el cierre mensual de socios? Total: '+fmt(total)+'. Esto borrará todos los consumos.'))return;
+  // Save cierre record
+  var cierreSocios={id:'cs_'+Date.now(),ts:Date.now(),total:total,items:consumoSocios.length,uid:usuarioActivo.id};
+  var r=ref('cierresSocios');
+  if(r)r.push(cierreSocios);
+  // Reset
+  consumoSocios=[];
+  var rs=ref('consumoSocios');
+  if(rs)rs.set(null); else fbSet('consumoSocios',null);
+  render();
+  alert('Cierre mensual guardado. Total: '+fmt(total));
+}
+
 function renderAdmin(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
   if(!esAdmin) return '<div class="alert-box alert-blue">Solo administradores.</div>';
@@ -2600,6 +2820,20 @@ document.addEventListener('click',function(e){
     var el=document.getElementById('ci-valor');
     if(el)el.value=qvBtn.getAttribute('data-qv');
   }
+  // Socios controls
+  var ss=e.target.closest('[data-act="sel-socio"]');
+  if(ss){_socioActivo=ss.getAttribute('data-socio');render();return;}
+  var sc=e.target.closest('[data-act="soc-cat"]');
+  if(sc){_socCatFiltro=sc.getAttribute('data-cat');render();return;}
+  var sa=e.target.closest('[data-act="soc-add"]');
+  if(sa){
+    var pid=parseInt(sa.getAttribute('data-pid'));
+    var esCub=sa.getAttribute('data-cub')==='true';
+    agregarConsumoSocio(pid,esCub);return;
+  }
+  var scb=e.target.closest('[data-act="soc-add-combo"]');
+  if(scb){agregarConsumoSocioCombo(scb.getAttribute('data-cbid'));return;}
+
   // Paredes UI controls - always active regardless of cloneNode
   var pc=e.target.closest('[data-pcolor]');
   if(pc){selColorP(pc.getAttribute('data-pcolor'));return;}
