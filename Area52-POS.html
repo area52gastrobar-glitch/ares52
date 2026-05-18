@@ -713,6 +713,7 @@ function renderPanelPedido(){
       +'<span style="color:var(--gold);font-size:22px;font-weight:900">'+fmt(total)+'</span></div>'
       +'<div style="display:flex;gap:7px">'
       +'<button class="btn btn-sm btn-blue btn-full" onclick="imprimirPrecuenta()" '+(ped.length?'':'disabled')+'>🖨️ Preorden</button>'
+      +'<button class="btn btn-sm btn-outline btn-full" onclick="abrirTrasladoMesa()" '+(ped.length?'':'disabled')+' style="font-size:11px">🔀 Trasladar</button>'
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+'>💳 Cobrar</button>'
       +'</div></div>';
 
@@ -918,6 +919,72 @@ function clickMesa(id){
 }
 function dblMesa(id){if(!modoEdicion)return;abrirEditorMesa(id);}
 function cerrarPanel(){mesaActiva=null;render();}
+
+function abrirTrasladoMesa(){
+  if(!mesaActiva)return;
+  var origen=mesaActiva;
+  // Build list of available target mesas (different from current, in any zone)
+  var disponibles=mesas.filter(function(m){
+    return m.id!==origen.id;
+  });
+  var zonaGroups={};
+  disponibles.forEach(function(m){
+    if(!zonaGroups[m.zona])zonaGroups[m.zona]=[];
+    zonaGroups[m.zona].push(m);
+  });
+  var mesaOpts=Object.keys(zonaGroups).map(function(z){
+    var zona=ZONAS.find(function(x){return x.id===z;});
+    return'<optgroup label="'+(zona?zona.label:z)+'">'+zonaGroups[z].map(function(m){
+      var tieneped=(pedidos[m.id]&&pedidos[m.id].length>0);
+      return'<option value="'+m.id+'">'+(m.nombre||'Mesa '+m.num)+(tieneped?' ⚠️ ocupada':'')+'</option>';
+    }).join('')+'</optgroup>';
+  }).join('');
+
+  modal2('<div style="text-align:center;margin-bottom:16px">'
+    +'<div style="font-size:24px">🔀</div>'
+    +'<div style="font-weight:800;font-size:16px">Trasladar mesa</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:4px">Desde: '+(origen.nombre||'Mesa '+origen.num)+'</div></div>'
+    +'<div style="margin-bottom:16px">'
+      +'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">Mover pedido a:</div>'
+      +'<select class="inp" id="traslado-dest"><option value="">— Selecciona mesa destino —</option>'+mesaOpts+'</select>'
+    +'</div>'
+    +'<div style="background:#f5a62318;border:1px solid #f5a62333;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#f5a623">'
+      +'⚠️ Si la mesa destino ya tiene pedido, los items se fusionan.'
+    +'</div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
+      +'<button class="btn btn-green btn-full" onclick="confirmarTrasladoMesa()">✅ Trasladar</button>'
+    +'</div>');
+}
+
+function confirmarTrasladoMesa(){
+  if(!mesaActiva)return;
+  var destId=parseInt((document.getElementById('traslado-dest')||{}).value);
+  if(!destId){alert('Selecciona la mesa destino.');return;}
+  var destMesa=mesas.find(function(m){return m.id===destId;});
+  if(!destMesa){alert('Mesa no encontrada.');return;}
+  var origenId=mesaActiva.id;
+  // Merge pedidos
+  var pedOrigen=pedidos[origenId]||[];
+  var pedDest=pedidos[destId]||[];
+  // Combine: if same product exists in dest, sum quantities
+  pedOrigen.forEach(function(it){
+    var existe=pedDest.findIndex(function(d){return d.pid===it.pid&&d.cubeta===it.cubeta;});
+    if(existe>=0) pedDest[existe].qty+=it.qty;
+    else pedDest.push(it);
+  });
+  // Save dest pedido, clear origen
+  pedidos[destId]=pedDest;
+  pedidos[origenId]=[];
+  var r1=ref('pedidos/'+destId); if(r1)r1.set(pedDest);
+  var r2=ref('pedidos/'+origenId); if(r2)r2.set(null);
+  // Switch active mesa to destination
+  mesaActiva=destMesa;
+  closeModal2();
+  render();
+  actualizarColorMesas();
+  updateHeader();
+}
 function cambiarZona(z){zonaActual=z;mesaActiva=null;render();}
 function toggleEdicion(){modoEdicion=!modoEdicion;modoParedes=false;mesaActiva=null;render();}
 function toggleParedes(){
