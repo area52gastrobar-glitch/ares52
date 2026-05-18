@@ -1342,6 +1342,9 @@ function bindAdminEvents(){
   c.addEventListener('click',function(e){
     var btn=e.target.closest('[data-act]');if(!btn)return;
     var act=btn.getAttribute('data-act');
+    var uid=btn.getAttribute('data-uid');
+    if(act==='edituser'&&uid){editarUsuario(uid);return;}
+    if(act==='deluser'&&uid){borrarUsuario(uid);return;}
     if(act==='setfont'){
       ticketConfig.fontSize=parseInt(btn.getAttribute('data-fs'));
       render();
@@ -2150,13 +2153,20 @@ function renderVentas(){
     var z=ZONAS.find(function(x){return x.id===v.zona;});
     // Items detail
     var itemsHtml='';
-    if(v.items&&v.items.length){
+    var vItems=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    if(vItems.length){
       itemsHtml='<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'
-        +v.items.map(function(it){
+        +vItems.map(function(it){
           var nombre,pr;
           if(it.isCustom){nombre='✏️ '+esc(it.customNombre||'');pr=it.customPrecio||0;}
           else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
-          else{var p=menu.find(function(m){return m.id===it.pid;});nombre=(p?p.emoji+' ':'')+esc((p&&p.nombre)||'?');pr=it.cubeta?(p&&p.cubeta||(p&&p.precio||0)*5):(p&&p.precio||0);}
+          else{
+            var p=menu.find(function(m){return m.id==it.pid;});  // == to handle string/int mismatch
+            var pNombre=p?p.nombre:(it.nombre||it.prodNombre||('Producto #'+it.pid));
+            var pEmoji=p?p.emoji:(it.emoji||'🍺');
+            nombre=pEmoji+' '+esc(pNombre);
+            pr=it.cubeta?(p&&p.cubeta||(p&&p.precio||0)*5):(p?p.precio:(it.precio||0));
+          }
           return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:1px 0">'
             +'<span>'+nombre+' ×'+it.qty+'</span>'
             +'<span>'+fmt(pr*it.qty)+'</span></div>';
@@ -2182,6 +2192,42 @@ function renderVentas(){
       +(r==='mesero'?'<div style="color:var(--muted);font-size:10px;margin-top:2px">Sin acceso a cobro ni Excel</div>':'')
       +'</div>';
   }).join('');
+
+  // ── Return ventas layout ──────────────────────────────────────────────────
+  return(puedeExcel
+    ?'<div style="display:flex;justify-content:flex-end;margin-bottom:12px">'
+      +'<button class="btn btn-green" onclick="exportarExcel()" style="background:linear-gradient(135deg,#1d6f42,#21a55c)">📊 Descargar Excel</button>'
+      +'</div>'
+    :'<div class="alert-box alert-blue mb12">📊 Solo administradores y cajeros pueden descargar el reporte Excel.</div>')
+    +'<div style="background:var(--accent)18;border:1px solid var(--accent)33;border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">🕐 Turno actual'+(turnoInicio?' · desde '+fmtDT(turnoInicio):'')+'</div>'
+    +kpis
+    +'<div class="res-grid">'
+    +'<div class="res-card"><div class="section-title">Por forma de pago — turno</div>'+pagoRows+'</div>'
+    +'<div class="res-card"><div class="section-title">Top productos — turno</div>'+prodRows+'</div>'
+    +'<div class="res-card full-col"><div class="section-title">Cobros del turno actual</div>'+histRows+'</div>'
+    +'</div>'
+    +'<div style="background:#38bdf818;border:1px solid #38bdf833;border-radius:10px;padding:8px 14px;margin:14px 0 8px;font-size:12px;color:#38bdf8;font-weight:700">📊 Histórico total — todos los turnos</div>'
+    +'<div class="res-grid">'
+    +'<div class="res-card"><div class="section-title">Acumulado total</div>'
+      +'<div class="res-row"><span>Total ventas</span><span style="color:var(--gold);font-weight:900">'+fmt(ventas.reduce(function(a,v){return a+v.total;},0))+'</span></div>'
+      +'<div class="res-row"><span>Número de cobros</span><span style="color:#22c55e;font-weight:700">'+ventas.length+'</span></div>'
+      +'<div class="res-row"><span>Total gastos</span><span style="color:#ef4444;font-weight:700">'+fmt(gastos.reduce(function(a,g){return a+g.valor;},0))+'</span></div>'
+    +'</div>'
+    +'<div class="res-card"><div class="section-title">Por forma de pago — histórico</div>'
+      +FPAGO.filter(function(f){return ventas.some(function(v){return v.fp===f.id||( v.pagos&&v.pagos.some(function(p){return p.fp===f.id;}));});}).map(function(f){
+        var t=ventas.reduce(function(a,v){
+          if(v.pagos&&v.pagos.length) return a+v.pagos.filter(function(p){return p.fp===f.id;}).reduce(function(b,p){return b+p.monto;},0);
+          return a+(v.fp===f.id?v.total:0);
+        },0);
+        return'<div class="res-row"><div style="display:flex;align-items:center;gap:8px"><span>'+f.emoji+'</span><span style="color:'+f.color+';font-weight:700">'+f.label+'</span></div><span style="color:var(--gold);font-weight:800">'+fmt(t)+'</span></div>';
+      }).join('')
+    +'</div>'
+    +'</div>';
+}
+
+function renderAdmin(){
+  var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+  if(!esAdmin) return '<div class="alert-box alert-blue">Solo administradores.</div>';
 
   // Ticket config section
   var ticketSection='<div class="card" style="grid-column:1/-1">'
@@ -2243,6 +2289,35 @@ function renderVentas(){
       +'</button>'
     +'</div>'
     +'</div>';
+
+  // Build userRows
+  var userRows=usuarios.map(function(u){
+    return'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:20px">'+u.emoji+'</span>'
+      +'<div style="flex:1"><div style="font-weight:700;font-size:13px">'+esc(u.nombre)+'</div>'
+      +'<div style="color:var(--muted);font-size:11px">'+u.rol+' · PIN: '+u.pin+'</div></div>'
+      +'<button data-act="edituser" data-uid="'+u.id+'" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer">✏️</button>'
+      +'<button data-act="deluser" data-uid="'+u.id+'" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer">✕</button>'
+      +'</div>';
+  }).join('');
+
+  // Build rolCards
+  var ROLES_INFO={
+    admin:{label:'Administrador',desc:'Acceso total: mesas, inventario, carta, combos, caja, gastos, ventas, admin'},
+    cajero:{label:'Cajero',desc:'Mesas, inventario, carta, combos, caja, gastos, ventas. Sin admin'},
+    mesero:{label:'Mesero / Mesera',desc:'Solo mesas y gastos. Sin cobro ni Excel'}
+  };
+  var rolCards=Object.entries(ROLES_INFO).map(function(kv){
+    var r=kv[0],info=kv[1];
+    var count=usuarios.filter(function(u){return u.rol===r;}).length;
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<div style="font-weight:700;font-size:13px">'+info.label+'</div>'
+      +'<span style="background:var(--accent)18;color:var(--accent);border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700">'+count+' usuarios</span>'
+      +'</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:3px">'+info.desc+'</div>'
+      +'</div>';
+  }).join('');
 
   return'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
     +sistemaCard
