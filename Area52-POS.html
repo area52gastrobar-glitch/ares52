@@ -2935,35 +2935,39 @@ function initApp(){
   document.querySelectorAll('.pg').forEach(function(el){
     el.onclick=function(){selGrosorP(parseInt(el.getAttribute('data-pgrosor')));};
   });
-  // Load usuarios from Firebase before showing login
-  var r=ref('usuarios');
-  if(r){
+  // Wait for Firebase to be ready, then load usuarios
+  function cargarUsuariosYLogin(intentos){
+    intentos=intentos||0;
+    var r=ref('usuarios');
+    if(!r){
+      if(intentos<20){
+        // Firebase not ready yet, retry in 300ms
+        setTimeout(function(){cargarUsuariosYLogin(intentos+1);},300);
+      } else {
+        // Firebase never loaded - use defaults
+        renderLogin();
+      }
+      return;
+    }
     r.on('value',function(snap){
       var v=snap.val();
       if(v){
         var loaded=Array.isArray(v)?v:Object.values(v);
-        // Sort to maintain consistent order (admin first)
-        loaded.sort(function(a,b){
-          var order={admin:0,cajero:1,mesero:2};
-          return (order[a.rol]||3)-(order[b.rol]||3);
-        });
+        loaded.sort(function(a,b){var o={admin:0,cajero:1,mesero:2};return(o[a.rol]||3)-(o[b.rol]||3);});
         if(loaded.length>0&&loaded.some(function(u){return u.rol==='admin';})){
           usuarios=loaded;
         }
       }
-      // Only call renderLogin once (first load)
       if(!window._loginRendered){
         window._loginRendered=true;
         renderLogin();
       } else {
-        // If already logged in, refresh login screen if showing
         var ul=document.getElementById('user-list');
         if(ul) renderLogin();
       }
     });
-  } else {
-    renderLogin();
   }
+  cargarUsuariosYLogin();
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initApp);}else{initApp();}
 </script>
