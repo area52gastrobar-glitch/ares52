@@ -428,6 +428,10 @@ function iniciarSync(){
     consumoSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='socios')render();
   });
+  fbOn('usuarios',function(v){
+    if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
+    if(tabActual==='admin')render();
+  });
 }
 
 /* ═══════════════ LOGIN ═══════════════ */
@@ -2622,7 +2626,7 @@ var _rolSelU='mesero';var _emojiSelU='🛸';
 var EMOJIS_U=['👑','💰','🛸','🧑','👩','🧑‍🍳','🎯','⭐','🦋','🌙'];
 function nuevoUsuario(){abrirModalUsuario(null);}
 function editarUsuario(id){abrirModalUsuario(usuarios.find(function(u){return u.id===id;}));}
-function borrarUsuario(id){if(id==='admin')return;if(!confirm('¿Eliminar usuario?'))return;usuarios=usuarios.filter(function(u){return u.id!==id;});render();}
+function borrarUsuario(id){if(id==='admin')return;if(!confirm('¿Eliminar usuario?'))return;usuarios=usuarios.filter(function(u){return u.id!==id;});fbSet('usuarios',usuarios);render();}
 function abrirModalUsuario(u){
   var isNew=!u;
   _rolSelU=u?u.rol:'mesero';_emojiSelU=u?u.emoji:'🛸';
@@ -2662,6 +2666,9 @@ function guardarUsuario(idParam){
   if(!nombre||pin.length<4){alert('Completa nombre y PIN de 4 dígitos.');return;}
   if(idParam==='nuevo'){usuarios.push({id:'u'+Date.now(),nombre:nombre,pin:pin,rol:_rolSelU,emoji:emoji});}
   else{var idx=usuarios.findIndex(function(u){return u.id===idParam;});if(idx>=0)usuarios[idx]=Object.assign({},usuarios[idx],{nombre:nombre,pin:pin,rol:_rolSelU,emoji:emoji});}
+  // Save as object keyed by user id for reliable Firebase storage
+  var uObj={};usuarios.forEach(function(u){uObj[u.id]=u;});
+  fbSet('usuarios',uObj);
   closeModal1();render();
 }
 
@@ -2917,7 +2924,7 @@ document.addEventListener('click',function(e){
 
 /* ═══════════════ INIT ═══════════════ */
 function initApp(){
-  // Wire paredes panel buttons ONCE at startup - they live in HTML body, never destroyed
+  // Wire paredes panel buttons ONCE at startup
   var btnD=document.getElementById('btn-deshacer-pared');
   var btnL=document.getElementById('btn-limpiar-pared');
   if(btnD)btnD.onclick=function(){deshacerPared();};
@@ -2928,7 +2935,35 @@ function initApp(){
   document.querySelectorAll('.pg').forEach(function(el){
     el.onclick=function(){selGrosorP(parseInt(el.getAttribute('data-pgrosor')));};
   });
-  renderLogin();
+  // Load usuarios from Firebase before showing login
+  var r=ref('usuarios');
+  if(r){
+    r.on('value',function(snap){
+      var v=snap.val();
+      if(v){
+        var loaded=Array.isArray(v)?v:Object.values(v);
+        // Sort to maintain consistent order (admin first)
+        loaded.sort(function(a,b){
+          var order={admin:0,cajero:1,mesero:2};
+          return (order[a.rol]||3)-(order[b.rol]||3);
+        });
+        if(loaded.length>0&&loaded.some(function(u){return u.rol==='admin';})){
+          usuarios=loaded;
+        }
+      }
+      // Only call renderLogin once (first load)
+      if(!window._loginRendered){
+        window._loginRendered=true;
+        renderLogin();
+      } else {
+        // If already logged in, refresh login screen if showing
+        var ul=document.getElementById('user-list');
+        if(ul) renderLogin();
+      }
+    });
+  } else {
+    renderLogin();
+  }
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initApp);}else{initApp();}
 </script>
