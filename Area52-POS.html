@@ -708,7 +708,8 @@ function renderPanelPedido(){
       +'</div>'
       +(it.isCustom?'<div style="color:#f5a623;font-size:10px;font-weight:700">Producto personalizado</div>':'')
       +(it.isCombo?'<div style="color:var(--gold);font-size:10px;font-weight:700">🎁 Combo · '+ingDesc+'</div>':'')
-      +(it.cubeta?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO ×5</div>':'')+'</div>'
+      +(it.cubeta?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO ×5</div>':'')
+      +(it.varianteNombre?'<div style="color:var(--accent);font-size:10px;font-weight:700">📐 '+esc(it.varianteNombre)+'</div>':'')+'</div>'
       +'<button data-act="ped-minus" data-idx="'+idx_+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">−</button>'
       +'<span style="color:#fff;font-weight:800;min-width:24px;text-align:center">'+it.qty+'</span>'
       +'<button data-act="ped-plus" data-idx="'+idx_+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">+</button>'
@@ -1054,15 +1055,48 @@ function borrarParedes(){
 function setCatPed(c){catFiltroPed=c;renderSoloPedido();}
 
 /* ═══════════════ PEDIDOS ═══════════════ */
-function agregarItem(pid,cubeta){
+function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
   if(!mesaActiva)return;
+  var p=menu.find(function(m){return m.id===pid;});
+  // If product has variantes and no variant specified, show selector
+  if(p&&p.variantes&&p.variantes.length>0&&!varianteNombre&&!cubeta){
+    abrirSelectorVariante(pid);
+    return;
+  }
   var id=mesaActiva.id;
   if(!pedidos[id])pedidos[id]=[];
-  var idx=pedidos[id].findIndex(function(it){return it.pid===pid&&it.cubeta===cubeta;});
+  // For variante items, match by pid + varianteNombre
+  var idx=pedidos[id].findIndex(function(it){
+    return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'');
+  });
+  var precio=variantePrecio||(p?p.precio:0);
   if(idx>=0)pedidos[id][idx].qty++;
-  else pedidos[id].push({pid:pid,cubeta:cubeta,qty:1});
+  else pedidos[id].push({
+    pid:pid,cubeta:cubeta,qty:1,
+    varianteNombre:varianteNombre||'',
+    variantePrecio:variantePrecio||0
+  });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
   renderSoloPedido();updateHeader();actualizarColorMesas();
+}
+
+function abrirSelectorVariante(pid){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p||!p.variantes||!p.variantes.length)return;
+  var btns=p.variantes.map(function(v){
+    return'<button data-act="pick-variante" data-pid="'+pid+'" data-nom="'+esc(v.nombre)+'" data-pre="'+v.precio+'" '
+      +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;'
+      +'text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px">'
+      +'<span style="font-weight:700;font-size:14px">'+esc(v.nombre)+'</span>'
+      +'<span style="color:var(--accent);font-weight:700;font-size:15px">'+fmt(v.precio)+'</span>'
+      +'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:16px">'
+    +'<div style="font-size:28px">'+p.emoji+'</div>'
+    +'<div style="font-weight:800;font-size:16px;margin-top:4px">'+esc(p.nombre)+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Qué tamaño?</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'+btns+'</div>');
 }
 function quitarItem(pid,cubeta){
   if(!mesaActiva)return;
@@ -1223,7 +1257,10 @@ function confirmarCobro(){
   var pagos=window._pagosParciales||{};
   var pagado=Object.values(pagos).reduce(function(a,v){return a+(v||0);},0);
   var total=totalPedido(mesaActiva.id);
-  if(Math.round(pagado)<Math.round(total)){alert('El total pagado no cubre el valor. Verifica los montos.');return;}
+  // Apply discount if exists
+  var descMesa=descuentos[mesaActiva.id];
+  if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
+  if(Math.round(pagado)<Math.round(total)){alert('El total pagado ($'+total.toLocaleString('es-CO')+') no cubre el valor. Verifica los montos.');return;}
 
   var mesa=mesaActiva;
   var ped=pedidos[mesa.id]||[];
@@ -1443,7 +1480,7 @@ function renderCarta(){
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-comida" '+(p.esComida?'checked':'')+'/> '
         +'👨‍🍳 Va a pantalla de cocina</label>'
-      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
+      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Personal $22.000 · Mediana $32.000)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: Personal)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" placeholder="Precio" value="'+(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
         +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:3px">🪣 Precio CUBETAZO ×5 (COP)</div>'
         +'<input class="inp" id="f-cubeta" type="number" value="'+(p.cubeta||'')+'" placeholder="Ej: 20000"/>'
       +'</div>'
@@ -1852,6 +1889,32 @@ function autoAsignarEmojis(){
   alert('✅ '+count+' productos actualizados de '+cats.length+' categorías.');
 }
 
+function agregarVariante(){
+  var list=document.getElementById('variantes-list');
+  if(!list)return;
+  // Remove "sin variantes" message if present
+  var msg=list.querySelector('div:not([id])');
+  if(msg&&msg.textContent.indexOf('Sin variantes')>=0)msg.remove();
+  var vi=list.children.length;
+  var row=document.createElement('div');
+  row.style.cssText='display:flex;gap:6px;margin-bottom:6px';
+  row.id='vrow-'+vi;
+  row.innerHTML='<input class="inp inp-sm" placeholder="Nombre (ej: Mediana)" style="flex:2" data-vnom="'+vi+'"/>'
+    +'<input class="inp inp-sm" type="number" placeholder="Precio" style="flex:1" data-vpre="'+vi+'"/>'
+    +'<button onclick="this.parentElement.remove()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>';
+  list.appendChild(row);
+  row.querySelector('[data-vnom]').focus();
+}
+
+function quitarVariante(vi){
+  var row=document.getElementById('vrow-'+vi);
+  if(row)row.remove();
+  var list=document.getElementById('variantes-list');
+  if(list&&list.children.length===0){
+    list.innerHTML='<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>';
+  }
+}
+
 function toggleVentaSinStock(){
   ventaSinStock=!ventaSinStock;
   render();
@@ -2024,6 +2087,15 @@ function guardarProd(){
   var cerv=!!((document.getElementById('f-cerveza')||{}).checked);
   var esComida=!!((document.getElementById('f-comida')||{}).checked);
   var descripcion=((document.getElementById('f-desc')||{}).value||'').trim();
+  // Read variantes from dynamic rows
+  var variantes=[];
+  document.querySelectorAll('[data-vnom]').forEach(function(el){
+    var vi=el.getAttribute('data-vnom');
+    var nom=el.value.trim();
+    var preEl=document.querySelector('[data-vpre="'+vi+'"]');
+    var pre=preEl?parseInt(preEl.value)||0:0;
+    if(nom&&pre>0) variantes.push({nombre:nom,precio:pre});
+  });
   var cubeta=cerv?(parseInt((document.getElementById('f-cubeta')||{}).value)||null):null;
   var emoji=(document.getElementById('f-emoji')||{}).value||'🍺';
   if(!nombre){alert('Escribe el nombre.');return;}
@@ -2031,10 +2103,10 @@ function guardarProd(){
   if(!cat){alert('Escribe la categoría.');return;}
   if(editandoProd==='nuevo'){
     var maxId=0;menu.forEach(function(m){if(m.id>maxId)maxId=m.id;});
-    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,cat:cat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[]});
+    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[]});
     _recetaTemp=[];
   } else {
-    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,cat:cat,emoji:emoji,stock:stock,und:und});break;}}
+    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,emoji:emoji,stock:stock,und:und});break;}}
   }
   editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();
 }
@@ -3392,6 +3464,15 @@ document.addEventListener('click',function(e){
     var cat2=cce.getAttribute('data-cat');
     var val=((document.getElementById('emoji-custom')||{}).value||'').trim();
     if(val){catEmojis[cat2]=val;fbSet('catEmojis',catEmojis);closeModal2();render();}
+    return;
+  }
+  var pv=e.target.closest('[data-act="pick-variante"]');
+  if(pv){
+    var pid=parseInt(pv.getAttribute('data-pid'));
+    var nom=pv.getAttribute('data-nom');
+    var pre=parseInt(pv.getAttribute('data-pre'));
+    closeModal2();
+    agregarItem(pid,false,nom,pre);
     return;
   }
   var ces=e.target.closest('[data-act="confirm-edit-stock"]');
