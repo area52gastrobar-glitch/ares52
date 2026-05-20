@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>QR Carta — ÁREA 52</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Josefin+Sans:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0c0b09;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:"Josefin Sans",sans-serif;}
+
+.card{
+  background:#0c0b09;
+  border:2px solid #c4973a;
+  border-radius:16px;
+  padding:32px 28px;
+  text-align:center;
+  width:320px;
+  position:relative;
+}
+.card::before{
+  content:"";position:absolute;inset:6px;
+  border:1px solid rgba(196,151,58,.2);
+  border-radius:10px;pointer-events:none;
+}
+.logo-text{
+  font-family:"Bebas Neue",sans-serif;
+  font-size:42px;letter-spacing:5px;
+  background:linear-gradient(135deg,#e8c97a,#c4973a);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:2px;
+}
+.sub{
+  font-size:11px;letter-spacing:6px;color:rgba(196,151,58,.6);
+  text-transform:uppercase;margin-bottom:20px;
+}
+.qr-wrap{
+  background:#f0e8d0;
+  border-radius:12px;
+  padding:12px;
+  display:inline-block;
+  margin-bottom:18px;
+}
+.qr-wrap img{
+  width:200px;height:200px;
+  display:block;
+  border-radius:4px;
+}
+.instruction{
+  font-size:12px;letter-spacing:2px;color:rgba(196,151,58,.7);
+  text-transform:uppercase;margin-bottom:6px;
+}
+.url{
+  font-size:9px;color:rgba(196,151,58,.35);letter-spacing:1px;word-break:break-all;
+}
+.divider{
+  display:flex;align-items:center;gap:8px;justify-content:center;
+  margin:14px 0;
+}
+.divider-line{flex:1;height:1px;background:rgba(196,151,58,.2);}
+.divider-diamond{width:5px;height:5px;background:#c4973a;transform:rotate(45deg);flex-shrink:0;}
+
+/* Print: one card per page, 3x3 grid for cutting -->*/
+@media print{
+  body{background:#0c0b09;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .no-print{display:none;}
+  .cards-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
+    padding:16px;width:100%;
+  }
+  .card{width:100%;page-break-inside:avoid;}
+}
+</style>
+</head>
+<body>
+<div class="no-print" style="margin-bottom:20px;display:flex;gap:10px">
+  <button onclick="window.print()" style="background:#c4973a;color:#000;border:none;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:13px;letter-spacing:2px;cursor:pointer;font-weight:700">🖨️ IMPRIMIR QRs</button>
+</div>
+
+<!-- Grid of 9 cards for printing and cutting -->
+<div class="cards-grid" id="grid"></div>
+
+<script>
+var CARTA_URL = "https://area52gastrobar-glitch.github.io/ares52/Area52-Menu.html?cliente=1";
+var QR_API = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(CARTA_URL) + "&bgcolor=f0e8d0&color=0c0b09&format=png&margin=10";
+var grid = document.getElementById("grid");
+for(var i=0;i<9;i++){
+  grid.innerHTML += `
+  <div class="card">
+    <div class="logo-text">ÁREA 52</div>
+    <div class="sub">Gastro Bar</div>
+    <div class="divider"><div class="divider-line"></div><div class="divider-diamond"></div><div class="divider-line"></div></div>
+    <div class="instruction">Escanea para ver la carta</div>
+    <div class="qr-wrap"><img src="${QR_API}" alt="QR Carta"/></div>
+    <div class="divider"><div class="divider-line"></div><div class="divider-diamond"></div><div class="divider-line"></div></div>
+    <div class="url">${CARTA_URL}</div>
+  </div>`;
+}
+// Show single card on screen
+if(window.innerWidth < 600){
+  document.querySelector('.cards-grid').style.gridTemplateColumns = '1fr';
+}
+</script>
+</body>
+</html>
