@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Carta — ÁREA 52</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;600;700&family=Lato:wght@300;400&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#111009;
+  --card:#1a1810;
+  --gold:#f0c040;
+  --red:#e03030;
+  --blue:#3a8fd4;
+  --white:#f0ece0;
+  --muted:#888070;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0a0908;font-family:"Lato",sans-serif;min-height:100vh;}
+
+/* ── CHROME ── */
+.chrome{max-width:900px;margin:0 auto;padding:16px;}
+.toolbar{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  background:#1a1810;border:1px solid #3a3020;border-radius:10px;
+  padding:10px 14px;margin-bottom:12px;
+}
+.toolbar-title{color:var(--gold);font-family:"Bebas Neue",sans-serif;font-size:16px;letter-spacing:3px;}
+.tbtn{
+  padding:8px 18px;border-radius:6px;font-family:"Oswald",sans-serif;
+  font-size:12px;letter-spacing:2px;cursor:pointer;transition:.15s;border:none;
+}
+.tbtn-outline{background:transparent;border:1px solid var(--gold);color:var(--gold);}
+.tbtn-outline:hover{background:var(--gold);color:#000;}
+.tbtn-solid{background:var(--gold);color:#000;font-weight:600;}
+.tbtn-solid:hover{background:#ffd060;}
+.opts{
+  display:flex;gap:8px;flex-wrap:wrap;
+  background:#1a1810;border:1px solid #2a2010;border-radius:10px;
+  padding:10px 14px;margin-bottom:12px;align-items:flex-end;
+}
+.opt-group{display:flex;flex-direction:column;gap:3px;flex:1;min-width:100px;}
+.opt-group label{color:var(--muted);font-size:9px;letter-spacing:2px;text-transform:uppercase;}
+.opt-group select,.opt-group input[type=text]{
+  background:#0d0c08;color:var(--white);border:1px solid #333;
+  border-radius:5px;padding:6px 8px;font-family:"Lato",sans-serif;font-size:12px;
+}
+.opt-group input[type=color]{height:30px;padding:2px;border-radius:5px;cursor:pointer;}
+#status{color:var(--muted);font-size:11px;padding:6px 0 10px;letter-spacing:1px;}
+
+/* ── DOCUMENT ── */
+#doc{border-radius:8px;overflow:hidden;}
+
+/* Cover */
+.cover{
+  background:var(--bg);
+  padding:10px 32px 8px;
+  text-align:center;
+  position:relative;
+  border-bottom:2px solid var(--gold);
+}
+/* Texture overlay */
+.cover::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(240,192,64,.08) 0%,transparent 60%);
+  pointer-events:none;
+}
+
+.cover-tag{
+  font-family:"Bebas Neue",sans-serif;font-size:13px;letter-spacing:8px;
+  color:var(--gold);margin-bottom:8px;
+}
+.cover-title{
+  font-family:"Bebas Neue",sans-serif;font-size:56px;letter-spacing:4px;
+  color:var(--white);line-height:1;
+  text-shadow:0 0 40px rgba(240,192,64,.3);
+}
+.cover-title span{color:var(--gold);}
+.cover-sub{
+  font-family:"Oswald",sans-serif;font-weight:300;font-size:14px;
+  letter-spacing:8px;color:var(--muted);margin-top:6px;
+  text-transform:uppercase;
+}
+.cover-divider{
+  display:flex;align-items:center;gap:12px;justify-content:center;
+  margin:16px auto;max-width:300px;
+}
+.cover-divider-line{flex:1;height:1px;background:var(--gold);opacity:.4;}
+.cover-divider-icon{color:var(--gold);font-size:18px;}
+.cover-tagline{
+  font-family:"Lato",sans-serif;font-weight:300;font-size:14px;
+  color:var(--muted);letter-spacing:2px;text-transform:uppercase;
+}
+
+/* Menu pages */
+.menu-pages{
+  background:var(--bg);
+  position:relative;
+  overflow:hidden;
+}
+
+
+/* Sin fondo - screen preview */
+
+
+
+
+
+/* Cliente mode - hide all controls */
+body.cliente-mode .toolbar,
+body.cliente-mode .opts,
+body.cliente-mode #status{
+  display:none !important;
+}
+body.cliente-mode .chrome{
+  padding:0;
+  max-width:100%;
+}
+body.cliente-mode #doc{
+  border-radius:0;
+  min-height:100vh;
+}
+
+@media print{
+  @page{margin:6mm;}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;}
+  .chrome>.toolbar,.chrome>.opts,#status{display:none!important;}
+  #doc{border-radius:0;}
+  .cover{background:#0c0b09!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .menu-pages{background:#111009!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .menu-footer{background:#0a0908!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+.cat-section{position:relative;padding:6px 24px 2px;}
+.cat-divider{
+  display:flex;align-items:center;justify-content:center;
+  gap:16px;padding:6px 28px;opacity:0.12;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.fondo-ilustraciones{display:none;}
+.cat-divider svg{fill:#f0c040;flex-shrink:0;}
+
+/* Category */
+
+
+
+.cat-header{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:5px;
+}
+.cat-emoji{
+  font-size:28px;flex-shrink:0;
+  filter:drop-shadow(0 0 8px rgba(255,255,255,.2));
+}
+.cat-title{
+  font-family:"Bebas Neue",sans-serif;
+  font-size:26px;letter-spacing:2px;
+  line-height:1;
+}
+.cat-count{
+  font-family:"Oswald",sans-serif;font-weight:300;
+  font-size:12px;letter-spacing:2px;color:var(--muted);
+  border:1px solid #333;border-radius:99px;
+  padding:3px 10px;white-space:nowrap;
+}
+.cat-line{flex:1;height:1px;background:linear-gradient(90deg,currentColor,transparent);opacity:.3;}
+
+/* Items grid */
+.items-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:2px 20px;
+  margin-bottom:4px;
+}
+.menu-item{
+  display:flex;align-items:baseline;gap:6px;
+  padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.item-emoji{font-size:15px;flex-shrink:0;}
+.item-name{
+  font-family:"Oswald",sans-serif;font-weight:400;
+  font-size:20px;color:var(--white);flex:1;letter-spacing:.2px;
+}
+.item-dots{
+  flex:1;border-bottom:1px dotted rgba(255,255,255,.15);
+  align-self:baseline;position:relative;top:-3px;min-width:8px;
+}
+.item-price{
+  font-family:"Bebas Neue",sans-serif;font-size:20px;
+  letter-spacing:1px;white-space:nowrap;flex-shrink:0;
+}
+.item-cubeta{
+  display:block;font-family:"Lato",sans-serif;font-weight:300;
+  font-size:11px;color:#f0c040;letter-spacing:1px;margin-top:2px;
+}
+
+/* Footer */
+.menu-footer{
+  background:#0a0908;border-top:3px solid var(--gold);
+  padding:24px 36px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:16px;
+}
+.footer-contact{display:flex;flex-direction:column;gap:5px;}
+.footer-contact span{
+  font-family:"Oswald",sans-serif;font-weight:300;
+  font-size:12px;letter-spacing:2px;color:var(--muted);
+  display:flex;align-items:center;gap:8px;
+}
+.footer-contact b{color:var(--gold);font-weight:400;}
+.footer-brand{
+  font-family:"Bebas Neue",sans-serif;font-size:36px;letter-spacing:4px;
+  color:var(--gold);opacity:.3;
+}
+
+/* Happy hour badge */
+.happy-hour{
+  display:inline-block;
+  background:var(--red);color:#fff;
+  font-family:"Bebas Neue",sans-serif;font-size:12px;letter-spacing:2px;
+  padding:3px 10px;border-radius:4px;margin-left:8px;vertical-align:middle;
+}
+
+@media print{
+  @page{margin:6mm;}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;}
+  .chrome>.toolbar,.chrome>.opts,#status{display:none!important;}
+  #doc{border-radius:0;}
+  /* Sin fondo - light version */
+  
+  
+  
+  
+  
+  /* Con fondo - full pattern */
+  #doc
+  #doc
+  
+  /* Default (no mode set) - same as sin fondo */
+  .cover{background:#0c0b09 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .menu-pages{background:#111009 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .menu-footer{background:#0a0908 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .cat-section{}
+  #doc::after{display:none !important;}
+}
+
+/* ── MODO CLARO (sin fondo) ── */
+.modo-claro #doc .cover{
+  background:#fff !important;
+  border-bottom:3px solid #c4973a;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.modo-claro #doc .cover::before{display:none;}
+.modo-claro #doc .cover-title{color:#1a1208 !important;-webkit-text-fill-color:#1a1208 !important;}
+.modo-claro #doc .cover-title span{color:#c4973a !important;-webkit-text-fill-color:#c4973a !important;}
+.modo-claro #doc .cover-tag{color:#c4973a !important;}
+.modo-claro #doc .cover-sub{color:#666 !important;}
+.modo-claro #doc .cover-tagline{color:#888 !important;}
+.modo-claro #doc .cover-divider-line{background:linear-gradient(90deg,transparent,#c4973a) !important;}
+.modo-claro #doc .cover-divider-diamond{background:#c4973a !important;}
+.modo-claro #doc .menu-pages{background:#fff !important;}
+.modo-claro #doc .menu-footer{background:#1a1208 !important;}
+.modo-claro #doc .cat-section{border-bottom:1px solid #e8e0d0;}
+.modo-claro #doc .cat-title{color:#1a1208 !important;}
+.modo-claro #doc .cat-count{border-color:#c4973a44 !important;color:#c4973a !important;}
+.modo-claro #doc .item-name{color:#1a1208 !important;}
+.modo-claro #doc .item-dots{border-bottom-color:rgba(0,0,0,.2) !important;}
+.modo-claro #doc .item-price{color:#c4973a !important;}
+.modo-claro #doc .item-cubeta div{background:#c4973a22 !important;border-color:#c4973a55 !important;color:#a07828 !important;}
+.modo-claro #doc .menu-item{border-bottom-color:rgba(0,0,0,.08) !important;}
+.modo-claro #doc [style*="color:#bbb"]{color:#555 !important;}
+.modo-claro #doc [style*="color:#999"]{color:#666 !important;}
+.modo-claro #doc [style*="color:var(--muted)"]{color:#888 !important;}
+@media print{
+  body.modo-claro{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body.modo-claro #doc .cover{background:#fff !important;}
+  body.modo-claro #doc .menu-pages{background:#fff !important;}
+  body.modo-claro #doc .cat-title{color:#1a1208 !important;}
+  body.modo-claro #doc .item-name{color:#1a1208 !important;}
+  body.modo-claro #doc .item-price{color:#c4973a !important;}
+}
+</style>
+</head>
+<body>
+<div class="chrome">
+  <div class="toolbar">
+    <span class="toolbar-title">ÁREA 52 · CARTA DIGITAL</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="tbtn tbtn-outline" onclick="recargar()">↻ Recargar</button>
+      <span id="fondo-indicator" style="font-size:11px;padding:4px 10px;border-radius:6px;background:#ef444422;color:#ef4444;border:1px solid #ef444444">● Sin fondo</span>
+      <button id="fondo-btn" class="tbtn tbtn-outline" onclick="toggleFondo()">☀️ Versión blanca</button>
+      <button class="tbtn tbtn-solid" onclick="imprimirModo()">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <div class="opts">
+    <div class="opt-group">
+      <label>Precios</label>
+      <select id="cfg-precios" onchange="regenerar()">
+        <option value="si">Mostrar</option>
+        <option value="no">Ocultar</option>
+      </select>
+    </div>
+    <div class="opt-group">
+      <label>Cubetazo</label>
+      <select id="cfg-cubeta" onchange="regenerar()">
+        <option value="si">Mostrar</option>
+        <option value="no">Ocultar</option>
+      </select>
+    </div>
+    <div class="opt-group" style="flex:2">
+      <label>Frase portada</label>
+      <input type="text" id="cfg-tagline" value="Craft Beer · Coctelería · Gastronomía" oninput="regenerar()" style="width:100%"/>
+    </div>
+  </div>
+  <div id="status">⏳ Cargando carta...</div>
+  <div id="doc"></div>
+</div>
+
+<script>
+var LOGO_SVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">\n  <defs>\n    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">\n      <stop offset="0%" stop-color="#e8c97a"/>\n      <stop offset="50%" stop-color="#c4973a"/>\n      <stop offset="100%" stop-color="#a07828"/>\n    </linearGradient>\n    <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">\n      <stop offset="0%" stop-color="#1a1208"/>\n      <stop offset="100%" stop-color="#0c0b09"/>\n    </linearGradient>\n    <filter id="glow">\n      <feGaussianBlur stdDeviation="3" result="blur"/>\n      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>\n    </filter>\n  </defs>\n\n  <!-- Dark background circle -->\n  <circle cx="200" cy="200" r="195" fill="url(#g2)"/>\n\n  <!-- Outer ring -->\n  <circle cx="200" cy="200" r="190" fill="none" stroke="url(#g1)" stroke-width="1.5"/>\n\n  <!-- Inner ring -->\n  <circle cx="200" cy="200" r="175" fill="none" stroke="url(#g1)" stroke-width="0.8" stroke-dasharray="4 3"/>\n\n  <!-- Inner solid ring -->\n  <circle cx="200" cy="200" r="155" fill="none" stroke="url(#g1)" stroke-width="1.5"/>\n\n  <!-- Top arc text: FOOD & DRINKS -->\n  <path id="topArc" fill="none" d="M 60,200 A 140,140 0 0,1 340,200"/>\n  <text font-family="\'Josefin Sans\', sans-serif" font-size="13" font-weight="300" fill="#c4973a" letter-spacing="5">\n    <textPath href="#topArc" startOffset="50%" text-anchor="middle">CRAFT BEER · COCKTAILS · FOOD</textPath>\n  </text>\n\n  <!-- Bottom arc text: ESTD · GASTRO BAR -->\n  <path id="botArc" fill="none" d="M 65,200 A 135,135 0 0,0 335,200"/>\n  <text font-family="\'Josefin Sans\', sans-serif" font-size="12" font-weight="300" fill="#c4973a" letter-spacing="4">\n    <textPath href="#botArc" startOffset="50%" text-anchor="middle">GASTRO BAR · BOGOTÁ</textPath>\n  </text>\n\n  <!-- Decorative horizontal bar through center -->\n  <rect x="50" y="193" width="300" height="14" fill="#0c0b09"/>\n  <rect x="45" y="194" width="310" height="12" fill="url(#g1)" rx="1"/>\n  <rect x="48" y="196" width="304" height="8" fill="#0c0b09" rx="1"/>\n\n  <!-- AREA text -->\n  <text x="200" y="188"\n    font-family="\'Cormorant Garamond\', serif"\n    font-size="64" font-weight="700"\n    fill="url(#g1)"\n    text-anchor="middle"\n    letter-spacing="8"\n    filter="url(#glow)">AREA</text>\n\n  <!-- 52 large number -->\n  <text x="200" y="258"\n    font-family="\'Josefin Sans\', sans-serif"\n    font-size="80" font-weight="700"\n    fill="url(#g1)"\n    text-anchor="middle"\n    letter-spacing="-2"\n    filter="url(#glow)">52</text>\n\n  <!-- Corner diamond ornaments -->\n  <g fill="url(#g1)">\n    <!-- Top -->\n    <polygon points="200,18 204,26 200,34 196,26"/>\n    <!-- Bottom -->\n    <polygon points="200,366 204,374 200,382 196,374"/>\n    <!-- Left -->\n    <polygon points="18,200 26,196 34,200 26,204"/>\n    <!-- Right -->\n    <polygon points="366,200 374,196 382,200 374,204"/>\n  </g>\n\n  <!-- Small star ornaments at 45deg -->\n  <g fill="url(#g1)" opacity="0.7">\n    <polygon points="62,62 65,69 72,72 65,75 62,82 59,75 52,72 59,69"/>\n    <polygon points="338,62 341,69 348,72 341,75 338,82 335,75 328,72 335,69"/>\n    <polygon points="62,338 65,345 72,348 65,351 62,358 59,351 52,348 59,345"/>\n    <polygon points="338,338 341,345 348,348 341,351 338,358 335,351 328,348 335,345"/>\n  </g>\n\n  <!-- Thin decorative lines beside AREA -->\n  <line x1="52" y1="155" x2="118" y2="155" stroke="url(#g1)" stroke-width="0.8" opacity="0.5"/>\n  <line x1="282" y1="155" x2="348" y2="155" stroke="url(#g1)" stroke-width="0.8" opacity="0.5"/>\n</svg>';
+
+// Category colors cycling: gold, red, blue, gold...
+var CAT_COLORS=["#f0c040","#e03030","#3a8fd4","#f0c040","#50c878","#e07820","#3a8fd4","#e03030"];
+
+
+var CAT_EMOJI_MAP = {
+  'Agua': '💧',
+  'Alitas': '🍗',
+  'Burritos': '🌯',
+  'COCTELES': '🍹',
+  'Cafe': '☕',
+  'Carnes': '🥩',
+  'Cerveza 3 cordilleras': '🍺',
+  'Cerveza Importada': '🍻',
+  'Cerveza Nacional': '🍺',
+  'Comida': '🍽️',
+  'Energizantes': '⚡',
+  'Entradas': '🍟',
+  'Gaseosas': '🥤',
+  'JUGOS': '🧃',
+  'Lasagna': '🍝',
+  'Licores 1/2': '🥃',
+  'Licores Litro': '🍾',
+  'PIZZA': '🍕',
+  'Smirnoff': '🍸',
+  'Whisky': '🥃',
+  'cigarrillo': '🚬',
+  'otros': '🍹',
+  'tequila': '🥃',
+};
+
+function getCatEmoji(cat) {
+  // Exact match first
+  if (CAT_EMOJI_MAP[cat]) return CAT_EMOJI_MAP[cat];
+  // Case-insensitive match
+  var cl = cat.toLowerCase();
+  for (var k in CAT_EMOJI_MAP) {
+    if (k.toLowerCase() === cl) return CAT_EMOJI_MAP[k];
+  }
+  // Partial match
+  for (var k in CAT_EMOJI_MAP) {
+    if (cl.indexOf(k.toLowerCase()) >= 0 || k.toLowerCase().indexOf(cl) >= 0)
+      return CAT_EMOJI_MAP[k];
+  }
+  return '🍽️';
+}
+var BG_PATTERN="url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc0MDAnIGhlaWdodD0nNDAwJyBvcGFjaXR5PScwLjEyJz4KICA8ZGVmcz48c3R5bGU+cGF0aCxsaW5lLHJlY3QsZWxsaXBzZSxwb2x5Z29ue2ZpbGw6bm9uZTtzdHJva2U6JTIzZjBjMDQwO3N0cm9rZS13aWR0aDoyLjU7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO308L3N0eWxlPjwvZGVmcz4KICA8IS0tIEJlZXIgdG9wLWxlZnQgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTAsMTApIHNjYWxlKDAuNSkiPjxwYXRoIGQ9Ik0yNSA0MCBMMjAgMTQwIFEyMCAxNTAgMzAgMTUwIEw3NSAxNTAgUTg1IDE1MCA4NSAxNDAgTDgwIDQwIFoiLz48cGF0aCBkPSJNODUgNTUgUTk1IDU1IDk1IDc1IEw5NSAxMTAgUTk1IDEzMCA4NSAxMzAiLz48cGF0aCBkPSJNMjggNDAgUTUyIDMwIDc4IDQwIi8+PC9nPgogIDwhLS0gV2luZSB0b3AtcmlnaHQgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjYwLDUpIHNjYWxlKDAuNDUpIj48cGF0aCBkPSJNMzAgMTAgUTUwIDEwIDcwIDEwIFE3NSA1MCA2MCA4MCBRNTUgOTAgNTAgOTUgTDUwIDE1NSBRNjUgMTU1IDY1IDE2NSBMMzUgMTY1IFEzNSAxNTUgNTAgMTU1IEw1MCA5NSBRNDUgOTAgNDAgODAgUTI1IDUwIDMwIDEwIFoiLz48L2c+CiAgPCEtLSBDb2NrdGFpbCB0b3AtY2VudGVyIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDE0MCw4KSBzY2FsZSgwLjQ1KSI+PHBhdGggZD0iTTEwIDE1IEw2MCA4NSBMMTEwIDE1IFoiLz48bGluZSB4MT0iNjAiIHkxPSI4NSIgeDI9IjYwIiB5Mj0iMTQwIi8+PGxpbmUgeDE9IjM1IiB5MT0iMTQwIiB4Mj0iODUiIHkyPSIxNDAiLz48L2c+CiAgPCEtLSBQaXp6YSBsZWZ0IC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDUsMTQwKSBzY2FsZSgwLjUpIj48cGF0aCBkPSJNNzAgNSBMNSAxMjAgTDEzNSAxMjAgWiIvPjxjaXJjbGUgY3g9IjQ1IiBjeT0iODgiIHI9IjciLz48Y2lyY2xlIGN4PSI4MCIgY3k9IjcyIiByPSI2Ii8+PGNpcmNsZSBjeD0iMTAwIiBjeT0iOTYiIHI9IjUiLz48L2c+CiAgPCEtLSBCdXJnZXIgY2VudGVyIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDE0MCwxMzApIHNjYWxlKDAuNDUpIj48cGF0aCBkPSJNMTUgMzUgUTE1IDEwIDcwIDEwIFExMjUgMTAgMTI1IDM1IEwxMjUgNDIgTDE1IDQyIFoiLz48cmVjdCB4PSIxMCIgeT0iNDIiIHdpZHRoPSIxMTYiIGhlaWdodD0iMTIiIHJ4PSIyIi8+PHJlY3QgeD0iMTAiIHk9Ijc4IiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjIwIiByeD0iMTAiLz48L2c+CiAgPCEtLSBCb3R0bGUgcmlnaHQgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzEwLDExMCkgc2NhbGUoMC40KSI+PHBhdGggZD0iTTMwIDEwIEwzMCAzNSBRMTUgNTAgMTUgNzAgTDE1IDE3NSBRMTUgMTg1IDI1IDE4NSBMNTUgMTg1IFE2NSAxODUgNjUgMTc1IEw2NSA3MCBRNjUgNTAgNTAgMzUgTDUwIDEwIFoiLz48cmVjdCB4PSIyOCIgeT0iNSIgd2lkdGg9IjI0IiBoZWlnaHQ9IjgiIHJ4PSIyIi8+PC9nPgogIDwhLS0gRm9yay9rbmlmZSBib3R0b20tbGVmdCAtLT4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyMCwyNTUpIHNjYWxlKDAuNSkiPjxsaW5lIHgxPSIyMCIgeTE9IjEwIiB4Mj0iMjAiIHkyPSIxODAiLz48cGF0aCBkPSJNMTIgMTAgTDEyIDYwIFEyMCA3MCAyOCA2MCBMMjggMTAiLz48bGluZSB4MT0iNjAiIHkxPSIxMCIgeDI9IjYwIiB5Mj0iMTgwIi8+PHBhdGggZD0iTTUyIDEwIFE1MiA0NSA2MCA1MCBRNjggNDUgNjggMTAgWiIvPjwvZz4KICA8IS0tIERydW1zdGljayBib3R0b20tY2VudGVyIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDE2MCwyNTUpIHNjYWxlKDAuNDUpIj48ZWxsaXBzZSBjeD0iNzAiIGN5PSI0NSIgcng9IjQyIiByeT0iMzgiLz48cGF0aCBkPSJNMzUgNjggUTIwIDkwIDI1IDEyMCBRMzAgMTM1IDQwIDEzMCBRNTAgMTI1IDQ1IDEwOCBRNDIgOTUgNTUgODAgWiIvPjwvZz4KICA8IS0tIEJlZXIgYm90dG9tLXJpZ2h0IC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDI4MCwyNTApIHNjYWxlKDAuNSkiPjxwYXRoIGQ9Ik0yNSA0MCBMMjAgMTQwIFEyMCAxNTAgMzAgMTUwIEw3NSAxNTAgUTg1IDE1MCA4NSAxNDAgTDgwIDQwIFoiLz48cGF0aCBkPSJNODUgNTUgUTk1IDU1IDk1IDc1IEw5NSAxMTAgUTk1IDEzMCA4NSAxMzAiLz48cGF0aCBkPSJNMjggNDAgUTUyIDMwIDc4IDQwIi8+PC9nPgogIDwhLS0gU3RhciBvcm5hbWVudHMgLS0+CiAgPHBvbHlnb24gcG9pbnRzPSIyMDAsMTkwIDIwNSwyMDUgMjIwLDIwNSAyMDgsMjE0IDIxMywyMjkgMjAwLDIyMCAxODcsMjI5IDE5MiwyMTQgMTgwLDIwNSAxOTUsMjA1IiBvcGFjaXR5PSIwLjYiLz4KICA8cG9seWdvbiBwb2ludHM9IjMwLDM4MCAzMywzOTAgNDMsMzkwIDM1LDM5NiAzOCw0MDYgMzAsNDAwIDIyLDQwNiAyNSwzOTYgMTcsMzkwIDI3LDM5MCIgb3BhY2l0eT0iMC41Ii8+CiAgPHBvbHlnb24gcG9pbnRzPSIzNzAsMzAgMzczLDQwIDM4Myw0MCAzNzUsNDYgMzc4LDU2IDM3MCw1MCAzNjIsNTYgMzY1LDQ2IDM1Nyw0MCAzNjcsNDAiIG9wYWNpdHk9IjAuNSIvPgo8L3N2Zz4=')";
+var _fondoActivo=false;
+// Ensure fondo state is correct at print time
+window.addEventListener('beforeprint', function(){
+  if(!_fondoActivo){
+    var st=document.getElementById('fondo-style');
+    if(st) st.remove();
+  }
+});
+function aplicarFondo(on){
+  _fondoActivo=on;
+  var st=document.getElementById('fondo-style');
+  if(on){
+    // Create/update style tag with pattern
+    if(!st){st=document.createElement('style');st.id='fondo-style';document.head.appendChild(st);}
+    st.textContent=
+      '.menu-pages,.cover{'
+        +'background-image:'+BG_PATTERN+'!important;'
+        +'background-size:400px 400px!important;'
+        +'background-repeat:repeat!important;'
+        +'-webkit-print-color-adjust:exact!important;'
+        +'print-color-adjust:exact!important;'
+      +'}'
+      +'.fondo-ilustraciones{display:flex!important;}';
+  } else {
+    // REMOVE the style tag completely - no override possible
+    if(st) st.remove();
+    // Also hide ilustraciones directly
+    document.querySelectorAll('.fondo-ilustraciones').forEach(function(el){el.style.display='none';});
+  }
+}
+function setModo(modo){
+  // modo: 'oscuro' | 'claro'
+  _fondoActivo = (modo==='oscuro');
+  document.body.classList.toggle('modo-claro', modo==='claro');
+  aplicarFondo(modo==='oscuro');
+  var ind=document.getElementById('fondo-indicator');
+  var btn=document.getElementById('fondo-btn');
+  if(modo==='oscuro'){
+    if(ind){ind.style.background='#22c55e22';ind.style.color='#22c55e';ind.style.border='1px solid #22c55e44';ind.textContent='● Oscuro con fondo';}
+    if(btn)btn.textContent='☀️ Versión blanca';
+  } else {
+    if(ind){ind.style.background='#3b82f622';ind.style.color='#60a5fa';ind.style.border='1px solid #3b82f644';ind.textContent='● Blanco elegante';}
+    if(btn)btn.textContent='🌙 Versión oscura';
+  }
+}
+function toggleFondo(){
+  setModo(document.body.classList.contains('modo-claro')?'oscuro':'claro');
+}
+function imprimirModo(){
+  document.body.offsetHeight;
+  window.print();
+}
+function imprimirConFondo(){aplicarFondo(true);toggleFondo();imprimirModo();}
+function imprimirSinFondo(){aplicarFondo(false);toggleFondo();imprimirModo();}
+
+firebase.initializeApp({
+  apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",
+  authDomain:"area52bar-a36aa.firebaseapp.com",
+  databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",
+  projectId:"area52bar-a36aa",
+  storageBucket:"area52bar-a36aa.firebasestorage.app",
+  messagingSenderId:"79314921682",
+  appId:"1:79314921682:web:abfa44eefbd0df7441250b"
+});
+var db=firebase.database();
+var menuData=[];
+
+function fmt(n){return "$"+Number(n).toLocaleString("es-CO");}
+function esc(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+// Check if in cliente mode
+(function(){
+  if(window.location.search.indexOf('cliente=1')>=0){
+    document.body.classList.add('cliente-mode');
+    // Auto-activate dark background for customers
+    // cliente mode: no auto-background
+  }
+})();
+
+// Init: dark mode, no pattern by default
+setModo('oscuro');
+
+function recargar(){
+  document.getElementById("status").textContent="⏳ Cargando carta desde Firebase...";
+  db.ref("menu").on("value",function(snap){
+    var v=snap.val();
+    if(!v){document.getElementById("status").textContent="Sin carta.";return;}
+    menuData=Object.values(v).filter(function(m){return m&&m.nombre;});
+    menuData.sort(function(a,b){return(a.cat||"").localeCompare(b.cat||"")||(a.nombre||"").localeCompare(b.nombre||"");});
+    document.getElementById("status").textContent="✓ "+menuData.length+" productos listos";
+    regenerar();
+  },function(e){document.getElementById("status").textContent="Error: "+e.message;});
+}
+
+function regenerar(){
+  if(!menuData.length)return;
+  var showPrice=document.getElementById("cfg-precios").value!=="no";
+  var showCubeta=document.getElementById("cfg-cubeta").value!=="no";
+  var tagline=document.getElementById("cfg-tagline").value;
+
+  // Group by category
+  var cats={};
+  menuData.forEach(function(p){var c=p.cat||"Otros";if(!cats[c])cats[c]=[];cats[c].push(p);});
+  var catNames=Object.keys(cats).sort();
+
+  // Adjust logo SVG colors to gold
+  var logoSvg=LOGO_SVG;
+
+  var sections=catNames.map(function(cat,i){
+    var color=CAT_COLORS[i%CAT_COLORS.length];
+    var count=cats[cat].length;
+    var items=cats[cat].map(function(p){
+      var cubHtml=(showCubeta&&p.esCerveza&&p.cubeta)
+        ?'<div style="display:inline-block;background:#f0c04022;border:1px solid #f0c04055;border-radius:4px;padding:1px 6px;margin-top:3px;font-size:11px;font-weight:700;color:#f0c040;letter-spacing:1px">🪣 CUBETAZO '+fmt(p.cubeta)+'</div>':"";
+      return'<div class="menu-item">'
+        +'<span class="item-emoji">'+(p.emoji||"·")+"</span>"
+        +'<div style="flex:1">'
+        +'<span class="item-name">'+esc(p.nombre)+"</span>"
+        +(p.descripcion?'<div style="font-size:14px;color:#bbb;font-style:italic;margin-top:3px;line-height:1.4">'+esc(p.descripcion)+'</div>':'')
+        +cubHtml
+        +"</div>"
+        +(showPrice
+          ?'<span class="item-dots"></span>'
+           +'<div style="text-align:right;flex-shrink:0">'
+             +'<span class="item-price" style="color:'+color+'">'+fmt(p.precio)+"</span>"
+           +"</div>"
+          :"")
+        +"</div>";
+    }).join("");
+
+    var catEmoji=getCatEmoji(cat);
+    var icon_div='<span style="font-size:18px;opacity:.8">'+catEmoji+'</span>';
+    return'<div class="cat-section">'
+      +'<div class="cat-header" style="color:'+color+'">'
+        +'<div class="cat-emoji">'+catEmoji+'</div>'
+        +'<div class="cat-title">'+esc(cat.toUpperCase())+'</div>'
+        +'<div class="cat-count" style="border-color:'+color+'44;color:'+color+'">'+count+'</div>'
+        +'<div class="cat-line" style="border-color:'+color+'"></div>'
+      +"</div>"
+      +'<div class="items-grid">'+items+"</div>"
+      +"</div>";
+  }).join("");
+
+  document.getElementById("doc").innerHTML=
+    // Cover
+    '<div class="cover">'
+
+      +'<div style="font-size:22px;letter-spacing:12px;color:rgba(240,192,64,.5);margin-bottom:8px">✦ ✦ ✦</div>'
+      +'<div class="cover-tag">Bogotá · Colombia</div>'
+      +'<div class="cover-title">ÁREA <span>52</span></div>'
+      +'<div class="cover-sub">Gastro Bar</div>'
+      +'<div class="cover-divider">'
+        +'<div class="cover-divider-line"></div>'
+        +'<div class="cover-divider-icon">✦</div>'
+        +'<div class="cover-divider-line"></div>'
+      +"</div>"
+      +(tagline?'<div class="cover-tagline">'+esc(tagline)+"</div>":"")
+      +'<div class="fondo-ilustraciones" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;justify-content:center;gap:24px;margin-top:10px;opacity:0.15">'
+        +'<svg width="40" height="55" viewBox="0 0 80 200" fill="#f0c040"><path d="M30 10 L30 35 Q15 50 15 70 L15 175 Q15 185 25 185 L55 185 Q65 185 65 175 L65 70 Q65 50 50 35 L50 10 Z"/><rect x="28" y="5" width="24" height="8" rx="3"/></svg>'
+        +'<svg width="35" height="55" viewBox="0 0 100 180" fill="#f0c040"><path d="M30 10 Q50 10 70 10 Q75 50 60 80 Q55 90 50 95 L50 155 Q65 155 65 165 L35 165 Q35 155 50 155 L50 95 Q45 90 40 80 Q25 50 30 10 Z"/></svg>'
+        +'<svg width="40" height="45" viewBox="0 0 120 160" fill="#f0c040"><path d="M10 15 L60 85 L110 15 Z"/><line x1="60" y1="85" x2="60" y2="140" stroke="#f0c040" stroke-width="4"/><ellipse cx="60" cy="142" rx="25" ry="5"/></svg>'
+        +'<svg width="35" height="55" viewBox="0 0 80 200" fill="#f0c040"><path d="M30 10 L30 35 Q15 50 15 70 L15 175 Q15 185 25 185 L55 185 Q65 185 65 175 L65 70 Q65 50 50 35 L50 10 Z"/><rect x="28" y="5" width="24" height="8" rx="3"/></svg>'
+        +'<svg width="40" height="45" viewBox="0 0 140 110" fill="#f0c040"><path d="M15 35 Q15 10 70 10 Q125 10 125 35 L125 42 L15 42 Z"/><rect x="12" y="42" width="116" height="12" rx="2" opacity=".7"/><rect x="10" y="78" width="120" height="20" rx="10"/></svg>'
+      +'</div>'
+    +"</div>"
+    // Sections
+    +'<div class="menu-pages">'
+      
+      +sections+"</div>" 
+    // Footer
+    +'<div class="menu-footer">'
+      +'<div class="footer-contact">'
+        +'<span><b>📍</b> Calle 53 # 85H – 10, Bogotá</span>'
+        +'<span><b>📞</b> 3213502772 &nbsp;·&nbsp; 3213502772</span>'
+        +'<span><b>📧</b> Area52.gastrobar@gmail.com</span>'
+        +'<span><b>📸</b> @area52.gastrobar</span>'
+      +"</div>"
+      +'<div class="footer-brand">ÁREA 52</div>'
+    +"</div>";
+  // Enforce fondo state after DOM rebuild
+  aplicarFondo(_fondoActivo);
+}
+
+recargar();
+</script>
+</body>
+</html>
