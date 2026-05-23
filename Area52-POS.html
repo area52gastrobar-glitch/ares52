@@ -407,7 +407,7 @@ function iniciarSync(){
   if(dot){dot.style.background='#22c55e';dot.title='Conectado a Firebase';}
   fbOn('pedidos',function(v){
     pedidos=v||{};
-    Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=[];});
+    Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=Object.values(pedidos[k]||{});});
     renderSoloPedido();updateHeader();actualizarColorMesas();
   });
   fbOn('ventas',function(v){ventas=v?Object.values(v):[];updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
@@ -427,6 +427,10 @@ function iniciarSync(){
     if(tabActual==='mesas')render();
   });
   fbOn('combos',function(v){combos=v?Object.values(v):[];if(tabActual==='combos'||tabActual==='mesas')render();});
+  fbOn('cocinaEntregados',function(v){
+    cocinaEntregados=v||{};
+    if(tabActual==='cocina')render();
+  });
   fbOn('cierres',function(v){cierres=v?Object.values(v):[];if(tabActual==='caja')render();});
   fbOn('cajaHoy',function(v){if(v)cajaHoy=v;if(tabActual==='caja')render();});
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
@@ -652,7 +656,10 @@ function renderMesas(){
 
   var panelPedido='<div id="panel-pedido-slot"></div>';
 
-  return '<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
+  // Mesa size slider
+  var sizeSlider='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);border-radius:8px;padding:6px 12px">'    +'<span style="color:var(--muted);font-size:11px;white-space:nowrap">🔲 Tamaño:</span>'    +'<input type="range" min="50" max="130" value="'+mesaSize+'" style="flex:1;accent-color:var(--accent)" '    +'oninput="mesaSize=parseInt(this.value);render()"/>'    +'<span style="color:var(--accent);font-size:12px;font-weight:700;min-width:34px">'+mesaSize+'px</span>'    +'</div>';
+
+  return sizeSlider+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
     +'<div class="flex">'+zonaBtns+'</div>'
     +ctrlBtns+'</div>'
     +(modoEdicion?'<div class="alert-box alert-gold mb12">💡 Arrastra para mover · Doble clic para editar nombre, forma o eliminar</div>':'')
@@ -694,8 +701,8 @@ function renderPanelPedido(){
       +'<div style="color:var(--text);font-size:12px;font-weight:700;margin:3px 0 1px;line-height:1.2">'+esc(p.nombre)+'</div>'
       +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">Stock: '+p.stock+' '+p.und+'</div>'
       +'<div style="display:flex;gap:4px">'
-      +'<button onclick="agregarItem('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+fmt(p.precio)+'</button>'
-      +(p.esCerveza&&p.cubeta?'<button onclick="agregarItem('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+fmt(p.cubeta)+'</button>':'')
+      +'<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+fmt(p.precio)+'</button>'
+      +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+fmt(p.cubeta)+'</button>':'')
       +'</div></div>';
   }).join('');
 
@@ -1057,6 +1064,68 @@ function borrarParedes(){
 function setCatPed(c){catFiltroPed=c;renderSoloPedido();}
 
 /* ═══════════════ PEDIDOS ═══════════════ */
+function abrirCantidadVariante(pid,nom,pre){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  var btns=[1,2,3,4,5,6,8,10,12].map(function(q){
+    return'<button data-act="mesa-qty-var" data-pid="'+pid+'" data-nom="'+esc(nom)+'" data-pre="'+pre+'" data-qty="'+q+'" '
+      +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 0;'
+      +'font-size:20px;font-weight:900;color:var(--accent);cursor:pointer">'+q+'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:14px">'
+    +'<div style="font-size:30px">'+p.emoji+'</div>'
+    +'<div style="font-weight:800;font-size:16px;margin-top:4px">'+esc(p.nombre)+' · '+esc(nom)+'</div>'
+    +'<div style="color:var(--accent);font-weight:700;font-size:14px;margin-top:2px">'+fmt(pre)+' c/u</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+}
+
+function abrirCantidadMesa(pid,cubeta){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  // If has variantes, show variante selector first instead
+  if(p.variantes&&p.variantes.length>0&&!cubeta){
+    abrirSelectorVariante(pid);
+    return;
+  }
+  var precio=cubeta?(p.cubeta||p.precio*5):p.precio;
+  var btns=[1,2,3,4,5,6,8,10,12].map(function(q){
+    return'<button data-act="mesa-qty" data-pid="'+pid+'" data-cub="'+cubeta+'" data-qty="'+q+'" '
+      +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 0;'
+      +'font-size:20px;font-weight:900;color:var(--accent);cursor:pointer">'+q+'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:14px">'
+    +'<div style="font-size:30px">'+(cubeta?'🪣':p.emoji)+'</div>'
+    +'<div style="font-weight:800;font-size:16px;margin-top:4px">'+(cubeta?'Cubetazo ':'')+esc(p.nombre)+'</div>'
+    +'<div style="color:var(--accent);font-weight:700;font-size:14px;margin-top:2px">'+fmt(precio)+(cubeta?' (×5)':' c/u')+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+}
+
+function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
+  if(!mesaActiva)return;
+  var p=menu.find(function(m){return m.id===pid;});
+  var id=mesaActiva.id;
+  if(!pedidos[id])pedidos[id]=[];
+  var idx=pedidos[id].findIndex(function(it){
+    return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'');
+  });
+  if(idx>=0)pedidos[id][idx].qty+=cantidad;
+  else pedidos[id].push({
+    pid:pid,cubeta:cubeta,qty:cantidad,
+    varianteNombre:varianteNombre||'',
+    variantePrecio:variantePrecio||0
+  });
+  var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  var totMesa=totalPedido(id);
+  var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
+  var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
+  showToast('✅ '+cantidad+'× '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+nItems+' ítems · '+fmt(totMesa)+'</span>','#22c55e');
+  renderSoloPedido();updateHeader();actualizarColorMesas();
+}
+
 function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
   if(!mesaActiva)return;
   var p=menu.find(function(m){return m.id===pid;});
@@ -1079,6 +1148,11 @@ function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
     variantePrecio:variantePrecio||0
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  // Toast feedback
+  var totMesa=totalPedido(id);
+  var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
+  var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
+  showToast('✅ '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+nItems+' ítems · '+fmt(totMesa)+'</span>','#22c55e');
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
 
@@ -2871,7 +2945,8 @@ function renderCocina(){
   // Collect all pending comida items across all mesas
   var pendientes=[];
   mesas.forEach(function(m){
-    var ped=pedidos[m.id]||[];
+    var rawP=pedidos[m.id]||pedidos[String(m.id)]||[];
+    var ped=Array.isArray(rawP)?rawP:Object.values(rawP);
     ped.forEach(function(it,idx){
       var p=it.isCustom||it.isCombo?null:menu.find(function(x){return x.id==it.pid;});
       if(p&&p.esComida){
@@ -3018,6 +3093,11 @@ function renderSocios(){
     +'</div>'
     // Category pills
     +'<div style="display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:10px;padding-bottom:4px">'+catPills+'</div>'
+    // Sticky resumen del socio activo
+    +'<div style="position:sticky;top:0;z-index:5;background:'+(socioActivo==='CARLOS'?'#38bdf8':'#a855f7')+';border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 4px 12px rgba(0,0,0,.3)">'
+      +'<span style="color:'+(socioActivo==='CARLOS'?'#000':'#fff')+';font-weight:800;font-size:13px">👤 '+socioActivo+'</span>'
+      +'<span style="color:'+(socioActivo==='CARLOS'?'#000':'#fff')+';font-weight:900;font-size:16px">'+fmt(socioActivo==='CARLOS'?totalCarlos:totalJavier)+'</span>'
+    +'</div>'
     // Product grid
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+prodCards+'</div>'
     +(comboCards?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'+comboCards+'</div>':'')
@@ -3036,17 +3116,59 @@ function renderSocios(){
 }
 
 
-function agregarConsumoSocio(pid,esCubeta){
+function showToast(msg,color){
+  var t=document.getElementById('app-toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='app-toast';
+    t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);background:#1a1a22;border:2px solid '+(color||'#22c55e')+';color:#fff;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;z-index:9999;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.16,1,.3,1);opacity:0;max-width:90vw;text-align:center';
+    document.body.appendChild(t);
+  }
+  t.style.borderColor=color||'#22c55e';
+  t.innerHTML=msg;
+  t.style.transform='translateX(-50%) translateY(0)';
+  t.style.opacity='1';
+  clearTimeout(t._timer);
+  t._timer=setTimeout(function(){
+    t.style.transform='translateX(-50%) translateY(-80px)';
+    t.style.opacity='0';
+  },1800);
+}
+
+function abrirCantidadSocio(pid,esCubeta){
   var p=menu.find(function(m){return m.id===pid;});
   if(!p)return;
   var precioBase=esCubeta?(p.cubeta||p.precio*5):p.precio;
   var precioSocio=Math.round(precioBase*0.9);
+  var btns=[1,2,3,4,5,6,8,10,12].map(function(q){
+    return'<button data-act="soc-qty" data-pid="'+pid+'" data-cub="'+esCubeta+'" data-qty="'+q+'" '
+      +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 0;'
+      +'font-size:20px;font-weight:900;color:var(--accent);cursor:pointer">'+q+'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:14px">'
+    +'<div style="font-size:30px">'+(esCubeta?'🪣':p.emoji)+'</div>'
+    +'<div style="font-weight:800;font-size:16px;margin-top:4px">'+(esCubeta?'Cubetazo ':'')+esc(p.nombre)+'</div>'
+    +'<div style="color:#22c55e;font-weight:700;font-size:14px;margin-top:2px">'+fmt(precioSocio)+' c/u</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+}
+
+function agregarConsumoSocio(pid,esCubeta,cantidad){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  var qty=cantidad||1;
+  var precioBase=esCubeta?(p.cubeta||p.precio*5):p.precio;
+  var precioSocio=Math.round(precioBase*0.9);
   var nombre=(esCubeta?'🪣 Cubetazo ':'')+''+p.nombre;
-  var item={pid:pid,qty:1,cubeta:!!esCubeta,nombre:nombre,emoji:p.emoji,precioBase:precioBase,precioSocio:precioSocio};
-  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio};
+  var item={pid:pid,qty:qty,cubeta:!!esCubeta,nombre:nombre,emoji:p.emoji,precioBase:precioBase,precioSocio:precioSocio};
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio*qty};
   consumoSocios.push(consumo);
   var r=ref('consumoSocios');
   if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
+  var totalSocio=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+c.total;},0);
+  var colorS=_socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
+  showToast('✅ '+qty+'× '+p.emoji+' '+esc(nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">Total '+_socioActivo+': '+fmt(totalSocio)+'</span>',colorS);
   render();
 }
 
@@ -3059,6 +3181,9 @@ function agregarConsumoSocioCombo(cbId){
   consumoSocios.push(consumo);
   var r=ref('consumoSocios');
   if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
+  var totalSocioC=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+c.total;},0);
+  var colorSC=_socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
+  showToast('✅ 🎁 '+esc(cb.nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">Total '+_socioActivo+': '+fmt(totalSocioC)+'</span>',colorSC);
   render();
 }
 
@@ -3534,13 +3659,32 @@ document.addEventListener('click',function(e){
     if(val){catEmojis[cat2]=val;fbSet('catEmojis',catEmojis);closeModal2();render();}
     return;
   }
+  var mqv=e.target.closest('[data-act="mesa-qty-var"]');
+  if(mqv){
+    var pidV=parseInt(mqv.getAttribute('data-pid'));
+    var nomV=mqv.getAttribute('data-nom');
+    var preV=parseInt(mqv.getAttribute('data-pre'));
+    var qtyV=parseInt(mqv.getAttribute('data-qty'));
+    closeModal2();
+    agregarItemQty(pidV,false,qtyV,nomV,preV);
+    return;
+  }
+  var mq=e.target.closest('[data-act="mesa-qty"]');
+  if(mq){
+    var pidM=parseInt(mq.getAttribute('data-pid'));
+    var cubM=mq.getAttribute('data-cub')==='true';
+    var qtyM=parseInt(mq.getAttribute('data-qty'));
+    closeModal2();
+    agregarItemQty(pidM,cubM,qtyM);
+    return;
+  }
   var pv=e.target.closest('[data-act="pick-variante"]');
   if(pv){
     var pid=parseInt(pv.getAttribute('data-pid'));
     var nom=pv.getAttribute('data-nom');
     var pre=parseInt(pv.getAttribute('data-pre'));
     closeModal2();
-    agregarItem(pid,false,nom,pre);
+    abrirCantidadVariante(pid,nom,pre);
     return;
   }
   var ces=e.target.closest('[data-act="confirm-edit-stock"]');
@@ -3557,7 +3701,15 @@ document.addEventListener('click',function(e){
   if(sa){
     var pid=parseInt(sa.getAttribute('data-pid'));
     var esCub=sa.getAttribute('data-cub')==='true';
-    agregarConsumoSocio(pid,esCub);return;
+    abrirCantidadSocio(pid,esCub);return;
+  }
+  var sq=e.target.closest('[data-act="soc-qty"]');
+  if(sq){
+    var pidQ=parseInt(sq.getAttribute('data-pid'));
+    var esCubQ=sq.getAttribute('data-cub')==='true';
+    var qtyQ=parseInt(sq.getAttribute('data-qty'));
+    closeModal2();
+    agregarConsumoSocio(pidQ,esCubQ,qtyQ);return;
   }
   var scb=e.target.closest('[data-act="soc-add-combo"]');
   if(scb){agregarConsumoSocioCombo(scb.getAttribute('data-cbid'));return;}
@@ -3574,14 +3726,17 @@ document.addEventListener('click',function(e){
       var key=btn2.getAttribute('data-key');
       var mesaId2=parseInt(btn2.getAttribute('data-mesaid'));
       var itemIdx2=parseInt(btn2.getAttribute('data-itemidx'));
-      var ped2=pedidos[mesaId2]||[];
+      var rawPed=pedidos[mesaId2]||pedidos[String(mesaId2)]||[];
+      // Firebase may return object instead of array - normalize
+      var ped2=Array.isArray(rawPed)?rawPed:Object.values(rawPed);
       var it2=ped2[itemIdx2];
-      if(it2){
-        var entregados2=(cocinaEntregados[key]||0)+1;
-        cocinaEntregados[key]=entregados2;
-        if(entregados2>=it2.qty) delete cocinaEntregados[key];
-        render();
-      }
+      var maxQty=it2?it2.qty:1;
+      var nuevo=(cocinaEntregados[key]||0)+1;
+      // Cap at maxQty, keep the value (don't delete - that would reset to pending)
+      cocinaEntregados[key]=Math.min(nuevo,maxQty);
+      // Persist to Firebase so it survives across devices and re-renders
+      fbSet('cocinaEntregados',cocinaEntregados);
+      render();
       return;
     }
     if(act2==='ped-minus'||act2==='ped-plus'){
