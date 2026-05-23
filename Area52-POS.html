@@ -297,12 +297,12 @@ var FPAGO=[
   {id:'efectivo', label:'Efectivo',       color:'#22C55E',emoji:'💵'}
 ];
 var ROLES={
-  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','socios','cocina','admin']},
-  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','socios','cocina']},
+  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','socios','empleados','cocina','admin']},
+  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','socios','empleados','cocina']},
   mesero:{label:'Mesero',       color:'#22c55e',tabs:['mesas','gastos','socios','cocina']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
-  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',socios:'🤝 Socios',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
+  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',socios:'🤝 Socios',empleados:'👷 Empleados',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
 var EMOJIS=['🍺','🍻','🥃','🍷','🥂','🍹','🥤','💧','🧃','🧉','🍸','🍾','☕','🫖','🧋','⚡','🔋','🥫','🍕','🍔','🌭','🌮','🌯','🫔','🥙','🍗','🍖','🥩','🥓','🍟','🧆','🍝','🍜','🥘','🫕','🥟','🧀','🥗','🎂','🍰','🧁','🍩','🍪','🍫','🚬','🔥','💫','🌶️','🍤','🦐','🦑','🦀','🍣','🍱','🍊','🍋','🍓','🫐','🥭','🧊','🥚','🍳','🫙','🥤','🍞','🥐','🧇'];
 var CATG_GASTOS=['Mercancía','Insumos','Servicios','Personal','Mantenimiento','Transporte','Otro'];
 
@@ -345,6 +345,8 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var empleados=[];      // [{id, nombre, cargo, activo}]
+var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid}]
 var _socioActivo='CARLOS';  // currently selected socio
 var _socCatFiltro='Todos';  // category filter in socios tab
 var ventaSinStock=false;  // admin toggle: allow selling without stock
@@ -437,6 +439,14 @@ function iniciarSync(){
   fbOn('consumoSocios',function(v){
     consumoSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='socios')render();
+  });
+  fbOn('empleados',function(v){
+    empleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='empleados')render();
+  });
+  fbOn('movEmpleados',function(v){
+    movEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='empleados')render();
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -556,6 +566,7 @@ function render(){
   if(tabActual==='gastos')    c.innerHTML=renderGastos();
   if(tabActual==='ventas')    c.innerHTML=renderVentas();
   if(tabActual==='socios')    c.innerHTML=renderSocios();
+  if(tabActual==='empleados') {c.innerHTML=renderEmpleados();}
   if(tabActual==='cocina')    {c.innerHTML=renderCocina();bindCocinaEvents();}
   if(tabActual==='admin')     c.innerHTML=renderAdmin();
   bindMapaEvents();
@@ -3006,6 +3017,137 @@ var cocinaEntregados={};  // {mesaId_itemIdx: cantidadEntregada}
 
 function bindCocinaEvents(){}  // handled by document listener
 
+function renderEmpleados(){
+  var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+
+  // Compute saldo de prestamos por empleado
+  function saldoPrestamo(empId){
+    return movEmpleados.filter(function(m){return m.empId===empId;}).reduce(function(s,m){
+      if(m.tipo==='prestamo')return s+m.valor;
+      if(m.tipo==='abono')return s-m.valor;
+      return s;
+    },0);
+  }
+
+  var empCards=empleados.filter(function(e){return e.activo!==false;}).map(function(e){
+    var saldo=saldoPrestamo(e.id);
+    var totalPagado=movEmpleados.filter(function(m){return m.empId===e.id&&m.tipo==='salario';}).reduce(function(s,m){return s+m.valor;},0);
+    return'<div class="card" style="margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+        +'<div>'
+          +'<div style="font-weight:800;font-size:15px">👷 '+esc(e.nombre)+'</div>'
+          +'<div style="color:var(--muted);font-size:12px">'+esc(e.cargo||'Sin cargo')+'</div>'
+        +'</div>'
+        +'<div style="text-align:right">'
+          +(saldo>0?'<div style="color:#ef4444;font-weight:700;font-size:13px">Debe: '+fmt(saldo)+'</div>':'<div style="color:#22c55e;font-size:12px">Sin deudas</div>')
+        +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+        +'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="prestamo" style="flex:1;min-width:80px;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">💸 Préstamo</button>'
+        +(saldo>0?'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="abono" style="flex:1;min-width:80px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✅ Abono</button>':'')
+        +'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="salario" style="flex:1;min-width:80px;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">💰 Salario</button>'
+        +'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="otro" style="flex:1;min-width:80px;background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">+ Otro</button>'
+      +'</div>'
+      // Historial movimientos
+      +(function(){
+        var movs=movEmpleados.filter(function(m){return m.empId===e.id;}).sort(function(a,b){return b.ts-a.ts;}).slice(0,5);
+        if(!movs.length)return'';
+        return'<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">'
+          +movs.map(function(m){
+            var icon=m.tipo==='prestamo'?'💸':(m.tipo==='abono'?'✅':(m.tipo==='salario'?'💰':'📌'));
+            var col=m.tipo==='abono'?'#22c55e':(m.tipo==='prestamo'?'#ef4444':'var(--muted)');
+            var fp=FPAGO.find(function(x){return x.id===m.fp;});
+            return'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px">'
+              +'<span style="color:var(--muted)">'+icon+' '+m.tipo.charAt(0).toUpperCase()+m.tipo.slice(1)+(m.nota?' · '+esc(m.nota):'')+' <span style="opacity:.6">'+fmtTime(m.ts)+'</span></span>'
+              +'<span style="color:'+col+';font-weight:700">'+fmt(m.valor)+(fp?' '+fp.emoji:'')+'</span>'
+              +(esAdmin?'<button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;margin-left:6px">✕</button>':'')
+              +'</div>';
+          }).join('')
+        +'</div>';
+      })()
+    +'</div>';
+  }).join('');
+
+  // Totales del turno (movimientos que son gasto)
+  var movTurno=movEmpleados.filter(function(m){return m.ts>=turnoInicio&&(m.tipo==='prestamo'||m.tipo==='salario'||m.tipo==='otro');});
+  var totalEgresos=movTurno.reduce(function(s,m){return s+m.valor;},0);
+
+  return'<div>'
+    +'<div class="flex-between mb12">'
+      +'<div style="font-weight:800;font-size:16px">👷 Empleados</div>'
+      +'<button class="btn btn-green" onclick="abrirNuevoEmpleado()">+ Empleado</button>'
+    +'</div>'
+    +(totalEgresos>0?'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between"><span style="color:#ef4444;font-weight:700;font-size:13px">💸 Egresos a empleados (turno)</span><span style="color:#ef4444;font-weight:900">'+fmt(totalEgresos)+'</span></div>':'')
+    +(empCards||'<div style="text-align:center;color:var(--muted);padding:40px 20px">Sin empleados. Toca "+ Empleado" para crear el primero.</div>')
+  +'</div>';
+}
+
+function abrirNuevoEmpleado(){
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:14px">👷 Nuevo empleado</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre *</div>'
+    +'<input class="inp" id="emp-nombre" placeholder="Ej: Juan Pérez"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cargo</div>'
+    +'<input class="inp" id="emp-cargo" placeholder="Ej: Mesero, Cocinero, Bartender"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarEmpleado()">Guardar</button>');
+}
+
+function guardarEmpleado(){
+  var nombre=((document.getElementById('emp-nombre')||{}).value||'').trim();
+  var cargo=((document.getElementById('emp-cargo')||{}).value||'').trim();
+  if(!nombre){alert('Escribe el nombre.');return;}
+  var emp={id:'emp'+Date.now(),nombre:nombre,cargo:cargo,activo:true,ts:Date.now()};
+  empleados.push(emp);
+  var r=ref('empleados');if(r)r.push(emp);else fbSet('empleados',empleados);
+  closeModal1();render();
+}
+
+function abrirMovEmpleado(empId,tipo){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var titulos={prestamo:'💸 Préstamo a',abono:'✅ Abono de',salario:'💰 Pago salario a',otro:'📌 Otro movimiento'};
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">'+(titulos[tipo]||tipo)+'</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
+    +'<input class="inp" id="mov-valor" type="number" placeholder="0" inputmode="numeric"/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
+    +'<select class="inp" id="mov-fp">'+fpOpts+'</select></div>'
+    +(tipo==='otro'?'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto</div><input class="inp" id="mov-nota" placeholder="Ej: Bono, descuento..."/></div>':'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nota (opcional)</div><input class="inp" id="mov-nota" placeholder=""/></div>')
+    +'<button class="btn btn-green btn-full" onclick="guardarMovEmpleado(\''+empId+'\',\''+tipo+'\')">Guardar</button>');
+}
+
+function guardarMovEmpleado(empId,tipo){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var valor=parseInt((document.getElementById('mov-valor')||{}).value)||0;
+  var fp=(document.getElementById('mov-fp')||{}).value||'efectivo';
+  var nota=((document.getElementById('mov-nota')||{}).value||'').trim();
+  if(!valor||valor<=0){alert('Escribe el valor.');return;}
+  var mov={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:tipo,valor:valor,fp:fp,nota:nota,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  movEmpleados.push(mov);
+  var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
+
+  // Préstamo, salario y otro = gasto automático (sale dinero). Abono NO (entra dinero).
+  if(tipo==='prestamo'||tipo==='salario'||tipo==='otro'){
+    var conceptos={prestamo:'Préstamo a '+emp.nombre,salario:'Salario '+emp.nombre,otro:(nota||'Movimiento')+' - '+emp.nombre};
+    var g={id:'g'+Date.now(),ts:Date.now(),concepto:conceptos[tipo],categoria:'Personal',valor:valor,notas:'Auto desde Empleados',fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+    gastos.push(g);
+    var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
+  }
+
+  closeModal1();
+  var msgs={prestamo:'💸 Préstamo registrado',abono:'✅ Abono registrado',salario:'💰 Salario pagado',otro:'📌 Movimiento registrado'};
+  showToast((msgs[tipo]||'Guardado')+'<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(valor)+'</span>',tipo==='abono'?'#22c55e':'#ef4444');
+  render();
+}
+
+function borrarMovEmpleado(movId){
+  if(!confirm('¿Eliminar este movimiento? (No elimina el gasto asociado)'))return;
+  movEmpleados=movEmpleados.filter(function(m){return m.id!==movId;});
+  fbSet('movEmpleados',movEmpleados);
+  render();
+}
+
 function renderSocios(){
   var totalAcum=consumoSocios.reduce(function(a,c){return a+c.total;},0);
   var totalCarlos=consumoSocios.filter(function(c){return c.socio==='CARLOS';}).reduce(function(a,c){return a+c.total;},0);
@@ -3710,6 +3852,15 @@ document.addEventListener('click',function(e){
     var qtyQ=parseInt(sq.getAttribute('data-qty'));
     closeModal2();
     agregarConsumoSocio(pidQ,esCubQ,qtyQ);return;
+  }
+  // Empleados
+  var em=e.target.closest('[data-act="emp-mov"]');
+  if(em){
+    abrirMovEmpleado(em.getAttribute('data-emp'),em.getAttribute('data-tipo'));return;
+  }
+  var edm=e.target.closest('[data-act="emp-delmov"]');
+  if(edm){
+    borrarMovEmpleado(edm.getAttribute('data-id'));return;
   }
   var scb=e.target.closest('[data-act="soc-add-combo"]');
   if(scb){agregarConsumoSocioCombo(scb.getAttribute('data-cbid'));return;}
