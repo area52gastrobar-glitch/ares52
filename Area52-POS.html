@@ -350,6 +350,7 @@ var _socCatFiltro='Todos';  // category filter in socios tab
 var ventaSinStock=false;  // admin toggle: allow selling without stock
 var descuentos={};        // {mesaId: {pct:10, auth:'Nombre'}}
 var _invTab='carta';      // 'carta' or 'ingredientes'
+var mesaSize=80;  // px size of each mesa circle
 var catEmojis={};  // {catName: emoji} - saved in Firebase
 var combos=[];  // [{id,nombre,precio,emoji,ingredientes:[{prodId,cantidad}]}]
 var ingredientes=[];  // cocina ingredients - separate from menu
@@ -582,9 +583,10 @@ function colorMesa(id){
   return(pedidos[id]&&pedidos[id].length>0)?'#f5a623':'#22c55e';
 }
 function dimMesa(forma,ori){
-  if(forma==='redonda')return{w:88,h:88,r:'50%'};
-  if(forma==='cuadrada')return{w:88,h:88,r:'10px'};
-  return ori==='vertical'?{w:72,h:112,r:'10px'}:{w:118,h:72,r:'10px'};
+  var s=mesaSize;
+  if(forma==='redonda')return{w:s,h:s,r:'50%'};
+  if(forma==='cuadrada')return{w:s,h:s,r:'10px'};
+  return ori==='vertical'?{w:Math.round(s*0.82),h:Math.round(s*1.27),r:'10px'}:{w:Math.round(s*1.34),h:Math.round(s*0.82),r:'10px'};
 }
 function renderMesas(){
   var zona=ZONAS.find(function(z){return z.id===zonaActual;});
@@ -1333,7 +1335,9 @@ function renderInventario(){
     +'</div>':'';
 
   // ── Tab pills ──────────────────────────────────────────────────────────────
-  var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px">'
+  var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>'
+    +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
       var sel=invTab===t;
       var label=t==='carta'?'🍺 Productos carta':'🧂 Ingredientes cocina';
@@ -1915,6 +1919,58 @@ function quitarVariante(vi){
   }
 }
 
+function exportarInventarioExcel(){
+  // Build CSV with BOM for Excel UTF-8 compatibility
+  var rows = [['Categoría','Nombre','Emoji','Precio','Stock','Unidad','Es Cerveza','Cubetazo','Descripción']];
+  
+  // Sort by category then name
+  var sorted = menu.slice().sort(function(a,b){
+    return (a.cat||'').localeCompare(b.cat||'') || (a.nombre||'').localeCompare(b.nombre||'');
+  });
+  
+  sorted.forEach(function(p){
+    rows.push([
+      p.cat||'',
+      p.nombre||'',
+      p.emoji||'',
+      p.precio||0,
+      p.stock||0,
+      p.und||'und',
+      p.esCerveza?'Sí':'No',
+      p.cubeta||0,
+      p.descripcion||''
+    ]);
+  });
+
+  // Ingredientes section
+  if(ingredientes.length){
+    rows.push([]);
+    rows.push(['── INGREDIENTES DE COCINA ──','','','','','','','','']);
+    rows.push(['Nombre','','','','Stock','Unidad','','','']);
+    ingredientes.forEach(function(i){
+      rows.push([i.nombre||'','','','',i.stock||0,i.und||'und','','','']);
+    });
+  }
+
+  var csv = '﻿'; // BOM
+  rows.forEach(function(r){
+    csv += r.map(function(v){
+      var s = String(v).replace(/"/g,'""');
+      return (s.indexOf(',')>=0||s.indexOf('"')>=0)?'"'+s+'"':s;
+    }).join(',') + '\r\n';
+  });
+
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'Area52-Inventario-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function toggleVentaSinStock(){
   ventaSinStock=!ventaSinStock;
   render();
@@ -2428,6 +2484,10 @@ function renderGastos(){
         +'<select class="inp" id="g-cat">'
         +CATG_GASTOS.map(function(c){return'<option>'+c+'</option>';}).join('')
         +'</select></div>'
+      +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago *</div>'
+        +'<select class="inp" id="g-fp">'
+        +FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
+        +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
         +'<input class="inp" id="g-valor" type="number" placeholder="0"/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Notas (opcional)</div>'
@@ -2446,6 +2506,7 @@ function renderGastos(){
         return'<div class="gasto-row">'
           +'<div style="flex:1">'
             +'<div style="font-size:13px;font-weight:600">'+esc(g.concepto)+'</div>'
+            +(function(){var f=FPAGO.find(function(x){return x.id===g.fp;});return f?'<span style="background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+'44;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700">'+f.emoji+' '+f.label+'</span> ':'';})()
             +'<div style="color:var(--muted);font-size:11px">'+g.categoria+' · '+fmtTime(g.ts)+' · '+esc(g.uidNombre||g.uid||'')+(g.notas?' · '+esc(g.notas):'')+'</div>'
           +'</div>'
           +'<span style="color:var(--red);font-weight:700;font-size:13px">'+fmt(g.valor)+'</span>'
@@ -2468,9 +2529,10 @@ function guardarGasto(){
   var valor=parseInt((document.getElementById('g-valor')||{}).value)||0;
   var categoria=(document.getElementById('g-cat')||{}).value||'Otro';
   var notas=(document.getElementById('g-notas')||{}).value||'';
+  var fp=(document.getElementById('g-fp')||{}).value||'efectivo';
   if(!concepto){alert('Escribe el concepto.');return;}
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
-  var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:categoria,valor:valor,notas:notas,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:categoria,valor:valor,notas:notas,fp:fp,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   fbPush('gastos',g);
   render();
 }
@@ -2613,32 +2675,60 @@ function confirmarCierre(){
   var hoyG=gastosTurno();
   var totalV=hoyV.reduce(function(a,v){return a+v.total;},0);
   var totalG=hoyG.reduce(function(a,g){return a+g.valor;},0);
-  var porFP={};hoyV.forEach(function(v){porFP[v.fp]=(porFP[v.fp]||0)+v.total;});
+  var porFP={};
+  hoyV.forEach(function(v){
+    if(v.pagos&&v.pagos.length){
+      v.pagos.forEach(function(p){porFP[p.fp]=(porFP[p.fp]||0)+p.monto;});
+    } else {
+      porFP[v.fp]=(porFP[v.fp]||0)+v.total;
+    }
+  });
+  // Descontar gastos por forma de pago
+  var gastosPorFP={};
+  hoyG.forEach(function(g){
+    var gfp=g.fp||'efectivo';
+    gastosPorFP[gfp]=(gastosPorFP[gfp]||0)+g.valor;
+    porFP[gfp]=(porFP[gfp]||0)-g.valor; // neto por FP
+  });
   var cierre={
     id:'c'+Date.now(),ts:Date.now(),
     turnoInicio:turnoInicio,
     turnoFin:Date.now(),
     cajaInicial:cajaHoy.cajaInicial,
     ventas:totalV,gastos:totalG,
-    porFP:porFP,
+    porFP:porFP,gastosPorFP:gastosPorFP,
     utilidad:cajaHoy.cajaInicial+totalV-totalG,
     numVentas:hoyV.length,numGastos:hoyG.length,
     uid:usuarioActivo.id
   };
   fbPush('cierres',cierre);
-  cajaHoy={cajaInicial:0};
+  // Nueva caja = caja anterior + neto por forma de pago (ventas - gastos)
+  var nuevaCajaInicial = cajaHoy.cajaInicial + totalV - totalG;
+  var nuevaCaja = {cajaInicial: Math.max(0, nuevaCajaInicial)};
+  FPAGO.forEach(function(f){
+    var ini = cajaHoy['ini_'+f.id]||0;
+    var neto = (porFP[f.id]||0); // ya tiene gastos descontados
+    nuevaCaja['ini_'+f.id] = Math.max(0, ini + neto);
+  });
+  cajaHoy = nuevaCaja;
   turnoInicio=Date.now();
   fbSet('cajaHoy',cajaHoy);
   fbSet('turnoInicio',turnoInicio);
   closeModal1();render();
-  alert('Cierre de turno guardado ✓ · Nuevo turno iniciado');
+  alert('Cierre de turno guardado ✓\nCaja inicial nuevo turno: '+fmt(cajaHoy.cajaInicial));
 }
 
 function verCierre(id){
   var c=cierres.find(function(x){return x.id===id;});if(!c)return;
   var uid=usuarios.find(function(u){return u.id===c.uid;});
   var filas=FPAGO.map(function(f){
-    return'<div class="cierre-row"><span>'+f.emoji+' '+f.label+'</span><span style="color:'+f.color+';font-weight:700">'+fmt((c.porFP&&c.porFP[f.id])||0)+'</span></div>';
+    var ventas=(c.porFP&&c.porFP[f.id])||0;
+    var gastos2=(c.gastosPorFP&&c.gastosPorFP[f.id])||0;
+    var neto=ventas-gastos2;
+    return'<div class="cierre-row"><span>'+f.emoji+' '+f.label+'</span>'
+      +'<span style="color:'+f.color+';font-weight:700">'+fmt(neto)
+      +(gastos2?'<span style="color:#ef4444;font-size:10px;margin-left:4px">(-'+fmt(gastos2)+')</span>':'')
+      +'</span></div>';
   }).join('');
   var turnoStr=c.turnoInicio?('Turno: '+fmtDT(c.turnoInicio)+' → '+fmtTime(c.turnoFin||c.ts)):'';
   modal2('<div style="text-align:center;margin-bottom:14px">'
@@ -2839,29 +2929,7 @@ function renderCocina(){
 
 var cocinaEntregados={};  // {mesaId_itemIdx: cantidadEntregada}
 
-function bindCocinaEvents(){
-  var c=document.getElementById('content');
-  if(!c||c._cocinaBound)return;
-  c._cocinaBound=true;
-  c.addEventListener('click',function(e){
-    var btn=e.target.closest('[data-act="entregar"]');
-    if(!btn)return;
-    var key=btn.getAttribute('data-key');
-    var mesaId=parseInt(btn.getAttribute('data-mesaid'));
-    var itemIdx=parseInt(btn.getAttribute('data-itemidx'));
-    var ped=pedidos[mesaId]||[];
-    var it=ped[itemIdx];
-    if(!it)return;
-    var entregados=(cocinaEntregados[key]||0)+1;
-    cocinaEntregados[key]=entregados;
-    // If all delivered, remove from pedido
-    if(entregados>=it.qty){
-      delete cocinaEntregados[key];
-      // Don't remove from pedido - still needs to be cobrado
-    }
-    render();
-  });
-}
+function bindCocinaEvents(){}  // handled by document listener
 
 function renderSocios(){
   var totalAcum=consumoSocios.reduce(function(a,c){return a+c.total;},0);
@@ -3502,6 +3570,20 @@ document.addEventListener('click',function(e){
     if(act2==='addcombo'&&cbid2){agregarComboAPedido(cbid2);return;}
     if(act2==='editcombo'&&cbid2){editarCombo(cbid2);return;}
     if(act2==='delcombo'&&cbid2){borrarCombo(cbid2);return;}
+    if(act2==='entregar'){
+      var key=btn2.getAttribute('data-key');
+      var mesaId2=parseInt(btn2.getAttribute('data-mesaid'));
+      var itemIdx2=parseInt(btn2.getAttribute('data-itemidx'));
+      var ped2=pedidos[mesaId2]||[];
+      var it2=ped2[itemIdx2];
+      if(it2){
+        var entregados2=(cocinaEntregados[key]||0)+1;
+        cocinaEntregados[key]=entregados2;
+        if(entregados2>=it2.qty) delete cocinaEntregados[key];
+        render();
+      }
+      return;
+    }
     if(act2==='ped-minus'||act2==='ped-plus'){
       var pidx=parseInt(btn2.getAttribute('data-idx'));
       if(isNaN(pidx)||!mesaActiva)return;
