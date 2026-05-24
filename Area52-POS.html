@@ -414,7 +414,7 @@ function iniciarSync(){
   });
   fbOn('ventas',function(v){ventas=v?Object.values(v):[];updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
-  fbOn('menu',function(v){if(v)menu=Object.values(v);if(tabActual==='carta'||tabActual==='inventario')render();});
+  fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
   fbOn('paredes',function(v){
     if(v){
@@ -1373,24 +1373,39 @@ function confirmarCobro(){
     if(it.isCustom) return;
     if(it.isCombo&&it.comboIngredientes){
       it.comboIngredientes.forEach(function(ing){
-        var p=menu.find(function(m){return m.id===ing.prodId;});
-        if(p)p.stock=Math.max(0,p.stock-(ing.cantidad*it.qty));
+        var cant=(ing.cantidad||1)*it.qty;
+        // Producto del menú
+        if(ing.prodId!=null){
+          var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+          if(p){
+            var antes=parseInt(p.stock); if(isNaN(antes))antes=0;
+            p.stock=Math.max(0,antes-cant);
+          }
+        }
+        // Ingrediente de cocina
+        if(ing.ingId!=null){
+          var ingI=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
+          if(ingI){
+            var antesI=parseInt(ingI.stock); if(isNaN(antesI))antesI=0;
+            ingI.stock=Math.max(0,antesI-cant);guardarIngredientes();
+          }
+        }
       });
     } else {
       var p=menu.find(function(m){return m.id===it.pid;});
       if(p){
         var c=it.cubeta?it.qty*5:it.qty;
-        // Discount the product itself
-        p.stock=Math.max(0,p.stock-c);
+        // Discount the product itself (coerce stock to number)
+        p.stock=Math.max(0,(parseInt(p.stock)||0)-c);
         // Also discount recipe ingredients if product has a recipe
         if(p.receta&&p.receta.length){
           p.receta.forEach(function(ri){
             // Check both menu and ingredientes
             var ing=menu.find(function(m){return m.id==ri.pid;});
-            if(ing){ing.stock=Math.max(0,ing.stock-(ri.cantidad*c));}
+            if(ing){ing.stock=Math.max(0,(parseInt(ing.stock)||0)-(ri.cantidad*c));}
             else{
               var ingI=ingredientes.find(function(i){return i.id==ri.pid;});
-              if(ingI){ingI.stock=Math.max(0,ingI.stock-(ri.cantidad*c));guardarIngredientes();}
+              if(ingI){ingI.stock=Math.max(0,(parseInt(ingI.stock)||0)-(ri.cantidad*c));guardarIngredientes();}
             }
           });
         }
@@ -1808,10 +1823,10 @@ function confirmarMercancia(id, esIng){
   if(cant<=0){alert('Ingresa una cantidad mayor a cero.');return;}
   if(esIng){
     var ing=ingredientes.find(function(x){return x.id===id;});
-    if(ing){ing.stock+=cant;guardarIngredientes();}
+    if(ing){ing.stock=(parseInt(ing.stock)||0)+cant;guardarIngredientes();}
   } else {
     var p=menu.find(function(m){return m.id===parseInt(id);});
-    if(p){p.stock+=cant;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);}
+    if(p){p.stock=(parseInt(p.stock)||0)+cant;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);}
   }
   closeModal2();render();
 }
