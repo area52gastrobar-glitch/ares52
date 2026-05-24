@@ -2622,7 +2622,78 @@ function renderGastos(){
   }).join('');
   var resumen=catRows?'<div class="card"><div class="section-title">Por categoría hoy</div>'+catRows+'</div>':'';
 
-  return form+resHoy+resumen;
+  // Historial completo (todos los gastos)
+  var todosGastos=gastos.slice().sort(function(a,b){return b.ts-a.ts;});
+  var totalTodos=todosGastos.reduce(function(a,g){return a+g.valor;},0);
+  var histRows=todosGastos.slice(0,100).map(function(g){
+    var f=FPAGO.find(function(x){return x.id===g.fp;});
+    return'<div class="gasto-row">'
+      +'<div style="flex:1">'
+        +'<div style="font-size:13px;font-weight:600">'+esc(g.concepto)+'</div>'
+        +(f?'<span style="background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+'44;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700">'+f.emoji+' '+f.label+'</span> ':'')
+        +'<div style="color:var(--muted);font-size:11px">'+g.categoria+' · '+fmtFecha(g.ts)+' '+fmtTime(g.ts)+' · '+esc(g.uidNombre||g.uid||'')+(g.notas?' · '+esc(g.notas):'')+'</div>'
+      +'</div>'
+      +'<span style="color:var(--red);font-weight:700;font-size:13px">'+fmt(g.valor)+'</span>'
+      +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="borrarGasto(\''+g.id+'\')" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px">✕</button>':'')
+    +'</div>';
+  }).join('');
+  var historial='<div class="card mb12">'
+    +'<div class="flex-between mb8">'
+      +'<div class="section-title" style="margin-bottom:0">📜 Historial completo de gastos</div>'
+      +'<button onclick="exportarGastosExcel()" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer">📥 Excel</button>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;margin-bottom:10px;padding:8px 12px;background:var(--card2);border-radius:8px">'
+      +'<span style="color:var(--muted);font-size:12px">Total acumulado ('+todosGastos.length+' gastos)</span>'
+      +'<span style="color:var(--red);font-weight:900;font-size:15px">'+fmt(totalTodos)+'</span>'
+    +'</div>'
+    +(todosGastos.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin gastos registrados</div>':histRows)
+    +(todosGastos.length>100?'<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">Mostrando los 100 más recientes · Exporta a Excel para ver todos</div>':'')
+  +'</div>';
+
+  return form+resHoy+resumen+historial;
+}
+
+function fmtFecha(ts){
+  var d=new Date(ts);
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+}
+
+function exportarGastosExcel(){
+  var rows=[['Fecha','Hora','Concepto','Categoría','Forma de pago','Valor','Usuario','Notas']];
+  var sorted=gastos.slice().sort(function(a,b){return b.ts-a.ts;});
+  sorted.forEach(function(g){
+    var f=FPAGO.find(function(x){return x.id===g.fp;});
+    var d=new Date(g.ts);
+    rows.push([
+      ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(),
+      ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2),
+      g.concepto||'',
+      g.categoria||'',
+      f?f.label:(g.fp||''),
+      g.valor||0,
+      g.uidNombre||g.uid||'',
+      g.notas||''
+    ]);
+  });
+  // Total row
+  var total=sorted.reduce(function(a,g){return a+g.valor;},0);
+  rows.push([]);
+  rows.push(['','','','','TOTAL',total,'','']);
+
+  var csv='﻿';
+  rows.forEach(function(r){
+    csv+=r.map(function(v){
+      var s=String(v).replace(/"/g,'""');
+      return (s.indexOf(',')>=0||s.indexOf('"')>=0)?'"'+s+'"':s;
+    }).join(',')+'\r\n';
+  });
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='Area52-Gastos-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 function guardarGasto(){
   var concepto=(document.getElementById('g-concepto')||{}).value;concepto=concepto?concepto.trim():'';
@@ -3323,6 +3394,19 @@ function agregarConsumoSocio(pid,esCubeta,cantidad){
   consumoSocios.push(consumo);
   var r=ref('consumoSocios');
   if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
+  // Descontar stock del producto
+  var cantStock=esCubeta?qty*5:qty;
+  var antesS=parseInt(p.stock); if(isNaN(antesS))antesS=0;
+  p.stock=Math.max(0,antesS-cantStock);
+  // Descontar receta si tiene
+  if(p.receta&&p.receta.length){
+    p.receta.forEach(function(ri){
+      var ingP=menu.find(function(m){return Number(m.id)===Number(ri.pid);});
+      if(ingP){var a=parseInt(ingP.stock);if(isNaN(a))a=0;ingP.stock=Math.max(0,a-(ri.cantidad*qty));}
+      else{var ingI=ingredientes.find(function(i){return Number(i.id)===Number(ri.pid);});if(ingI){var ai=parseInt(ingI.stock);if(isNaN(ai))ai=0;ingI.stock=Math.max(0,ai-(ri.cantidad*qty));guardarIngredientes();}}
+    });
+  }
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   var totalSocio=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+c.total;},0);
   var colorS=_socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
   showToast('✅ '+qty+'× '+p.emoji+' '+esc(nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">Total '+_socioActivo+': '+fmt(totalSocio)+'</span>',colorS);
@@ -3338,6 +3422,19 @@ function agregarConsumoSocioCombo(cbId){
   consumoSocios.push(consumo);
   var r=ref('consumoSocios');
   if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
+  // Descontar stock de ingredientes del combo
+  (cb.ingredientes||[]).forEach(function(ing){
+    var cant=ing.cantidad||1;
+    if(ing.prodId!=null){
+      var pp=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a-cant);}
+    }
+    if(ing.ingId!=null){
+      var ii=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
+      if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=Math.max(0,ai-cant);guardarIngredientes();}
+    }
+  });
+  var moc={};menu.forEach(function(m){moc[m.id]=m;});fbSet('menu',moc);
   var totalSocioC=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+c.total;},0);
   var colorSC=_socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
   showToast('✅ 🎁 '+esc(cb.nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">Total '+_socioActivo+': '+fmt(totalSocioC)+'</span>',colorSC);
