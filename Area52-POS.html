@@ -2882,11 +2882,19 @@ function confirmarCierre(){
     nuevaCaja['ini_'+f.id] = Math.max(0, ini + neto);
   });
   cajaHoy = nuevaCaja;
+  var antes=turnoInicio;
   turnoInicio=Date.now();
   fbSet('cajaHoy',cajaHoy);
   fbSet('turnoInicio',turnoInicio);
+  var vTurnoNuevo=ventas.filter(function(v){return v.ts>=turnoInicio;});
+  var gTurnoNuevo=gastos.filter(function(g){return g.ts>=turnoInicio;});
+  alert('DEBUG cierre:\n'+
+    'turnoInicio antes: '+new Date(antes).toLocaleString()+'\n'+
+    'turnoInicio ahora: '+new Date(turnoInicio).toLocaleString()+'\n'+
+    'ventas turno nuevo: '+vTurnoNuevo.length+'\n'+
+    'gastos turno nuevo: '+gTurnoNuevo.length+'\n'+
+    'ventas total array: '+ventas.length);
   closeModal1();render();
-  alert('Cierre de turno guardado ✓\nCaja inicial nuevo turno: '+fmt(cajaHoy.cajaInicial));
 }
 
 function verCierre(id){
