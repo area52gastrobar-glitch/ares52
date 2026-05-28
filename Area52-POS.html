@@ -297,12 +297,12 @@ var FPAGO=[
   {id:'efectivo', label:'Efectivo',       color:'#22C55E',emoji:'💵'}
 ];
 var ROLES={
-  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','socios','empleados','cocina','admin']},
-  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','socios','empleados','cocina']},
+  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','socios','empleados','creditos','cocina','admin']},
+  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','socios','empleados','creditos','cocina']},
   mesero:{label:'Mesero',       color:'#22c55e',tabs:['mesas','gastos','socios','cocina']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
-  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',socios:'🤝 Socios',empleados:'👷 Empleados',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
+  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',socios:'🤝 Socios',empleados:'👷 Empleados',creditos:'📒 Fiados',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
 var EMOJIS=['🍺','🍻','🥃','🍷','🥂','🍹','🥤','💧','🧃','🧉','🍸','🍾','☕','🫖','🧋','⚡','🔋','🥫','🍕','🍔','🌭','🌮','🌯','🫔','🥙','🍗','🍖','🥩','🥓','🍟','🧆','🍝','🍜','🥘','🫕','🥟','🧀','🥗','🎂','🍰','🧁','🍩','🍪','🍫','🚬','🔥','💫','🌶️','🍤','🦐','🦑','🦀','🍣','🍱','🍊','🍋','🍓','🫐','🥭','🧊','🥚','🍳','🫙','🥤','🍞','🥐','🧇'];
 var CATG_GASTOS=['Mercancía','Insumos','Servicios','Personal','Mantenimiento','Transporte','Otro'];
 
@@ -347,6 +347,8 @@ var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var empleados=[];      // [{id, nombre, cargo, activo}]
 var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid}]
+var clientesCredito=[];// [{id, nombre, telefono, activo}]
+var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos:[{ts,valor,fp}]}]
 var _socioActivo='CARLOS';  // currently selected socio
 var _socCatFiltro='Todos';  // category filter in socios tab
 var ventaSinStock=false;  // admin toggle: allow selling without stock
@@ -447,6 +449,14 @@ function iniciarSync(){
   fbOn('movEmpleados',function(v){
     movEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='empleados')render();
+  });
+  fbOn('clientesCredito',function(v){
+    clientesCredito=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='creditos')render();
+  });
+  fbOn('deudasCredito',function(v){
+    deudasCredito=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='creditos'||tabActual==='caja')render();
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -567,6 +577,7 @@ function render(){
   if(tabActual==='ventas')    c.innerHTML=renderVentas();
   if(tabActual==='socios')    c.innerHTML=renderSocios();
   if(tabActual==='empleados') {c.innerHTML=renderEmpleados();}
+  if(tabActual==='creditos')  {c.innerHTML=renderCreditos();}
   if(tabActual==='cocina')    {c.innerHTML=renderCocina();bindCocinaEvents();}
   if(tabActual==='admin')     c.innerHTML=renderAdmin();
   bindMapaEvents();
@@ -1115,6 +1126,43 @@ function abrirCantidadMesa(pid,cubeta){
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
 }
 
+function ajustarStockItem(item,delta){
+  // delta: cantidad a sumar al stock (negativo al agregar pedido, positivo al quitar)
+  if(item.isCustom)return;
+  if(item.isCombo){
+    var c=combos.find(function(x){return x.id===item.pid;});
+    if(!c)return;
+    (c.ingredientes||item.comboIngredientes||[]).forEach(function(ing){
+      var cant=(ing.cantidad||1)*Math.abs(delta);
+      var signo=delta<0?-1:1;
+      if(ing.prodId!=null){
+        var pp=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+        if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a+(cant*signo));}
+      }
+      if(ing.ingId!=null){
+        var ii=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
+        if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=Math.max(0,ai+(cant*signo));guardarIngredientes();}
+      }
+    });
+  } else {
+    var p=menu.find(function(m){return Number(m.id)===Number(item.pid);});
+    if(!p)return;
+    var c2=item.cubeta?Math.abs(delta)*5:Math.abs(delta);
+    var s=delta<0?-1:1;
+    var a2=parseInt(p.stock);if(isNaN(a2))a2=0;
+    p.stock=Math.max(0,a2+(c2*s));
+    // Receta
+    if(p.receta&&p.receta.length){
+      p.receta.forEach(function(ri){
+        var ing2=menu.find(function(m){return Number(m.id)===Number(ri.pid);});
+        if(ing2){var b=parseInt(ing2.stock);if(isNaN(b))b=0;ing2.stock=Math.max(0,b+(ri.cantidad*Math.abs(delta)*s));}
+        else{var iI=ingredientes.find(function(i){return Number(i.id)===Number(ri.pid);});if(iI){var bi=parseInt(iI.stock);if(isNaN(bi))bi=0;iI.stock=Math.max(0,bi+(ri.cantidad*Math.abs(delta)*s));guardarIngredientes();}}
+      });
+    }
+  }
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+}
+
 function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   if(!mesaActiva)return;
   var p=menu.find(function(m){return m.id===pid;});
@@ -1130,6 +1178,8 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
     variantePrecio:variantePrecio||0
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  // Descontar stock en tiempo real
+  ajustarStockItem({pid:pid,cubeta:cubeta,isCustom:false,isCombo:false},-cantidad);
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
   var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
@@ -1260,7 +1310,8 @@ function abrirCobro(){
       +(pagosResumen?'<div style="margin-bottom:10px;display:flex;gap:5px;flex-wrap:wrap">'+pagosResumen+'</div>':'')
       +'<div class="section-title">Distribuir pago por método</div>'
       +fpRows
-      +'<div style="display:flex;gap:10px;margin-top:16px">'
+      +'<button onclick="cobrarACredito()" style="width:100%;margin-top:12px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">📒 Dejar como fiado (cliente a crédito)</button>'
+      +'<div style="display:flex;gap:10px;margin-top:10px">'
         +'<button class="btn btn-outline btn-full" onclick="closeModal1()">Cancelar</button>'
         +'<button class="btn btn-green btn-full" id="btn-cobrar" onclick="confirmarCobro()" '+(completo?'':'disabled')+' style="font-size:15px">✓ Confirmar cobro</button>'
       +'</div>';
@@ -1369,49 +1420,7 @@ function confirmarCobro(){
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
   fbPush('ventas',venta);
-  ped.forEach(function(it){
-    if(it.isCustom) return;
-    if(it.isCombo&&it.comboIngredientes){
-      it.comboIngredientes.forEach(function(ing){
-        var cant=(ing.cantidad||1)*it.qty;
-        // Producto del menú
-        if(ing.prodId!=null){
-          var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
-          if(p){
-            var antes=parseInt(p.stock); if(isNaN(antes))antes=0;
-            p.stock=Math.max(0,antes-cant);
-          }
-        }
-        // Ingrediente de cocina
-        if(ing.ingId!=null){
-          var ingI=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
-          if(ingI){
-            var antesI=parseInt(ingI.stock); if(isNaN(antesI))antesI=0;
-            ingI.stock=Math.max(0,antesI-cant);guardarIngredientes();
-          }
-        }
-      });
-    } else {
-      var p=menu.find(function(m){return m.id===it.pid;});
-      if(p){
-        var c=it.cubeta?it.qty*5:it.qty;
-        // Discount the product itself (coerce stock to number)
-        p.stock=Math.max(0,(parseInt(p.stock)||0)-c);
-        // Also discount recipe ingredients if product has a recipe
-        if(p.receta&&p.receta.length){
-          p.receta.forEach(function(ri){
-            // Check both menu and ingredientes
-            var ing=menu.find(function(m){return m.id==ri.pid;});
-            if(ing){ing.stock=Math.max(0,(parseInt(ing.stock)||0)-(ri.cantidad*c));}
-            else{
-              var ingI=ingredientes.find(function(i){return i.id==ri.pid;});
-              if(ingI){ingI.stock=Math.max(0,(parseInt(ingI.stock)||0)-(ri.cantidad*c));guardarIngredientes();}
-            }
-          });
-        }
-      }
-    }
-  });
+  // Stock ya fue descontado al agregar a la mesa - no se descuenta aquí
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   imprimirTicket(mesa,ped,total,pagosList);
 
@@ -2185,13 +2194,27 @@ function confirmarComboEnPedido(cb, selecciones){
   var id=mesaActiva.id;
   if(!pedidos[id])pedidos[id]=[];
   // Each combo addition is unique (different product choices) — always push new
-  pedidos[id].push({
+  var newItem={
     pid:'combo_'+cb.id+'_'+Date.now(),
     cubeta:false,qty:1,isCombo:true,
     comboId:cb.id,comboNombre:cb.nombre,comboEmoji:cb.emoji,
     comboPrecio:cb.precio,comboIngredientes:finalIngs
-  });
+  };
+  pedidos[id].push(newItem);
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  // Descontar stock de los ingredientes
+  finalIngs.forEach(function(ing){
+    var cant=ing.cantidad||1;
+    if(ing.prodId!=null){
+      var pp=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a-cant);}
+    }
+    if(ing.ingId!=null){
+      var ii=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
+      if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=Math.max(0,ai-cant);guardarIngredientes();}
+    }
+  });
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
 
@@ -2726,12 +2749,18 @@ function renderCaja(){
   var porFP={};
   hoyV.forEach(function(v){
     if(v.pagos&&v.pagos.length){
-      // Split payment - distribute by actual payment method
       v.pagos.forEach(function(p){porFP[p.fp]=(porFP[p.fp]||0)+p.monto;});
     } else {
       porFP[v.fp]=(porFP[v.fp]||0)+v.total;
     }
   });
+  // Gastos por forma de pago
+  var gastosPorFP={};
+  hoyG.forEach(function(g){var gfp=g.fp||'efectivo';gastosPorFP[gfp]=(gastosPorFP[gfp]||0)+g.valor;});
+  // Saldo real por casilla = caja inicial del método + ventas - gastos
+  function saldoFP(fpId){
+    return (cajaHoy['ini_'+fpId]||0)+(porFP[fpId]||0)-(gastosPorFP[fpId]||0);
+  }
 
   var kpis='<div class="kpi-grid">'
     +[['💰','Caja inicial',fmt(cajaHoy.cajaInicial),'#f5a623'],
@@ -2739,11 +2768,11 @@ function renderCaja(){
       ['📈','Ventas del día',fmt(totalV),'#22c55e'],
       ['📋','Gastos del día',fmt(totalG),'#ef4444'],
       ['🏦','Utilidad bruta',fmt(utilidad),utilidad>=0?'#22c55e':'#ef4444'],
-      ['📲','Nequi',fmt(porFP.nequi||0),'#8B5CF6'],
-      ['🔴','Daviplata',fmt(porFP.daviplata||0),'#EF4444'],
-      ['💠','Bre-B',fmt(porFP.breb||0),'#06B6D4'],
-      ['💳','Tarjeta',fmt(porFP.tarjeta||0),'#F59E0B'],
-      ['💵','Efectivo',fmt(porFP.efectivo||0),'#22C55E']
+      ['📲','Nequi (saldo)',fmt(saldoFP('nequi')),'#8B5CF6'],
+      ['🔴','Daviplata (saldo)',fmt(saldoFP('daviplata')),'#EF4444'],
+      ['💠','Bre-B (saldo)',fmt(saldoFP('breb')),'#06B6D4'],
+      ['💳','Tarjeta (saldo)',fmt(saldoFP('tarjeta')),'#F59E0B'],
+      ['💵','Efectivo (saldo)',fmt(saldoFP('efectivo')),'#22C55E']
     ].map(function(x){
       return'<div class="kpi"><div style="font-size:20px">'+x[0]+'</div><div style="color:var(--muted);font-size:10px;margin-top:2px">'+x[1]+'</div><div style="color:'+x[3]+';font-weight:900;font-size:15px;margin-top:2px">'+x[2]+'</div></div>';
     }).join('')+'</div>';
@@ -2768,6 +2797,13 @@ function renderCaja(){
     +'<button class="btn btn-gold btn-full" onclick="abrirCierre()" style="font-size:15px;padding:12px">🔒 Hacer cierre del día</button>'
     +'</div>':'';
 
+  // Traslado Tarjeta -> Bre-B (cuando el banco deposita)
+  var trasladoCard='<div class="card mb12">'
+    +'<div class="section-title">🔄 Traslado Tarjeta → Bre-B</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:10px">Cuando el banco deposita lo de las tarjetas, pásalo a Bre-B. Caja actual en tarjeta: <b style="color:#F59E0B">'+fmt(cajaHoy.ini_tarjeta||0)+'</b></div>'
+    +'<button onclick="abrirTrasladoTarjeta()" style="width:100%;background:#06B6D418;color:#06B6D4;border:1px solid #06B6D444;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">🔄 Pasar Tarjeta a Bre-B</button>'
+  +'</div>';
+
   // Historial de cierres
   var histCierres='<div class="card">'
     +'<div class="section-title">Historial de cierres anteriores</div>'
@@ -2785,7 +2821,7 @@ function renderCaja(){
       }).join(''))
     +'</div>';
 
-  return configCaja+kpis+cierreBtn+histCierres;
+  return configCaja+kpis+trasladoCard+cierreBtn+histCierres;
 }
 
 function guardarCajaInicial(){
@@ -2882,19 +2918,11 @@ function confirmarCierre(){
     nuevaCaja['ini_'+f.id] = Math.max(0, ini + neto);
   });
   cajaHoy = nuevaCaja;
-  var antes=turnoInicio;
   turnoInicio=Date.now();
   fbSet('cajaHoy',cajaHoy);
   fbSet('turnoInicio',turnoInicio);
-  var vTurnoNuevo=ventas.filter(function(v){return v.ts>=turnoInicio;});
-  var gTurnoNuevo=gastos.filter(function(g){return g.ts>=turnoInicio;});
-  alert('DEBUG cierre:\n'+
-    'turnoInicio antes: '+new Date(antes).toLocaleString()+'\n'+
-    'turnoInicio ahora: '+new Date(turnoInicio).toLocaleString()+'\n'+
-    'ventas turno nuevo: '+vTurnoNuevo.length+'\n'+
-    'gastos turno nuevo: '+gTurnoNuevo.length+'\n'+
-    'ventas total array: '+ventas.length);
   closeModal1();render();
+  alert('Cierre de turno guardado ✓\nCaja inicial nuevo turno: '+fmt(cajaHoy.cajaInicial));
 }
 
 function verCierre(id){
@@ -3110,6 +3138,227 @@ function renderCocina(){
 var cocinaEntregados={};  // {mesaId_itemIdx: cantidadEntregada}
 
 function bindCocinaEvents(){}  // handled by document listener
+
+function cobrarACredito(){
+  if(!mesaActiva)return;
+  var mesa=mesaActiva;
+  var ped=pedidos[mesa.id]||[];
+  if(!ped.length){alert('No hay productos en esta mesa.');return;}
+  var total=totalPedido(mesa.id);
+  var descMesa=descuentos[mesa.id];
+  if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
+
+  // Build client selector
+  var clientesActivos=clientesCredito.filter(function(c){return c.activo!==false;});
+  var opts=clientesActivos.map(function(c){return'<option value="'+c.id+'">'+esc(c.nombre)+'</option>';}).join('');
+  modal2('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📒 Dejar como fiado</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(mesa.nombre||'Mesa '+mesa.num)+' · '+fmt(total)+'</div>'
+    +(clientesActivos.length?'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cliente existente</div>'
+      +'<select class="inp" id="cred-cliente"><option value="">— Selecciona —</option>'+opts+'</select></div>'
+      +'<div style="text-align:center;color:var(--muted);font-size:11px;margin:8px 0">— o —</div>':'')
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nuevo cliente</div>'
+    +'<input class="inp" id="cred-nuevo" placeholder="Nombre del cliente"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarCredito('+total+')">📒 Registrar fiado</button>');
+}
+
+function confirmarCredito(total){
+  var mesa=mesaActiva;
+  if(!mesa)return;
+  var ped=pedidos[mesa.id]||[];
+  var clienteSel=(document.getElementById('cred-cliente')||{}).value||'';
+  var nuevoNombre=((document.getElementById('cred-nuevo')||{}).value||'').trim();
+  var clienteId, clienteNombre;
+
+  if(nuevoNombre){
+    clienteId='cli'+Date.now();
+    clienteNombre=nuevoNombre;
+    var nc={id:clienteId,nombre:nuevoNombre,activo:true,ts:Date.now()};
+    clientesCredito.push(nc);
+    var rc=ref('clientesCredito');if(rc)rc.push(nc);else fbSet('clientesCredito',clientesCredito);
+  } else if(clienteSel){
+    clienteId=clienteSel;
+    var c=clientesCredito.find(function(x){return x.id===clienteSel;});
+    clienteNombre=c?c.nombre:'Cliente';
+  } else {
+    alert('Selecciona o crea un cliente.');return;
+  }
+
+  var deuda={
+    id:'deu'+Date.now(),ts:Date.now(),
+    clienteId:clienteId,clienteNombre:clienteNombre,
+    mesa:mesa.nombre||('Mesa '+mesa.num),
+    items:JSON.parse(JSON.stringify(ped)),
+    total:total,pagado:0,pagos:[],
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
+  };
+  deudasCredito.push(deuda);
+  var rd=ref('deudasCredito');if(rd)rd.push(deuda);else fbSet('deudasCredito',deudasCredito);
+
+  // El inventario YA se descontó al agregar a la mesa, así que NO se toca aquí.
+  // NO se registra venta (no afecta caja/cierre) hasta que el cliente pague.
+
+  // Liberar mesa
+  var r=ref('pedidos/'+mesa.id);if(r)r.set(null);
+  delete pedidos[mesa.id];
+  if(descuentos[mesa.id])delete descuentos[mesa.id];
+  mesaActiva=null;
+  closeModal2();closeModal1();
+  showToast('📒 Fiado registrado<br><span style="font-size:12px;opacity:.85">'+esc(clienteNombre)+' · '+fmt(total)+'</span>','#f5a623');
+  render();
+}
+
+function abrirTrasladoTarjeta(){
+  var disponible=cajaHoy.ini_tarjeta||0;
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🔄 Trasladar Tarjeta → Bre-B</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">Disponible en tarjeta: <b style="color:#F59E0B">'+fmt(disponible)+'</b></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto a trasladar a Bre-B</div>'
+    +'<input class="inp" id="trasl-valor" type="number" value="'+disponible+'" inputmode="numeric"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarTraslado()">🔄 Confirmar traslado</button>');
+}
+
+function confirmarTraslado(){
+  var valor=parseInt((document.getElementById('trasl-valor')||{}).value)||0;
+  var disponible=cajaHoy.ini_tarjeta||0;
+  if(valor<=0){alert('Escribe el monto.');return;}
+  if(valor>disponible){alert('No puedes trasladar más de lo disponible en tarjeta ('+fmt(disponible)+').');return;}
+  cajaHoy.ini_tarjeta=(cajaHoy.ini_tarjeta||0)-valor;
+  cajaHoy.ini_breb=(cajaHoy.ini_breb||0)+valor;
+  fbSet('cajaHoy',cajaHoy);
+  closeModal1();
+  showToast('🔄 Traslado realizado<br><span style="font-size:12px;opacity:.85">'+fmt(valor)+' de Tarjeta a Bre-B</span>','#06B6D4');
+  render();
+}
+
+function renderCreditos(){
+  var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+
+  function saldoCliente(cid){
+    return deudasCredito.filter(function(d){return d.clienteId===cid;}).reduce(function(s,d){return s+(d.total-(d.pagado||0));},0);
+  }
+
+  var totalPorCobrar=deudasCredito.reduce(function(s,d){return s+(d.total-(d.pagado||0));},0);
+
+  var clientesActivos=clientesCredito.filter(function(c){return c.activo!==false;});
+  var cards=clientesActivos.map(function(c){
+    var saldo=saldoCliente(c.id);
+    var deudasCli=deudasCredito.filter(function(d){return d.clienteId===c.id&&(d.total-(d.pagado||0))>0;}).sort(function(a,b){return b.ts-a.ts;});
+    if(saldo<=0&&deudasCli.length===0)return'';  // hide clients with no debt
+    return'<div class="card" style="margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+        +'<div><div style="font-weight:800;font-size:15px">👤 '+esc(c.nombre)+'</div>'
+        +(c.telefono?'<div style="color:var(--muted);font-size:12px">'+esc(c.telefono)+'</div>':'')+'</div>'
+        +'<div style="text-align:right"><div style="color:#f5a623;font-weight:900;font-size:16px">'+fmt(saldo)+'</div>'
+        +'<div style="color:var(--muted);font-size:10px">por cobrar</div></div>'
+      +'</div>'
+      +deudasCli.map(function(d){
+        var pend=d.total-(d.pagado||0);
+        return'<div style="background:var(--card2);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center">'
+            +'<span style="font-size:12px;color:var(--muted)">'+d.mesa+' · '+fmtFecha(d.ts)+'</span>'
+            +'<span style="font-weight:700;font-size:13px;color:#f5a623">'+fmt(pend)+(d.pagado>0?' / '+fmt(d.total):'')+'</span>'
+          +'</div>'
+          +'<button data-act="cred-pagar" data-id="'+d.id+'" style="width:100%;margin-top:6px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💵 Registrar pago</button>'
+        +'</div>';
+      }).join('')
+    +'</div>';
+  }).join('');
+
+  return'<div>'
+    +'<div class="flex-between mb12">'
+      +'<div style="font-weight:800;font-size:16px">📒 Fiados / Cuentas por cobrar</div>'
+      +'<button class="btn btn-green" onclick="abrirNuevoCliente()">+ Cliente</button>'
+    +'</div>'
+    +'<div style="background:#f5a62318;border:1px solid #f5a62333;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="color:#f5a623;font-weight:700;font-size:13px">💰 Total por cobrar</span>'
+      +'<span style="color:#f5a623;font-weight:900;font-size:18px">'+fmt(totalPorCobrar)+'</span>'
+    +'</div>'
+    +(cards||'<div style="text-align:center;color:var(--muted);padding:40px 20px">Sin cuentas por cobrar.<br>Al cobrar una mesa, usa "Dejar como fiado".</div>')
+  +'</div>';
+}
+
+function abrirNuevoCliente(){
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:14px">👤 Nuevo cliente a crédito</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre *</div>'
+    +'<input class="inp" id="cli-nombre" placeholder="Ej: Pedro Gómez"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Teléfono (opcional)</div>'
+    +'<input class="inp" id="cli-tel" placeholder="Ej: 3001234567"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarCliente()">Guardar</button>');
+}
+
+function guardarCliente(){
+  var nombre=((document.getElementById('cli-nombre')||{}).value||'').trim();
+  var tel=((document.getElementById('cli-tel')||{}).value||'').trim();
+  if(!nombre){alert('Escribe el nombre.');return;}
+  var c={id:'cli'+Date.now(),nombre:nombre,telefono:tel,activo:true,ts:Date.now()};
+  clientesCredito.push(c);
+  var r=ref('clientesCredito');if(r)r.push(c);else fbSet('clientesCredito',clientesCredito);
+  closeModal1();render();
+}
+
+function abrirPagoCredito(deudaId){
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var pend=d.total-(d.pagado||0);
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  // Detalle de lo consumido
+  var detalle=(d.items||[]).map(function(it){
+    var nombre,pr;
+    if(it.isCustom){nombre='✏️ '+esc(it.customNombre||it.nombre||'');pr=it.customPrecio||0;}
+    else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
+    else{var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});nombre=(it.cubeta?'🪣 ':'')+esc((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'');pr=it.variantePrecio||(it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0));}
+    return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">'
+      +'<span>'+nombre+' ×'+it.qty+'</span>'
+      +'<span style="color:var(--gold)">'+fmt(pr*it.qty)+'</span></div>';
+  }).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💵 Registrar pago</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:10px">'+esc(d.clienteNombre)+' · '+d.mesa+'<br>Pendiente: <b style="color:#f5a623">'+fmt(pend)+'</b></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:12px;max-height:160px;overflow-y:auto">'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px;font-weight:700">🧾 Consumo:</div>'
+      +(detalle||'<div style="color:var(--dim);font-size:12px">Sin detalle</div>')
+      +'<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;padding-top:6px;margin-top:4px;border-top:1px solid var(--accent)33"><span>Total</span><span style="color:var(--accent)">'+fmt(d.total)+'</span></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor del pago *</div>'
+    +'<input class="inp" id="pago-valor" type="number" value="'+pend+'" inputmode="numeric"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
+    +'<select class="inp" id="pago-fp">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPagoCredito(\''+deudaId+'\')">💵 Confirmar pago</button>');
+}
+
+function confirmarPagoCredito(deudaId){
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var valor=parseInt((document.getElementById('pago-valor')||{}).value)||0;
+  var fp=(document.getElementById('pago-fp')||{}).value||'efectivo';
+  var pend=d.total-(d.pagado||0);
+  if(valor<=0){alert('Escribe el valor.');return;}
+  if(valor>pend){alert('El pago no puede ser mayor a lo pendiente ('+fmt(pend)+').');return;}
+
+  d.pagado=(d.pagado||0)+valor;
+  d.pagos=d.pagos||[];
+  d.pagos.push({ts:Date.now(),valor:valor,fp:fp});
+
+  // Persist deuda
+  var idx=deudasCredito.findIndex(function(x){return x.id===deudaId;});
+  if(idx>=0)deudasCredito[idx]=d;
+  var do2={};deudasCredito.forEach(function(x){do2[x.id]=x;});fbSet('deudasCredito',do2);
+
+  // Registrar como VENTA del día actual (entra a caja/cierre del día que paga)
+  var f=FPAGO.find(function(x){return x.id===fp;});
+  var venta={
+    mesa:'Fiado: '+d.clienteNombre,zona:'credito',
+    ts:Date.now(),total:valor,
+    items:[{isCustom:true,customNombre:'Abono fiado '+d.clienteNombre,customPrecio:valor,qty:1}],
+    fp:fp,fpLabel:(f?f.label:fp),
+    pagos:[{fp:fp,label:(f?f.label:fp),monto:valor}],
+    esPagoCredito:true,
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
+  };
+  fbPush('ventas',venta);
+
+  closeModal1();
+  showToast('💵 Pago registrado<br><span style="font-size:12px;opacity:.85">'+esc(d.clienteNombre)+' · '+fmt(valor)+(d.pagado>=d.total?' · ✓ Saldado':'')+'</span>','#22c55e');
+  render();
+}
 
 function renderEmpleados(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
@@ -3698,10 +3947,16 @@ function guardarMesa(id){
   fbSet('mesas',mesasObj());closeModal1();render();
 }
 function eliminarMesa(id){
-  if(!confirm('¿Eliminar esta mesa?'))return;
+  if(!confirm('¿Eliminar esta mesa? Si tiene pedidos sin cobrar el stock se devolverá al inventario.'))return;
+  // Return stock for any pedidos in this mesa
+  var rawP=pedidos[id]||[];
+  var ped=Array.isArray(rawP)?rawP:Object.values(rawP);
+  ped.forEach(function(it){ajustarStockItem(it,+(it.qty||1));});
   mesas=mesas.filter(function(m){return m.id!==id;});
   delete pedidos[id];if(mesaActiva&&mesaActiva.id===id)mesaActiva=null;
-  fbSet('mesas',mesasObj());closeModal1();render();
+  fbSet('mesas',mesasObj());
+  var rp=ref('pedidos/'+id);if(rp)rp.set(null);
+  closeModal1();render();
 }
 
 /* ═══════════════ TICKET ═══════════════ */
@@ -3982,6 +4237,10 @@ document.addEventListener('click',function(e){
   if(edm){
     borrarMovEmpleado(edm.getAttribute('data-id'));return;
   }
+  var cp=e.target.closest('[data-act="cred-pagar"]');
+  if(cp){
+    abrirPagoCredito(cp.getAttribute('data-id'));return;
+  }
   var scb=e.target.closest('[data-act="soc-add-combo"]');
   if(scb){agregarConsumoSocioCombo(scb.getAttribute('data-cbid'));return;}
 
@@ -4016,9 +4275,11 @@ document.addEventListener('click',function(e){
       var pped=pedidos[mesaActiva.id]||[];
       var pit=pped[pidx];if(!pit)return;
       if(act2==='ped-minus'){
+        ajustarStockItem(pit,+1);  // devolver al inventario
         if(pit.qty===1)pped.splice(pidx,1);
         else pit.qty--;
       } else {
+        ajustarStockItem(pit,-1);  // descontar del inventario
         pit.qty++;
       }
       var pr=ref('pedidos/'+mesaActiva.id);
