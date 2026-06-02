@@ -390,6 +390,8 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'
 function precioItem(it){
   if(it.isCombo) return it.comboPrecio||0;
   if(it.isCustom) return it.customPrecio||0;
+  // Variante con precio propio (ej: Pizza Personal/Mediana)
+  if(it.variantePrecio) return it.variantePrecio;
   var p=menu.find(function(m){return m.id===it.pid;});if(!p)return 0;return it.cubeta?(p.cubeta||p.precio*5):p.precio;
 }
 function totalPedido(mid){return(pedidos[mid]||[]).reduce(function(a,it){return a+precioItem(it)*it.qty;},0);}
@@ -2854,9 +2856,22 @@ function abrirCierre(){
   var utilidad=cajaHoy.cajaInicial+totalV-totalG;
   var mesasOcup=mesas.filter(function(m){return pedidos[m.id]&&pedidos[m.id].length>0;}).length;
 
+  // Gastos por forma de pago para mostrar el saldo neto proyectado
+  var gastosPorFP={};
+  hoyG.forEach(function(g){var gfp=g.fp||'efectivo';gastosPorFP[gfp]=(gastosPorFP[gfp]||0)+g.valor;});
+  var sumaProyectada=0;
   var filas=FPAGO.map(function(f){
-    return'<div class="cierre-row"><span>'+f.emoji+' '+f.label+'</span><span style="color:'+f.color+';font-weight:700">'+fmt(porFP[f.id]||0)+'</span></div>';
-  }).join('');
+    var ini=cajaHoy['ini_'+f.id]||0;
+    var ventasFP=porFP[f.id]||0;
+    var gastosFP=gastosPorFP[f.id]||0;
+    var saldoFP=Math.max(0,ini+ventasFP-gastosFP);
+    sumaProyectada+=saldoFP;
+    return'<div class="cierre-row"><span>'+f.emoji+' '+f.label+'</span>'
+      +'<span style="color:'+f.color+';font-weight:700">'+fmt(saldoFP)
+      +'<span style="color:var(--muted);font-size:10px;font-weight:400"> ('+fmt(ini)+'+'+fmt(ventasFP)+(gastosFP?'-'+fmt(gastosFP):'')+')</span>'
+      +'</span></div>';
+  }).join('')
+  +'<div class="cierre-row" style="border-top:1px solid var(--gold)33;margin-top:4px;padding-top:6px"><span style="font-weight:700">Total en caja nuevo turno</span><span style="color:var(--gold);font-weight:900">'+fmt(sumaProyectada)+'</span></div>';
 
   modal1('<div style="text-align:center;margin-bottom:16px">'
     +'<div style="font-size:28px">🔒</div>'
@@ -2867,6 +2882,7 @@ function abrirCierre(){
     +'<div class="cierre-row"><span>Caja inicial</span><span style="color:var(--gold);font-weight:700">'+fmt(cajaHoy.cajaInicial)+'</span></div>'
     +'<div class="cierre-row"><span>Total ventas</span><span style="color:#22c55e;font-weight:700">'+fmt(totalV)+'</span></div>'
     +'<div class="cierre-row"><span>Total gastos</span><span style="color:#ef4444;font-weight:700">'+fmt(totalG)+'</span></div>'
+    +'<div style="color:var(--muted);font-size:11px;margin:8px 0 4px;font-weight:700">💰 Saldo que queda en cada casilla:</div>'
     +filas
     +'<div class="cierre-total"><span>Utilidad bruta</span><span style="color:'+(utilidad>=0?'#22c55e':'#ef4444')+'">'+fmt(utilidad)+'</span></div>'
     +'</div>'
@@ -2909,20 +2925,27 @@ function confirmarCierre(){
     uid:usuarioActivo.id
   };
   fbPush('cierres',cierre);
-  // Nueva caja = caja anterior + neto por forma de pago (ventas - gastos)
-  var nuevaCajaInicial = cajaHoy.cajaInicial + totalV - totalG;
-  var nuevaCaja = {cajaInicial: Math.max(0, nuevaCajaInicial)};
+  // Nueva caja por forma de pago = inicial anterior del método + neto del método
+  var nuevaCaja = {};
+  var sumaCasillas = 0;
   FPAGO.forEach(function(f){
     var ini = cajaHoy['ini_'+f.id]||0;
-    var neto = (porFP[f.id]||0); // ya tiene gastos descontados
-    nuevaCaja['ini_'+f.id] = Math.max(0, ini + neto);
+    var neto = (porFP[f.id]||0); // ventas - gastos del método
+    var saldoFP = Math.max(0, ini + neto);
+    nuevaCaja['ini_'+f.id] = saldoFP;
+    sumaCasillas += saldoFP;
   });
+  // El total SIEMPRE es la suma exacta de las casillas (así nunca se descuadra)
+  nuevaCaja.cajaInicial = sumaCasillas;
   cajaHoy = nuevaCaja;
   turnoInicio=Date.now();
   fbSet('cajaHoy',cajaHoy);
   fbSet('turnoInicio',turnoInicio);
   closeModal1();render();
-  alert('Cierre de turno guardado ✓\nCaja inicial nuevo turno: '+fmt(cajaHoy.cajaInicial));
+  var resumen='Cierre guardado ✓\n\nSaldos que pasan al nuevo turno:\n';
+  FPAGO.forEach(function(f){resumen+=f.emoji+' '+f.label+': '+fmt(nuevaCaja['ini_'+f.id]||0)+'\n';});
+  resumen+='\nTOTAL EN CAJA: '+fmt(sumaCasillas);
+  alert(resumen);
 }
 
 function verCierre(id){
@@ -2991,7 +3014,13 @@ function renderVentas(){
 
     var histRows=hoyV.slice().reverse().map(function(v){
     var f=FPAGO.find(function(x){return x.id===v.fp;});
-    var fpDisplay=v.fpLabel||(f?f.emoji+' '+f.label:'');
+    // Mixed payment: show breakdown by method
+    var fpDisplay;
+    if(v.pagos&&v.pagos.length>1){
+      fpDisplay=v.pagos.map(function(p){var ff=FPAGO.find(function(x){return x.id===p.fp;});return (ff?ff.emoji:'')+' '+(ff?ff.label:p.fp)+': '+fmt(p.monto);}).join(' + ');
+    } else {
+      fpDisplay=v.fpLabel||(f?f.emoji+' '+f.label:'');
+    }
     var z=ZONAS.find(function(x){return x.id===v.zona;});
     // Items detail
     var itemsHtml='';
@@ -3064,7 +3093,43 @@ function renderVentas(){
         return'<div class="res-row"><div style="display:flex;align-items:center;gap:8px"><span>'+f.emoji+'</span><span style="color:'+f.color+';font-weight:700">'+f.label+'</span></div><span style="color:var(--gold);font-weight:800">'+fmt(t)+'</span></div>';
       }).join('')
     +'</div>'
+    +'</div>'
+    // ── HISTORIAL COMPLETO DE TODAS LAS VENTAS ──
+    +'<div style="background:#a855f718;border:1px solid #a855f733;border-radius:10px;padding:8px 14px;margin:14px 0 8px;font-size:12px;color:#a855f7;font-weight:700;display:flex;justify-content:space-between;align-items:center"><span>🧾 Historial completo de ventas ('+ventas.length+')</span></div>'
+    +'<div class="res-card full-col">'+histTodasVentas()+'</div>';
+}
+
+function histTodasVentas(){
+  var todas=ventas.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,150);
+  if(!todas.length)return'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin ventas registradas</div>';
+  return todas.map(function(v){
+    var f=FPAGO.find(function(x){return x.id===v.fp;});
+    var fpDisplay;
+    if(v.pagos&&v.pagos.length>1){
+      fpDisplay=v.pagos.map(function(p){var ff=FPAGO.find(function(x){return x.id===p.fp;});return (ff?ff.emoji:'')+' '+(ff?ff.label:p.fp)+': '+fmt(p.monto);}).join(' + ');
+    } else {
+      fpDisplay=v.fpLabel||(f?f.emoji+' '+f.label:'');
+    }
+    var z=ZONAS.find(function(x){return x.id===v.zona;});
+    var vItems=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    var itemsHtml=vItems.length?('<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--border)">'
+      +vItems.map(function(it){
+        var nombre,pr;
+        if(it.isCustom){nombre='✏️ '+esc(it.customNombre||'');pr=it.customPrecio||0;}
+        else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
+        else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(p?p.emoji+' '+esc(p.nombre):(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'');pr=it.variantePrecio||(it.cubeta?(p&&p.cubeta||(p&&p.precio||0)*5):(p?p.precio:0));}
+        return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:1px 0"><span>'+nombre+' ×'+it.qty+'</span><span>'+fmt(pr*it.qty)+'</span></div>';
+      }).join('')+'</div>'):'';
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+(z?z.label+' · ':'')+esc(v.mesa||'?')+'</div>'
+        +'<div style="color:var(--accent);font-size:11px;font-weight:600">'+fpDisplay+'</div>'
+        +'<div style="color:var(--muted);font-size:10px">'+fmtDT(v.ts)+' · '+esc(v.uidNombre||v.uid||'')+'</div></div>'
+        +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(v.total)+'</span>'
+      +'</div>'+itemsHtml
     +'</div>';
+  }).join('')
+  +(ventas.length>150?'<div style="color:var(--muted);text-align:center;padding:8px;font-size:11px">Mostrando las 150 más recientes · Descarga Excel para ver todas</div>':'');
 }
 
 /* ═══════════════ SOCIOS ═══════════════ */
