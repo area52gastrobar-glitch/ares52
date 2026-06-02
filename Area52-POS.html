@@ -725,14 +725,14 @@ function renderPanelPedido(){
       +'<div style="color:var(--text);font-size:12px;font-weight:700;margin:3px 0 1px;line-height:1.2">'+esc(p.nombre)+'</div>'
       +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">Stock: '+p.stock+' '+p.und+'</div>'
       +'<div style="display:flex;gap:4px">'
-      +'<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+fmt(p.precio)+'</button>'
+      +'<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+((p.variantes&&p.variantes.length)?'desde '+fmt(Math.min.apply(null,p.variantes.map(function(v){return v.precio;}))):fmt(p.precio))+'</button>'
       +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+fmt(p.cubeta)+'</button>':'')
       +'</div></div>';
   }).join('');
 
   var pedItems=ped.map(function(it,idx_){
     var p=(it.isCombo||it.isCustom)?null:menu.find(function(m){return m.id===it.pid;});
-    var pr=it.isCombo?it.comboPrecio:it.isCustom?it.customPrecio:(it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0));
+    var pr=precioItem(it);  // maneja variantes, combos, cubetazos correctamente
     var ingDesc=it.isCombo&&it.comboIngredientes?it.comboIngredientes.map(function(ing){var pm=menu.find(function(m){return m.id===ing.prodId;});return(pm?pm.emoji:'')+'×'+ing.cantidad;}).join(' '):'';
     return'<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1">'
