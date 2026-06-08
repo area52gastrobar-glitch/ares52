@@ -417,7 +417,7 @@ function iniciarSync(){
     Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=Object.values(pedidos[k]||{});});
     renderSoloPedido();updateHeader();actualizarColorMesas();
   });
-  fbOn('ventas',function(v){ventas=v?Object.values(v):[];updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
+  fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
@@ -3205,6 +3205,52 @@ function renderVentas(){
     +'<div class="res-card full-col">'+histTodasVentas()+'</div>';
 }
 
+function abrirEditarFP(fbkey){
+  var v=ventas.find(function(x){return x._fbkey===fbkey;});
+  if(!v){alert('Venta no encontrada.');return;}
+  var esMixto=v.pagos&&v.pagos.length>1;
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'"'+(f.id===v.fp?' selected':'')+'>'+f.emoji+' '+f.label+'</option>';}).join('');
+  var actual;
+  if(esMixto){
+    actual=v.pagos.map(function(p){var ff=FPAGO.find(function(x){return x.id===p.fp;});return (ff?ff.emoji+' '+ff.label:p.fp)+': '+fmt(p.monto);}).join('<br>');
+  } else {
+    var f=FPAGO.find(function(x){return x.id===v.fp;});
+    actual=(f?f.emoji+' '+f.label:v.fp);
+  }
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">✏️ Corregir forma de pago</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:12px">'+esc(v.mesa||'')+' · '+fmt(v.total)+'</div>'
+    +'<div style="background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:12px">'
+      +'<div style="color:var(--muted);font-size:11px">Forma de pago actual:</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--accent);margin-top:2px">'+actual+'</div>'
+    +'</div>'
+    +(esMixto?'<div style="background:#f5a62318;border:1px solid #f5a62333;border-radius:8px;padding:8px 12px;margin-bottom:12px;color:#f5a623;font-size:12px">⚠️ Este cobro fue mixto. Al corregir, se convertirá en un solo método por el total.</div>':'')
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nueva forma de pago</div>'
+    +'<select class="inp" id="editfp-sel">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarEditarFP(\''+fbkey+'\')">Guardar cambio</button>');
+}
+
+function guardarEditarFP(fbkey){
+  var v=ventas.find(function(x){return x._fbkey===fbkey;});
+  if(!v)return;
+  var nuevoFp=(document.getElementById('editfp-sel')||{}).value;
+  if(!nuevoFp)return;
+  var f=FPAGO.find(function(x){return x.id===nuevoFp;});
+  // Actualizar la venta: forma de pago única por el total
+  v.fp=nuevoFp;
+  v.fpLabel=f?f.emoji+' '+f.label:nuevoFp;
+  v.pagos=[{fp:nuevoFp,label:(f?f.label:nuevoFp),monto:v.total}];
+  v.editadoFP=true;
+  v.editadoPor=usuarioActivo.nombre;
+  v.editadoTs=Date.now();
+  // Guardar en Firebase (sin el _fbkey interno)
+  var copia={};Object.keys(v).forEach(function(k){if(k!=='_fbkey')copia[k]=v[k];});
+  var r=ref('ventas/'+fbkey);
+  if(r)r.set(copia);
+  closeModal1();
+  showToast('✅ Forma de pago corregida<br><span style="font-size:12px;opacity:.85">'+esc(v.mesa||'')+' → '+(f?f.label:nuevoFp)+'</span>','#22c55e');
+  render();
+}
+
 function histTodasVentas(){
   var todas=ventas.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,150);
   if(!todas.length)return'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin ventas registradas</div>';
@@ -3230,10 +3276,11 @@ function histTodasVentas(){
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
         +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+(z?z.label+' · ':'')+esc(v.mesa||'?')+'</div>'
-        +'<div style="color:var(--accent);font-size:11px;font-weight:600">'+fpDisplay+'</div>'
-        +'<div style="color:var(--muted);font-size:10px">'+fmtDT(v.ts)+' · '+esc(v.uidNombre||v.uid||'')+'</div></div>'
+        +'<div style="color:var(--accent);font-size:11px;font-weight:600">'+fpDisplay+(v.editadoFP?' <span style="color:#f5a623;font-size:9px">✏️ corregido</span>':'')+'</div>'
+        +'<div style="color:var(--muted);font-size:10px">'+fmtDT(v.ts)+' · '+esc(v.uidNombre||v.uid||'')+(v.editadoFP?' · corregido por '+esc(v.editadoPor||''):'')+'</div></div>'
         +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(v.total)+'</span>'
       +'</div>'+itemsHtml
+      +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey)?'<button data-act="venta-editfp" data-key="'+v._fbkey+'" style="width:100%;margin-top:6px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✏️ Corregir forma de pago</button>':'')
     +'</div>';
   }).join('')
   +(ventas.length>150?'<div style="color:var(--muted);text-align:center;padding:8px;font-size:11px">Mostrando las 150 más recientes · Descarga Excel para ver todas</div>':'');
@@ -4428,6 +4475,12 @@ document.addEventListener('click',function(e){
   var cp=e.target.closest('[data-act="cred-pagar"]');
   if(cp){
     abrirPagoCredito(cp.getAttribute('data-id'));return;
+  }
+  var vef=e.target.closest('[data-act="venta-editfp"]');
+  if(vef){
+    if(usuarioActivo&&usuarioActivo.rol==='admin')abrirEditarFP(vef.getAttribute('data-key'));
+    else alert('Solo el administrador puede corregir la forma de pago.');
+    return;
   }
   var scb=e.target.closest('[data-act="soc-add-combo"]');
   if(scb){agregarConsumoSocioCombo(scb.getAttribute('data-cbid'));return;}
