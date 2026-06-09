@@ -348,7 +348,7 @@ var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var empleados=[];      // [{id, nombre, cargo, activo}]
 var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid}]
 var clientesCredito=[];// [{id, nombre, telefono, activo}]
-var _secOpen={ranking:false,historial:false,socios:false};  // secciones plegables (cerradas por defecto)
+var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false};  // secciones plegables
 var _mesesOpen={};  // meses expandidos en historial
 var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos:[{ts,valor,fp}]}]
 var _socioActivo='CARLOS';  // currently selected socio
@@ -1637,9 +1637,15 @@ function renderInventario(){
         +'</div>'
         +'</div>';
     }).join('');
+    var catKey='inv_'+cat;
+    var abierto=(catKey in _mesesOpen)?_mesesOpen[catKey]:false;  // cerradas por defecto
+    var totalCat=prods.reduce(function(a,p){return a+(parseInt(p.stock)||0);},0);
     return'<div class="card mb8">'
-      +'<div style="color:var(--accent);font-weight:800;font-size:13px;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase">'+cat+'</div>'
-      +rows
+      +'<button data-act="toggle-mes" data-mes="'+catKey+'" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;cursor:pointer;padding:0">'
+        +'<span style="color:var(--accent);font-weight:800;font-size:13px;letter-spacing:1px;text-transform:uppercase">'+(abierto?'▼':'▶')+' '+cat+'</span>'
+        +'<span style="color:var(--muted);font-size:11px">'+prods.length+' prod · '+totalCat+' und</span>'
+      +'</button>'
+      +(abierto?'<div style="margin-top:8px">'+rows+'</div>':'')
       +'</div>';
   }).join('');
 
@@ -1749,7 +1755,16 @@ function renderCarta(){
           +'<button onclick="borrarProd('+p.id+')" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;font-size:11px;font-weight:700">🗑</button>'
         +'</div></div>';
     }).join('');
-    return'<div><div class="cat-title">'+esc(cat)+'</div><div class="prod-grid">'+prods+'</div></div>';
+    var catKey='carta_'+cat;
+    var abierto=(catKey in _mesesOpen)?_mesesOpen[catKey]:false;
+    var nProds=menu.filter(function(m){return m.cat===cat;}).length;
+    return'<div style="margin-bottom:8px">'
+      +'<button data-act="toggle-mes" data-mes="'+catKey+'" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 14px;cursor:pointer;color:var(--text)">'
+        +'<span style="font-weight:800;font-size:13px">'+(abierto?'▼':'▶')+' '+esc(cat)+'</span>'
+        +'<span style="color:var(--muted);font-size:11px">'+nProds+' productos</span>'
+      +'</button>'
+      +(abierto?'<div class="prod-grid" style="margin-top:6px">'+prods+'</div>':'')
+      +'</div>';
   }).join('');
   return formHtml+secs;
 }
@@ -2732,11 +2747,19 @@ function renderGastos(){
     +'<button class="btn btn-gold btn-full" onclick="guardarGasto()">💾 Registrar gasto</button>'
     +'</div>';
 
+  // Desglose de gastos de hoy por forma de pago
+  var gastosPorFpHoy={};
+  hoy.forEach(function(g){var gfp=g.fp||'efectivo';gastosPorFpHoy[gfp]=(gastosPorFpHoy[gfp]||0)+g.valor;});
+  var fpBreakdown=FPAGO.filter(function(f){return gastosPorFpHoy[f.id];}).map(function(f){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0"><span style="color:'+f.color+';font-size:12px;font-weight:600">'+f.emoji+' '+f.label+'</span><span style="color:'+f.color+';font-weight:700;font-size:13px">'+fmt(gastosPorFpHoy[f.id])+'</span></div>';
+  }).join('');
+
   var resHoy='<div class="card mb12">'
     +'<div class="flex-between mb8">'
     +'<div class="section-title" style="margin-bottom:0">Gastos de hoy — '+todayStr()+'</div>'
     +'<span style="color:var(--red);font-weight:900;font-size:15px">'+fmt(totalH)+'</span>'
     +'</div>'
+    +(fpBreakdown?'<div style="background:var(--bg);border-radius:8px;padding:6px 12px;margin-bottom:10px">'+fpBreakdown+'</div>':'')
     +(hoy.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin gastos registrados hoy</div>'
       :hoy.slice().reverse().map(function(g){
         return'<div class="gasto-row">'
@@ -2775,15 +2798,17 @@ function renderGastos(){
   }).join('');
   var historial='<div class="card mb12">'
     +'<div class="flex-between mb8">'
-      +'<div class="section-title" style="margin-bottom:0">📜 Historial completo de gastos</div>'
+      +'<button data-act="toggle-sec" data-sec="gastosHist" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0">'+(_secOpen.gastosHist?'▼':'▶')+' 📜 Historial completo de gastos</button>'
       +'<button onclick="exportarGastosExcel()" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer">📥 Excel</button>'
     +'</div>'
+    +(_secOpen.gastosHist?(''
     +'<div style="display:flex;justify-content:space-between;margin-bottom:10px;padding:8px 12px;background:var(--card2);border-radius:8px">'
       +'<span style="color:var(--muted);font-size:12px">Total acumulado ('+todosGastos.length+' gastos)</span>'
       +'<span style="color:var(--red);font-weight:900;font-size:15px">'+fmt(totalTodos)+'</span>'
     +'</div>'
     +(todosGastos.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin gastos registrados</div>':histRows)
     +(todosGastos.length>100?'<div style="color:var(--muted);text-align:center;padding:10px;font-size:11px">Mostrando los 100 más recientes · Exporta a Excel para ver todos</div>':'')
+    ):'')
   +'</div>';
 
   return form+resHoy+resumen+historial;
@@ -2919,8 +2944,8 @@ function renderCaja(){
 
   // Historial de cierres
   var histCierres='<div class="card">'
-    +'<div class="section-title">Historial de cierres anteriores</div>'
-    +(cierres.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin cierres registrados</div>'
+    +'<button data-act="toggle-sec" data-sec="cierresHist" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0;margin-bottom:10px">'+(_secOpen.cierresHist?'▼':'▶')+' 📋 Historial de cierres ('+cierres.length+')</button>'
+    +(!_secOpen.cierresHist?'':cierres.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin cierres registrados</div>'
       :cierres.slice().reverse().map(function(c){
         var uid=usuarios.find(function(u){return u.id===c.uid;});
         return'<div class="cierre-hist-item" onclick="verCierre(\''+c.id+'\')">'
@@ -3328,14 +3353,15 @@ function rankingTotalProductos(){
   ventas.forEach(function(v){
     var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
     its.forEach(function(it){
-      var nombre,emoji,key,qty=it.qty||1;
-      if(it.isCustom){return;} // omitir personalizados/abonos
-      if(it.isCombo){nombre=it.comboNombre||'Combo';emoji='🎁';key='combo_'+nombre;}
+      var nombre,emoji,key,cat,qty=it.qty||1;
+      if(it.isCustom){return;}
+      if(it.isCombo){nombre=it.comboNombre||'Combo';emoji='🎁';cat='🎁 Combos';key='combo_'+nombre;}
       else if(it.isCubetazoMix){
-        // contar cada cerveza del cubetazo mixto
         (it.cubMixDetalle||[]).forEach(function(dd){
+          var pp=menu.find(function(m){return Number(m.id)===Number(dd.prodId);});
+          var cat2=pp?pp.cat:'Cerveza';
           var k='p_'+dd.nombre;
-          if(!porProd[k])porProd[k]={nombre:dd.nombre,emoji:dd.emoji||'🍺',qty:0,total:0};
+          if(!porProd[k])porProd[k]={nombre:dd.nombre,emoji:dd.emoji||'🍺',cat:cat2,qty:0,total:0};
           porProd[k].qty+=dd.cantidad*qty;
         });
         return;
@@ -3344,38 +3370,65 @@ function rankingTotalProductos(){
         var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
         nombre=(p?p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'');
         emoji=p?p.emoji:'📦';
-        // Cubetazo = 5 unidades del producto; se suman a la misma línea del producto
+        cat=p?p.cat:'Otros';
         if(it.cubeta){qty=(it.qty||1)*5;}
-        key='p_'+nombre;  // misma línea con o sin cubetazo
+        key='p_'+nombre;
       }
-      if(!porProd[key])porProd[key]={nombre:nombre,emoji:emoji,qty:0,total:0};
+      if(!porProd[key])porProd[key]={nombre:nombre,emoji:emoji,cat:cat||'Otros',qty:0,total:0};
       porProd[key].qty+=qty;
       porProd[key].total+=precioItem(it)*(it.qty||1);
     });
   });
-  var ranking=Object.values(porProd).sort(function(a,b){return b.qty-a.qty;});
-  if(!ranking.length)return'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin ventas registradas</div>';
-  var totalUnidades=ranking.reduce(function(a,p){return a+p.qty;},0);
+  var lista=Object.values(porProd);
+  if(!lista.length)return'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin ventas registradas</div>';
+  var totalUnidades=lista.reduce(function(a,p){return a+p.qty;},0);
+
+  // Agrupar por categoría
+  var porCat={};
+  lista.forEach(function(p){
+    var c=p.cat||'Otros';
+    if(!porCat[c])porCat[c]={cat:c,prods:[],qty:0,total:0};
+    porCat[c].prods.push(p);
+    porCat[c].qty+=p.qty;
+    porCat[c].total+=p.total;
+  });
+  // Ordenar categorías por unidades, y productos dentro de cada una
+  var cats=Object.values(porCat).sort(function(a,b){return b.qty-a.qty;});
+  var emojiCat=(typeof catEmojis!=='undefined')?catEmojis:{};
+
   return'<input id="busca-prod" oninput="filtrarRankingProd(this.value)" placeholder="🔍 Buscar producto..." class="inp" style="margin-bottom:10px"/>'
-    +'<div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--card2);border-radius:8px;margin-bottom:8px"><span style="color:var(--muted);font-size:11px">'+ranking.length+' productos · '+totalUnidades+' unidades vendidas</span></div>'
+    +'<div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--card2);border-radius:8px;margin-bottom:8px"><span style="color:var(--muted);font-size:11px">'+lista.length+' productos · '+totalUnidades+' unidades vendidas</span></div>'
     +'<div id="ranking-prod-list">'
-    +ranking.map(function(p){
-      return'<div class="res-row rank-prod-item" data-nombre="'+esc(p.nombre.toLowerCase())+'">'
-        +'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">'+p.emoji+'</span>'
-        +'<div><div style="font-size:13px;font-weight:700">'+esc(p.nombre)+'</div>'
-        +'<div style="color:var(--muted);font-size:11px">'+(p.total>0?fmt(p.total):'')+'</div></div></div>'
-        +'<div style="text-align:right"><div style="color:var(--accent);font-weight:900;font-size:17px">'+p.qty+'</div><div style="color:var(--muted);font-size:9px">und</div></div>'
+    +cats.map(function(c){
+      var prods=c.prods.sort(function(a,b){return b.qty-a.qty;});
+      return'<div class="rank-cat-group" data-cat="'+esc((c.cat||'').toLowerCase())+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--accent)18;border-radius:7px;padding:7px 12px;margin:10px 0 6px">'
+          +'<span style="color:var(--accent);font-weight:800;font-size:13px">'+(emojiCat[c.cat]?emojiCat[c.cat]+' ':'')+esc(c.cat)+'</span>'
+          +'<span style="color:var(--accent);font-weight:700;font-size:12px">'+c.qty+' und</span>'
+        +'</div>'
+        +prods.map(function(p){
+          return'<div class="res-row rank-prod-item" data-nombre="'+esc(p.nombre.toLowerCase())+'" data-cat="'+esc((c.cat||'').toLowerCase())+'">'
+            +'<div style="display:flex;align-items:center;gap:8px;padding-left:6px"><span style="font-size:16px">'+p.emoji+'</span>'
+            +'<div><div style="font-size:13px;font-weight:600">'+esc(p.nombre)+'</div>'
+            +'<div style="color:var(--muted);font-size:11px">'+(p.total>0?fmt(p.total):'')+'</div></div></div>'
+            +'<div style="text-align:right"><div style="color:var(--text);font-weight:900;font-size:16px">'+p.qty+'</div><div style="color:var(--muted);font-size:9px">und</div></div>'
+          +'</div>';
+        }).join('')
       +'</div>';
     }).join('')
     +'</div>';
 }
-
 function filtrarRankingProd(q){
   q=(q||'').toLowerCase();
   var items=document.querySelectorAll('.rank-prod-item');
   items.forEach(function(el){
     var n=el.getAttribute('data-nombre')||'';
     el.style.display=n.indexOf(q)>=0?'':'none';
+  });
+  // Ocultar grupos de categoría sin resultados visibles
+  document.querySelectorAll('.rank-cat-group').forEach(function(g){
+    var visibles=Array.prototype.filter.call(g.querySelectorAll('.rank-prod-item'),function(el){return el.style.display!=='none';});
+    g.style.display=visibles.length?'':'none';
   });
 }
 
@@ -3952,12 +4005,21 @@ function renderSocios(){
     // Product grid
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+prodCards+'</div>'
     +(comboCards?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'+comboCards+'</div>':'')
-    // Cierre mensual
+    // Liquidar por socio individual
+    +(esAdmin&&(totalCarlos>0||totalJavier>0)
+      ?'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+        +'<div style="color:var(--muted);font-size:11px;font-weight:700;margin-bottom:8px">💵 Liquidar cuenta de socio (vuelve a 0)</div>'
+        +'<div style="display:flex;gap:8px">'
+        +(totalCarlos>0?'<button onclick="liquidarSocio(\'CARLOS\')" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Carlos · '+fmt(totalCarlos)+'</button>':'')
+        +(totalJavier>0?'<button onclick="liquidarSocio(\'JAVIER\')" style="flex:1;background:#a855f718;color:#a855f7;border:1px solid #a855f744;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Javier · '+fmt(totalJavier)+'</button>':'')
+        +'</div></div>'
+      :'')
+    // Cierre mensual (todos)
     +(esAdmin&&totalAcum>0
       ?'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:10px;padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">'
-        +'<div><div style="color:#ef4444;font-weight:700;font-size:13px">🔒 Cierre mensual socios</div>'
+        +'<div><div style="color:#ef4444;font-weight:700;font-size:13px">🔒 Cerrar todo (Carlos + Javier)</div>'
         +'<div style="color:var(--muted);font-size:11px">Total: '+fmt(totalAcum)+'</div></div>'
-        +'<button onclick="cerrarConsumoSocios()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer">Cerrar mes</button>'
+        +'<button onclick="cerrarConsumoSocios()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer">Cerrar todo</button>'
       +'</div>'
       :'')
     // History
@@ -4061,6 +4123,22 @@ function agregarConsumoSocioCombo(cbId){
   var totalSocioC=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+c.total;},0);
   var colorSC=_socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
   showToast('✅ 🎁 '+esc(cb.nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">Total '+_socioActivo+': '+fmt(totalSocioC)+'</span>',colorSC);
+  render();
+}
+
+function liquidarSocio(socio){
+  var consumosSocio=consumoSocios.filter(function(c){return c.socio===socio;});
+  var total=consumosSocio.reduce(function(a,c){return a+c.total;},0);
+  if(total<=0){alert('Este socio no tiene consumos.');return;}
+  if(!confirm('¿Liquidar la cuenta de '+socio+'? Total: '+fmt(total)+'.\n\nEsto registra el cierre de '+socio+' y vuelve su cuenta a 0. Los consumos del otro socio no se afectan.'))return;
+  // Guardar registro del cierre de este socio
+  var cierreSocio={id:'cs_'+Date.now(),ts:Date.now(),socio:socio,total:total,items:consumosSocio.length,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var r=ref('cierresSocios');if(r)r.push(cierreSocio);
+  // Quitar solo los consumos de este socio
+  consumoSocios=consumoSocios.filter(function(c){return c.socio!==socio;});
+  var co={};consumoSocios.forEach(function(c,i){co['c'+i]=c;});
+  fbSet('consumoSocios',consumoSocios.length?co:null);
+  showToast('✅ Cuenta de '+socio+' liquidada<br><span style="font-size:12px;opacity:.85">'+fmt(total)+' · vuelve a 0</span>',socio==='CARLOS'?'#38bdf8':'#a855f7');
   render();
 }
 
