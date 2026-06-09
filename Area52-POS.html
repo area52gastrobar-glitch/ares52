@@ -297,12 +297,12 @@ var FPAGO=[
   {id:'efectivo', label:'Efectivo',       color:'#22C55E',emoji:'💵'}
 ];
 var ROLES={
-  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','socios','empleados','creditos','cocina','admin']},
-  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','socios','empleados','creditos','cocina']},
+  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','rappi','socios','empleados','creditos','cocina','admin']},
+  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','cocina']},
   mesero:{label:'Mesero',       color:'#22c55e',tabs:['mesas','gastos','socios','cocina']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
-  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',socios:'🤝 Socios',empleados:'👷 Empleados',creditos:'📒 Fiados',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
+  caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',rappi:'🛵 Rappi',socios:'🤝 Socios',empleados:'👷 Empleados',creditos:'📒 Fiados',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
 var EMOJIS=['🍺','🍻','🥃','🍷','🥂','🍹','🥤','💧','🧃','🧉','🍸','🍾','☕','🫖','🧋','⚡','🔋','🥫','🍕','🍔','🌭','🌮','🌯','🫔','🥙','🍗','🍖','🥩','🥓','🍟','🧆','🍝','🍜','🥘','🫕','🥟','🧀','🥗','🎂','🍰','🧁','🍩','🍪','🍫','🚬','🔥','💫','🌶️','🍤','🦐','🦑','🦀','🍣','🍱','🍊','🍋','🍓','🫐','🥭','🧊','🥚','🍳','🫙','🥤','🍞','🥐','🧇'];
 var CATG_GASTOS=['Mercancía','Insumos','Servicios','Personal','Mantenimiento','Transporte','Otro'];
 
@@ -348,7 +348,11 @@ var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var empleados=[];      // [{id, nombre, cargo, activo}]
 var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid}]
 var clientesCredito=[];// [{id, nombre, telefono, activo}]
-var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false};  // secciones plegables
+var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false};  // secciones plegables
+var ventasRappi=[];   // [{id,ts,items,total,uid}]
+var _rappiPedido=[];  // pedido en construcción
+var _rappiCat='Todos';
+var cierresRappi=[];  // histórico de cierres de Rappi
 var _mesesOpen={};  // meses expandidos en historial
 var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos:[{ts,valor,fp}]}]
 var _socioActivo='CARLOS';  // currently selected socio
@@ -462,6 +466,14 @@ function iniciarSync(){
   fbOn('deudasCredito',function(v){
     deudasCredito=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='creditos'||tabActual==='caja')render();
+  });
+  fbOn('ventasRappi',function(v){
+    ventasRappi=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='rappi')render();
+  });
+  fbOn('cierresRappi',function(v){
+    cierresRappi=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='rappi')render();
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -583,6 +595,7 @@ function render(){
   if(tabActual==='socios')    c.innerHTML=renderSocios();
   if(tabActual==='empleados') {c.innerHTML=renderEmpleados();}
   if(tabActual==='creditos')  {c.innerHTML=renderCreditos();}
+  if(tabActual==='rappi')     {c.innerHTML=renderRappi();}
   if(tabActual==='cocina')    {c.innerHTML=renderCocina();bindCocinaEvents();}
   if(tabActual==='admin')     c.innerHTML=renderAdmin();
   bindMapaEvents();
@@ -3639,6 +3652,184 @@ function confirmarTraslado(){
   closeModal1();
   showToast('🔄 Traslado realizado<br><span style="font-size:12px;opacity:.85">'+fmt(valor)+' de Tarjeta a Bre-B</span>','#06B6D4');
   render();
+}
+
+function renderRappi(){
+  var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+
+  // Total histórico Rappi (separado de la caja del bar)
+  var totalRappi=ventasRappi.reduce(function(a,v){return a+(v.total||0);},0);
+  var hoyRappi=ventasRappi.filter(function(v){var d=new Date(v.ts),h=new Date();return d.toDateString()===h.toDateString();});
+  var totalHoyRappi=hoyRappi.reduce(function(a,v){return a+(v.total||0);},0);
+
+  // Pedido en construcción
+  var totalPed=_rappiPedido.reduce(function(a,it){return a+(it.valor||0)*it.qty;},0);
+  var pedRows=_rappiPedido.map(function(it,idx){
+    var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+    return'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:18px">'+(p?p.emoji:'📦')+'</span>'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(p?p.nombre:it.nombre||'?')+'</div>'
+        +'<div style="color:var(--muted);font-size:11px">x'+it.qty+'</div></div>'
+      +'<input type="number" value="'+(it.valor||0)+'" onchange="setValorRappi('+idx+',this.value)" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px;font-size:13px;text-align:right" inputmode="numeric"/>'
+      +'<button onclick="quitarRappiItem('+idx+')" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px">✕</button>'
+    +'</div>';
+  }).join('');
+
+  // Selector de productos
+  var cats=['Todos'].concat(menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort());
+  var pills=cats.map(function(c){
+    var sel=_rappiCat===c;
+    return'<button onclick="_rappiCat=\''+c.replace(/'/g,"\\'")+'\';render()" style="background:'+(sel?'var(--accent)':'var(--card)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">'+esc(c)+'</button>';
+  }).join('');
+  var fil=menu.filter(function(m){return _rappiCat==='Todos'||m.cat===_rappiCat;});
+  var prodBtns=fil.map(function(p){
+    return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left">'
+      +'<div style="font-size:18px">'+p.emoji+'</div>'
+      +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">Stock: '+(parseInt(p.stock)||0)+' · '+fmt(p.precio)+'</div>'
+    +'</button>';
+  }).join('');
+
+  return'<div>'
+    // KPIs Rappi
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
+      +'<div style="background:#FF6B0018;border:2px solid #FF6B0044;border-radius:12px;padding:12px;text-align:center">'
+        +'<div style="color:#FF6B00;font-size:10px;font-weight:700">🛵 RAPPI HOY</div>'
+        +'<div style="color:#FF6B00;font-weight:900;font-size:20px">'+fmt(totalHoyRappi)+'</div></div>'
+      +'<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center">'
+        +'<div style="color:var(--muted);font-size:10px;font-weight:700">TOTAL ACUMULADO</div>'
+        +'<div style="color:var(--gold);font-weight:900;font-size:20px">'+fmt(totalRappi)+'</div></div>'
+    +'</div>'
+    +'<div style="background:#FF6B0011;border:1px solid #FF6B0033;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:#FF6B00">🛵 Las ventas de Rappi se manejan aparte y NO entran a la caja ni al cierre del bar. Solo descuentan inventario.</div>'
+    // Pedido en construcción
+    +'<div class="card mb12">'
+      +'<div class="section-title">🛒 Pedido Rappi en construcción</div>'
+      +(_rappiPedido.length?pedRows:'<div style="color:var(--dim);font-size:12px;text-align:center;padding:14px">Agrega productos abajo</div>')
+      +(_rappiPedido.length?'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--accent)33">'
+        +'<span style="font-weight:800;font-size:14px">Total cobrado</span>'
+        +'<span style="color:#FF6B00;font-weight:900;font-size:20px">'+fmt(totalPed)+'</span></div>'
+        +'<button onclick="registrarVentaRappi()" style="width:100%;margin-top:10px;background:#FF6B00;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer">🛵 Registrar venta Rappi</button>':'')
+    +'</div>'
+    // Selector productos
+    +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;overflow-x:auto">'+pills+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">'+prodBtns+'</div>'
+    // Cierre de Rappi (manual, cuando Rappi deposita en la cuenta)
+    +(esAdmin
+      ?'<div style="background:#FF6B0018;border:1px solid #FF6B0033;border-radius:10px;padding:12px;margin-bottom:12px">'
+        +'<div style="color:#FF6B00;font-weight:700;font-size:13px;margin-bottom:2px">🔒 Cierre de cuenta Rappi</div>'
+        +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Hazlo cada vez que Rappi deposite el dinero en tu cuenta. Acumulado actual: <b style="color:#FF6B00">'+fmt(totalRappi)+'</b></div>'
+        +(totalRappi>0
+          ?'<button onclick="cerrarRappi()" style="width:100%;background:#FF6B00;color:#fff;border:none;border-radius:8px;padding:11px;font-weight:800;font-size:14px;cursor:pointer">💰 Registrar depósito y cerrar (dejar en 0)</button>'
+          :'<div style="text-align:center;color:var(--muted);font-size:12px;padding:6px">Aún no hay ventas Rappi para cerrar</div>')
+      +'</div>'
+      :'')
+    // Historial ventas Rappi (plegable)
+    +'<button data-act="toggle-sec" data-sec="rappiHist" style="width:100%;text-align:left;background:#FF6B0018;border:1px solid #FF6B0033;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:12px;color:#FF6B00;font-weight:700;cursor:pointer">'+(_secOpen.rappiHist?'▼':'▶')+' 🧾 Historial de ventas Rappi ('+ventasRappi.length+')</button>'
+    +(_secOpen.rappiHist?'<div class="card">'+rappiHistorial()+'</div>':'')
+    // Historial de cierres Rappi (plegable)
+    +'<button data-act="toggle-sec" data-sec="rappiCierres" style="width:100%;text-align:left;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:12px;color:var(--text);font-weight:700;cursor:pointer">'+(_secOpen.rappiCierres?'▼':'▶')+' 📋 Historial de cierres Rappi ('+cierresRappi.length+')</button>'
+    +(_secOpen.rappiCierres?'<div class="card">'+rappiCierresHistorial()+'</div>':'')
+  +'</div>';
+}
+
+function agregarRappiItem(pid){
+  var p=menu.find(function(m){return Number(m.id)===Number(pid);});
+  if(!p)return;
+  var idx=_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid);});
+  if(idx>=0)_rappiPedido[idx].qty++;
+  else _rappiPedido.push({pid:pid,qty:1,valor:p.precio||0,nombre:p.nombre});
+  render();
+}
+
+function quitarRappiItem(idx){
+  _rappiPedido.splice(idx,1);
+  render();
+}
+
+function setValorRappi(idx,val){
+  if(_rappiPedido[idx])_rappiPedido[idx].valor=parseInt(val)||0;
+  // no render para no perder foco; el total se actualiza al registrar
+}
+
+function registrarVentaRappi(){
+  if(!_rappiPedido.length){alert('Agrega productos al pedido.');return;}
+  var total=_rappiPedido.reduce(function(a,it){return a+(it.valor||0)*it.qty;},0);
+  if(total<=0){alert('Asigna un valor a los productos.');return;}
+  // Descontar inventario
+  _rappiPedido.forEach(function(it){
+    var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+    if(p){var a=parseInt(p.stock);if(isNaN(a))a=0;p.stock=Math.max(0,a-it.qty);}
+  });
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+  // Registrar venta Rappi (separada)
+  var venta={id:'rap'+Date.now(),ts:Date.now(),
+    items:JSON.parse(JSON.stringify(_rappiPedido)),total:total,
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  ventasRappi.push(venta);
+  var r=ref('ventasRappi');if(r)r.push(venta);else fbSet('ventasRappi',ventasRappi);
+  _rappiPedido=[];
+  showToast('🛵 Venta Rappi registrada<br><span style="font-size:12px;opacity:.85">'+fmt(total)+'</span>','#FF6B00');
+  render();
+}
+
+function rappiHistorial(){
+  var todas=ventasRappi.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,100);
+  if(!todas.length)return'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin ventas Rappi</div>';
+  return todas.map(function(v){
+    var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    var det=its.map(function(it){var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});return (p?p.emoji+' '+esc(p.nombre):esc(it.nombre||'?'))+' x'+it.qty;}).join(', ');
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
+      +'<div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--muted)">'+fmtDT(v.ts)+' · '+esc(v.uidNombre||'')+'</span>'
+      +'<span style="color:#FF6B00;font-weight:900;font-size:15px">'+fmt(v.total)+'</span></div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:4px">'+det+'</div>'
+    +'</div>';
+  }).join('');
+}
+
+function cerrarRappi(){
+  var total=ventasRappi.reduce(function(a,v){return a+(v.total||0);},0);
+  var nVentas=ventasRappi.length;
+  if(total<=0){alert('No hay ventas Rappi para cerrar.');return;}
+  if(!confirm('¿Cerrar la cuenta de Rappi?\n\nTotal: '+fmt(total)+' ('+nVentas+' ventas)\n\nSe guarda en el histórico de cierres y la cuenta vuelve a 0. El inventario no se afecta.'))return;
+  // Guardar cierre con resumen de productos
+  var porProd={};
+  ventasRappi.forEach(function(v){
+    var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    its.forEach(function(it){
+      var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+      var nombre=p?p.nombre:(it.nombre||'?');
+      if(!porProd[nombre])porProd[nombre]={nombre:nombre,qty:0};
+      porProd[nombre].qty+=it.qty;
+    });
+  });
+  var cierre={id:'cr'+Date.now(),ts:Date.now(),total:total,nVentas:nVentas,
+    productos:Object.values(porProd),
+    desde:ventasRappi.length?Math.min.apply(null,ventasRappi.map(function(v){return v.ts;})):Date.now(),
+    hasta:Date.now(),
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var r=ref('cierresRappi');if(r)r.push(cierre);else fbSet('cierresRappi',cierresRappi.concat([cierre]));
+  // Resetear ventas Rappi
+  ventasRappi=[];
+  var rv=ref('ventasRappi');if(rv)rv.set(null);else fbSet('ventasRappi',null);
+  showToast('🔒 Cuenta Rappi cerrada<br><span style="font-size:12px;opacity:.85">'+fmt(total)+' · guardado en histórico</span>','#FF6B00');
+  render();
+}
+
+function rappiCierresHistorial(){
+  var cierres=cierresRappi.slice().sort(function(a,b){return b.ts-a.ts;});
+  if(!cierres.length)return'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin cierres registrados</div>';
+  return cierres.map(function(c){
+    var prods=(c.productos||[]).sort(function(a,b){return b.qty-a.qty;});
+    var detalle=prods.map(function(p){return esc(p.nombre)+' x'+p.qty;}).join(', ');
+    var rango=fmtFecha(c.desde)+(fmtFecha(c.desde)!==fmtFecha(c.hasta)?' al '+fmtFecha(c.hasta):'');
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+        +'<div><div style="font-weight:800;font-size:14px;color:#FF6B00">'+fmt(c.total)+'</div>'
+        +'<div style="color:var(--muted);font-size:11px">'+rango+' · '+c.nVentas+' ventas · '+esc(c.uidNombre||'')+'</div></div>'
+      +'</div>'
+      +(detalle?'<div style="color:var(--muted);font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'+detalle+'</div>':'')
+    +'</div>';
+  }).join('');
 }
 
 function renderCreditos(){
