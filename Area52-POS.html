@@ -356,6 +356,7 @@ var cierresRappi=[];  // histórico de cierres de Rappi
 var saneamientoChecks={};  // {fecha_areaId: {check,uid,hora}}
 var saneamientoSemanal={};  // {semana_actId: {fecha,insumo,responsable,obs}}
 var _sanSemanaOffset=0;  // 0=semana actual, -1=anterior, etc.
+var abonosMesa={};  // {mesaId:[{monto,fp,nombre,ts,uid}]}
 var SAN_AREAS=[
   {id:'pisos',nombre:'Pisos y Paredes',cond:'Libres de residuos, grasa y humedad. Barrido y trapeado completo.'},
   {id:'banos',nombre:'Baños (Clientes/Staff)',cond:'Sanitarios, lavamanos y pisos desinfectados. Papeleras vaciadas.'},
@@ -498,6 +499,11 @@ function iniciarSync(){
   fbOn('saneamientoSemanal',function(v){
     saneamientoSemanal=v||{};
     if(tabActual==='saneamiento')render();
+  });
+  fbOn('abonosMesa',function(v){
+    abonosMesa=v||{};
+    Object.keys(abonosMesa).forEach(function(k){if(!Array.isArray(abonosMesa[k]))abonosMesa[k]=Object.values(abonosMesa[k]||{});});
+    if(tabActual==='mesas')render();
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -806,6 +812,25 @@ function renderPanelPedido(){
       +'<button class="btn btn-sm btn-blue btn-full" onclick="imprimirPrecuenta()" '+(ped.length?'':'disabled')+'>🖨️ Preorden</button>'
       +(ped.length?'<button data-act="toggle-desc" style="flex:1;background:'+(desc?'#ef444418':'#22c55e18')+';color:'+(desc?'#ef4444':'#22c55e')+';border:1px solid '+(desc?'#ef444433':'#22c55e33')+';border-radius:8px;padding:5px 4px;font-size:10px;font-weight:700;cursor:pointer">'+(desc?'❌ Quitar desc':'🏷️ 10% Desc')+'</button>':'')
       +'<button class="btn btn-sm btn-outline btn-full" onclick="abrirTrasladoMesa()" '+(ped.length?'':'disabled')+' style="font-size:11px">🔀 Trasladar</button>'
+      +'</div>'
+      +(function(){
+        var abs=(abonosMesa[mesaActiva.id]||[]);
+        var totalAbonado=abs.reduce(function(a,x){return a+(x.monto||0);},0);
+        var totalReal=desc?Math.round(total*0.9):total;
+        var falta=Math.max(0,totalReal-totalAbonado);
+        var abonosHtml='';
+        if(abs.length){
+          abonosHtml='<div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-top:8px">'
+            +'<div style="color:var(--muted);font-size:10px;font-weight:700;margin-bottom:4px">💵 ABONOS RECIBIDOS</div>'
+            +abs.map(function(x,i){var f=FPAGO.find(function(z){return z.id===x.fp;});return'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:2px 0"><span>'+(f?f.emoji:'')+' '+esc(x.nombre||'Abono')+'</span><span style="display:flex;gap:6px;align-items:center"><b style="color:#22c55e">'+fmt(x.monto)+'</b><button data-act="quitar-abono" data-idx="'+i+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></span></div>';}).join('')
+            +'<div style="display:flex;justify-content:space-between;margin-top:5px;padding-top:5px;border-top:1px solid var(--border);font-size:12px"><span style="color:var(--muted)">Abonado</span><b style="color:#22c55e">'+fmt(totalAbonado)+'</b></div>'
+            +'<div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">Falta</span><b style="color:'+(falta>0?'#f5a623':'#22c55e')+'">'+fmt(falta)+'</b></div>'
+          +'</div>';
+        }
+        return abonosHtml;
+      })()
+      +'<div style="display:flex;gap:7px;margin-top:7px">'
+      +'<button class="btn btn-sm btn-full" onclick="abrirAbonoMesa()" '+(ped.length?'':'disabled')+' style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;font-size:11px">💵 Abonar</button>'
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+'>💳 Cobrar</button>'
       +'</div></div>';
 
@@ -1410,6 +1435,53 @@ function quitarItem(pid,cubeta){
 }
 
 /* ═══════════════ COBRO MODAL ═══════════════ */
+function abrirAbonoMesa(){
+  if(!mesaActiva)return;
+  var total=totalPedido(mesaActiva.id);
+  var desc=descuentos[mesaActiva.id];
+  var totalReal=desc&&desc.pct?Math.round(total*(1-desc.pct/100)):total;
+  var abs=(abonosMesa[mesaActiva.id]||[]);
+  var abonado=abs.reduce(function(a,x){return a+(x.monto||0);},0);
+  var falta=Math.max(0,totalReal-abonado);
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal2('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💵 Registrar abono</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:12px">Total cuenta: '+fmt(totalReal)+' · Falta: <b style="color:#f5a623">'+fmt(falta)+'</b></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Quién abona? (opcional)</div>'
+    +'<input class="inp" id="abono-nombre" placeholder="Ej: Juan, Mesa, etc."/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto del abono *</div>'
+    +'<input class="inp" id="abono-monto" type="number" value="'+falta+'" inputmode="numeric"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
+    +'<select class="inp" id="abono-fp">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarAbonoMesa()">💵 Registrar abono</button>');
+}
+
+function guardarAbonoMesa(){
+  if(!mesaActiva)return;
+  var monto=parseInt((document.getElementById('abono-monto')||{}).value)||0;
+  var fp=(document.getElementById('abono-fp')||{}).value||'efectivo';
+  var nombre=((document.getElementById('abono-nombre')||{}).value||'').trim()||'Abono';
+  if(monto<=0){alert('Escribe el monto.');return;}
+  var id=mesaActiva.id;
+  if(!abonosMesa[id])abonosMesa[id]=[];
+  abonosMesa[id].push({monto:monto,fp:fp,nombre:nombre,ts:Date.now(),uid:usuarioActivo.id});
+  fbSet('abonosMesa',abonosMesa);
+  closeModal2();
+  var f=FPAGO.find(function(x){return x.id===fp;});
+  showToast('💵 Abono registrado<br><span style="font-size:12px;opacity:.85">'+esc(nombre)+' · '+fmt(monto)+(f?' · '+f.label:'')+'</span>','#22c55e');
+  render();
+}
+
+function quitarAbonoMesa(idx){
+  if(!mesaActiva)return;
+  var id=mesaActiva.id;
+  if(abonosMesa[id]&&abonosMesa[id][idx]){
+    abonosMesa[id].splice(idx,1);
+    if(!abonosMesa[id].length)delete abonosMesa[id];
+    fbSet('abonosMesa',abonosMesa);
+    render();
+  }
+}
+
 function abrirCobro(){
   if(!mesaActiva)return;
   var ped=pedidos[mesaActiva.id]||[];
@@ -1418,6 +1490,9 @@ function abrirCobro(){
 
   // Estado del pago dividido
   window._pagosParciales={};  // {fpId: monto}
+  // Pre-cargar abonos ya recibidos por forma de pago
+  var _absMesa=(abonosMesa[mesaActiva.id]||[]);
+  _absMesa.forEach(function(ab){window._pagosParciales[ab.fp]=(window._pagosParciales[ab.fp]||0)+ab.monto;});
   window._totalCobro=total;
 
   function renderCobroModal(){
@@ -1588,6 +1663,8 @@ function confirmarCobro(){
   imprimirTicket(mesa,ped,total,pagosList);
 
   var r=ref('pedidos/'+mesa.id);if(r)r.set(null);
+  // Limpiar abonos de la mesa
+  if(abonosMesa[mesa.id]){delete abonosMesa[mesa.id];fbSet('abonosMesa',abonosMesa);}
   mesaActiva=null;closeModal1();render();
 }
 
@@ -3651,6 +3728,7 @@ function confirmarCredito(total){
   var r=ref('pedidos/'+mesa.id);if(r)r.set(null);
   delete pedidos[mesa.id];
   if(descuentos[mesa.id])delete descuentos[mesa.id];
+  if(abonosMesa[mesa.id]){delete abonosMesa[mesa.id];fbSet('abonosMesa',abonosMesa);}
   mesaActiva=null;
   closeModal2();closeModal1();
   showToast('📒 Fiado registrado<br><span style="font-size:12px;opacity:.85">'+esc(clienteNombre)+' · '+fmt(total)+'</span>','#f5a623');
@@ -4782,7 +4860,7 @@ function eliminarMesa(id){
   var ped=Array.isArray(rawP)?rawP:Object.values(rawP);
   ped.forEach(function(it){ajustarStockItem(it,+(it.qty||1));});
   mesas=mesas.filter(function(m){return m.id!==id;});
-  delete pedidos[id];if(mesaActiva&&mesaActiva.id===id)mesaActiva=null;
+  delete pedidos[id];if(abonosMesa[id]){delete abonosMesa[id];fbSet('abonosMesa',abonosMesa);}if(mesaActiva&&mesaActiva.id===id)mesaActiva=null;
   fbSet('mesas',mesasObj());
   var rp=ref('pedidos/'+id);if(rp)rp.set(null);
   closeModal1();render();
@@ -5097,6 +5175,11 @@ document.addEventListener('click',function(e){
     var mid=mes.getAttribute('data-mes');
     _mesesOpen[mid]=!_mesesOpen[mid];
     render();
+    return;
+  }
+  var qab=e.target.closest('[data-act="quitar-abono"]');
+  if(qab){
+    quitarAbonoMesa(parseInt(qab.getAttribute('data-idx')));
     return;
   }
   var sc=e.target.closest('[data-act="san-check"]');
