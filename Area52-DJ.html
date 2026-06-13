@@ -99,7 +99,10 @@ function renderSetup(){
 function guardarKey(){
   var k=document.getElementById('keyInput').value.trim();
   if(!k){alert('Pega la API key');return;}
-  localStorage.setItem('a52_ytkey',k);YT_API_KEY=k;renderSetup();
+  localStorage.setItem('a52_ytkey',k);YT_API_KEY=k;
+  // Guardar en Firebase para que la página de clientes también pueda buscar
+  db.ref('config/ytkey').set(k);
+  renderSetup();
 }
 
 // ---------- YOUTUBE PLAYER ----------
@@ -163,7 +166,10 @@ function colaOrdenada(){
 
 // ---------- BÚSQUEDA YOUTUBE ----------
 function buscarVideo(pedido,cb){
+  // El cliente ya eligió el video exacto -> usarlo directo
+  if(pedido.videoId){cb(pedido.videoId);return;}
   if(videoCache[pedido.key]){cb(videoCache[pedido.key]);return;}
+  // Fallback: buscar (por si vino de una versión vieja sin videoId)
   var q=encodeURIComponent((pedido.cancion||'')+' '+(pedido.artista||''));
   var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=1&q='+q+'&key='+YT_API_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){

@@ -11,7 +11,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{display:block;width:90px;height:90px;border-radius:50%;margin:10px auto 6px;object-fit:cover;box-shadow:0 0 30px rgba(196,151,58,.4)}
 h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;background:linear-gradient(90deg,#c4973a,#f5d676,#c4973a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .sub{text-align:center;color:#888;font-size:12px;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
-.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:18px;margin-bottom:16px;backdrop-filter:blur(10px)}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:18px;margin-bottom:16px}
 .label{color:#aaa;font-size:12px;margin-bottom:6px;font-weight:600}
 .inp{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:13px 14px;color:#fff;font-size:16px;margin-bottom:12px}
 .inp:focus{outline:none;border-color:#c4973a}
@@ -26,16 +26,19 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
 .song .info{flex:1;min-width:0}
 .song .nm{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .song .ar{font-size:12px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.song .by{font-size:11px;color:#c4973a;margin-top:2px}
-.song .x{background:#ef444418;color:#ef4444;border:none;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px;flex-shrink:0}
-.empty{text-align:center;color:#666;padding:30px 10px;font-size:14px}
 .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:#1a1a22;border:2px solid #22c55e;color:#fff;padding:13px 22px;border-radius:14px;font-weight:700;z-index:999;transition:transform .35s;box-shadow:0 8px 30px rgba(0,0,0,.5);text-align:center;max-width:90vw}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .staff-link{text-align:center;margin-top:24px}
 .staff-link button{background:none;border:none;color:#555;font-size:11px;cursor:pointer;text-decoration:underline}
-.played{opacity:.4}
-.played .nm{text-decoration:line-through}
-.badge-staff{background:#c4973a;color:#1a1208;font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px}
+.played{opacity:.4}.played .nm{text-decoration:line-through}
+.badge-g{background:#c4973a22;color:#c4973a;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px}
+/* resultados búsqueda */
+.result{display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:8px;margin-bottom:8px;cursor:pointer}
+.result:active{background:#c4973a22;border-color:#c4973a}
+.result img{width:80px;height:45px;border-radius:7px;object-fit:cover;flex-shrink:0;background:#000}
+.result .rt{font-size:13px;font-weight:700;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.result .rc{font-size:11px;color:#999;margin-top:2px}
+.spin{text-align:center;color:#888;padding:18px;font-size:13px}
 </style>
 </head>
 <body>
@@ -45,10 +48,8 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
   <div class="sub">Pide tu canción</div>
 
   <div class="card">
-    <div class="label">🎵 Canción</div>
-    <input class="inp" id="cancion" placeholder="Nombre de la canción" maxlength="80">
-    <div class="label">🎤 Artista</div>
-    <input class="inp" id="artista" placeholder="Artista o grupo" maxlength="60">
+    <div class="label">🔍 Busca tu canción</div>
+    <input class="inp" id="busqueda" placeholder="Ej: Bad Bunny Tití me preguntó" maxlength="90" onkeydown="if(event.key==='Enter')buscar()">
     <div class="label">🎸 Género</div>
     <select class="inp" id="genero">
       <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
@@ -63,15 +64,15 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
     </select>
     <div class="label">🙋 Tu nombre (opcional)</div>
     <input class="inp" id="nombre" placeholder="¿Quién la pide?" maxlength="40">
-    <button class="btn" id="btnPedir" onclick="pedirCancion()">🎶 Pedir canción</button>
+    <button class="btn" id="btnBuscar" onclick="buscar()">🔍 Buscar en YouTube</button>
+    <div id="resultados"></div>
   </div>
 
   <div class="qtitle"><span>🎧 En la fila</span><span id="contador" style="color:#888;font-weight:400;font-size:12px"></span></div>
-  <div id="lista"><div class="empty">Cargando...</div></div>
+  <div id="lista"><div class="empty spin">Cargando...</div></div>
 
   <div class="staff-link"><button onclick="toggleStaff()">· staff ·</button></div>
 </div>
-
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -80,87 +81,79 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
 var firebaseConfig={apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",authDomain:"area52bar-a36aa.firebaseapp.com",databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",projectId:"area52bar-a36aa",storageBucket:"area52bar-a36aa.firebasestorage.app",messagingSenderId:"79314921682",appId:"1:79314921682:web:abfa44eefbd0df7441250b"};
 firebase.initializeApp(firebaseConfig);
 var db=firebase.database();
-var STAFF_PIN="5252";  // PIN para modo staff
-var staffMode=false;
-var pedidos=[];
+var STAFF_PIN="5252";
+var staffMode=false, pedidos=[], YT_KEY='';
 
-function toast(msg,color){
-  var t=document.getElementById('toast');
-  t.style.borderColor=color||'#22c55e';
-  t.innerHTML=msg;t.classList.add('show');
-  clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2200);
+db.ref('config/ytkey').on('value',function(s){YT_KEY=s.val()||'';});
+
+function toast(msg,color){var t=document.getElementById('toast');t.style.borderColor=color||'#22c55e';t.innerHTML=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2400);}
+
+function buscar(){
+  var q=document.getElementById('busqueda').value.trim();
+  if(!q){toast('✍️ Escribe el nombre de la canción','#ef4444');return;}
+  if(!YT_KEY){toast('⚠️ La rocola no está configurada. Avisa al staff.','#ef4444');return;}
+  var cont=document.getElementById('resultados');
+  cont.innerHTML='<div class="spin">🔎 Buscando...</div>';
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=5&q='+encodeURIComponent(q)+'&key='+YT_KEY;
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    if(!data.items||!data.items.length){cont.innerHTML='<div class="spin">Sin resultados. Prueba con otro nombre.</div>';return;}
+    cont.innerHTML='<div class="label" style="margin-top:6px">👇 Toca la correcta para pedirla</div>'+data.items.map(function(it){
+      var v=it.id.videoId, sn=it.snippet;
+      var titulo=sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+      return'<div class="result" onclick="pedir(\''+v+'\',\''+encodeURIComponent(titulo)+'\',\''+encodeURIComponent(sn.channelTitle)+'\')">'
+        +'<img src="'+sn.thumbnails.default.url+'">'
+        +'<div><div class="rt">'+titulo+'</div><div class="rc">'+sn.channelTitle+'</div></div>'
+      +'</div>';
+    }).join('');
+  }).catch(function(){cont.innerHTML='<div class="spin">Error de búsqueda. Intenta de nuevo.</div>';});
 }
 
-function pedirCancion(){
-  var cancion=document.getElementById('cancion').value.trim();
-  var artista=document.getElementById('artista').value.trim();
-  var nombre=document.getElementById('nombre').value.trim();
-  if(!cancion){toast('✍️ Escribe la canción','#ef4444');return;}
-  // Anti-spam: máx 1 pedido cada 20 seg
+function pedir(videoId,tituloEnc,canalEnc){
   var ultimo=parseInt(localStorage.getItem('a52_ultPedido')||'0');
   if(Date.now()-ultimo<20000){toast('⏳ Espera un momento antes de pedir otra','#f5a623');return;}
-  var btn=document.getElementById('btnPedir');btn.disabled=true;
+  var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
   var genero=document.getElementById('genero').value||'Otro';
-  var pedido={cancion:cancion,artista:artista,nombre:nombre,genero:genero,ts:Date.now(),played:false};
+  var nombre=document.getElementById('nombre').value.trim();
+  var pedido={cancion:titulo,artista:canal,genero:genero,nombre:nombre,videoId:videoId,ts:Date.now(),played:false};
   db.ref('musica').push(pedido).then(function(){
     localStorage.setItem('a52_ultPedido',Date.now());
-    document.getElementById('cancion').value='';
-    document.getElementById('artista').value='';
+    document.getElementById('busqueda').value='';
+    document.getElementById('resultados').innerHTML='';
     toast('🎶 ¡Pedida! Pronto sonará');
-    btn.disabled=false;
-  }).catch(function(){toast('❌ Error, intenta de nuevo','#ef4444');btn.disabled=false;});
+  }).catch(function(){toast('❌ Error, intenta de nuevo','#ef4444');});
 }
 
 function toggleStaff(){
   if(staffMode){staffMode=false;render();return;}
   var pin=prompt('PIN de staff:');
-  if(pin===STAFF_PIN){staffMode=true;toast('🔓 Modo staff activado','#c4973a');render();}
+  if(pin===STAFF_PIN){staffMode=true;toast('🔓 Modo staff','#c4973a');render();}
   else if(pin!==null){toast('PIN incorrecto','#ef4444');}
 }
-
-function marcarSonada(key){
-  db.ref('musica/'+key+'/played').set(true);
-}
-function borrar(key){
-  db.ref('musica/'+key).remove();
-}
-function limpiarSonadas(){
-  if(!confirm('¿Borrar todas las canciones ya sonadas?'))return;
-  pedidos.forEach(function(p){if(p.played)db.ref('musica/'+p.key).remove();});
-  toast('🧹 Limpiado');
-}
+function marcarSonada(k){db.ref('musica/'+k+'/played').set(true);}
+function borrar(k){db.ref('musica/'+k).remove();}
+function limpiarSonadas(){if(!confirm('¿Borrar las ya sonadas?'))return;pedidos.forEach(function(p){if(p.played)db.ref('musica/'+p.key).remove();});}
 
 function render(){
   var cont=document.getElementById('lista');
-  var pendientes=pedidos.filter(function(p){return !p.played;});
-  var sonadas=pedidos.filter(function(p){return p.played;});
-  document.getElementById('contador').textContent=pendientes.length+' en espera';
-
-  if(!pedidos.length){cont.innerHTML='<div class="empty">🎵 Aún no hay canciones.<br>¡Sé el primero en pedir!</div>';return;}
-
+  var pend=pedidos.filter(function(p){return !p.played;});
+  var son=pedidos.filter(function(p){return p.played;});
+  document.getElementById('contador').textContent=pend.length+' en espera';
+  if(!pedidos.length){cont.innerHTML='<div class="empty spin">🎵 Aún no hay canciones.<br>¡Sé el primero en pedir!</div>';return;}
   var html='';
-  pendientes.forEach(function(p,i){
-    html+='<div class="song">'
-      +'<div class="num">'+(i+1)+'</div>'
+  pend.forEach(function(p,i){
+    html+='<div class="song"><div class="num">'+(i+1)+'</div>'
       +'<div class="info"><div class="nm">'+esc(p.cancion)+'</div>'
       +(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')
-      +'<div style="display:flex;gap:6px;align-items:center;margin-top:2px">'
-      +(p.genero?'<span style="background:#c4973a22;color:#c4973a;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px">'+esc(p.genero)+'</span>':'')
-      +(p.nombre?'<span class="by" style="margin:0">🙋 '+esc(p.nombre)+'</span>':'')
-      +'</div></div>'
-      +(staffMode?'<button class="x" style="background:#22c55e18;color:#22c55e" onclick="marcarSonada(\''+p.key+'\')">✓</button><button class="x" onclick="borrar(\''+p.key+'\')">✕</button>':'')
+      +'<div style="margin-top:3px">'+(p.genero?'<span class="badge-g">'+esc(p.genero)+'</span>':'')+(p.nombre?' <span style="font-size:11px;color:#c4973a">🙋 '+esc(p.nombre)+'</span>':'')+'</div></div>'
+      +(staffMode?'<button class="num" style="background:#22c55e18;color:#22c55e;border:none;cursor:pointer" onclick="marcarSonada(\''+p.key+'\')">✓</button><button class="num" style="background:#ef444418;color:#ef4444;border:none;cursor:pointer" onclick="borrar(\''+p.key+'\')">✕</button>':'')
     +'</div>';
   });
-
-  if(staffMode&&sonadas.length){
-    html+='<div class="qtitle" style="margin-top:20px"><span style="color:#666">Ya sonaron ('+sonadas.length+')</span><button onclick="limpiarSonadas()" style="background:#ef444418;color:#ef4444;border:none;border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">🧹 Limpiar</button></div>';
-    sonadas.forEach(function(p){
-      html+='<div class="song played"><div class="num">✓</div><div class="info"><div class="nm">'+esc(p.cancion)+'</div>'+(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')+'</div><button class="x" onclick="borrar(\''+p.key+'\')">✕</button></div>';
-    });
+  if(staffMode&&son.length){
+    html+='<div class="qtitle" style="margin-top:18px"><span style="color:#666">Ya sonaron ('+son.length+')</span><button onclick="limpiarSonadas()" style="background:#ef444418;color:#ef4444;border:none;border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer">🧹 Limpiar</button></div>';
+    son.forEach(function(p){html+='<div class="song played"><div class="num">✓</div><div class="info"><div class="nm">'+esc(p.cancion)+'</div></div><button class="num" style="background:#ef444418;color:#ef4444;border:none;cursor:pointer" onclick="borrar(\''+p.key+'\')">✕</button></div>';});
   }
   cont.innerHTML=html;
 }
-
 function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
 db.ref('musica').on('value',function(snap){
