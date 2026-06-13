@@ -49,6 +49,18 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
     <input class="inp" id="cancion" placeholder="Nombre de la canción" maxlength="80">
     <div class="label">🎤 Artista</div>
     <input class="inp" id="artista" placeholder="Artista o grupo" maxlength="60">
+    <div class="label">🎸 Género</div>
+    <select class="inp" id="genero">
+      <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
+      <option value="Salsa">💃 Salsa</option>
+      <option value="Vallenato">🪗 Vallenato</option>
+      <option value="Crossover">🎉 Crossover / Fiesta</option>
+      <option value="Pop">🎤 Pop</option>
+      <option value="Rock">🎸 Rock</option>
+      <option value="Electrónica">🎧 Electrónica</option>
+      <option value="Popular">🎶 Popular / Despecho</option>
+      <option value="Otro">🎵 Otro</option>
+    </select>
     <div class="label">🙋 Tu nombre (opcional)</div>
     <input class="inp" id="nombre" placeholder="¿Quién la pide?" maxlength="40">
     <button class="btn" id="btnPedir" onclick="pedirCancion()">🎶 Pedir canción</button>
@@ -88,7 +100,8 @@ function pedirCancion(){
   var ultimo=parseInt(localStorage.getItem('a52_ultPedido')||'0');
   if(Date.now()-ultimo<20000){toast('⏳ Espera un momento antes de pedir otra','#f5a623');return;}
   var btn=document.getElementById('btnPedir');btn.disabled=true;
-  var pedido={cancion:cancion,artista:artista,nombre:nombre,ts:Date.now(),played:false};
+  var genero=document.getElementById('genero').value||'Otro';
+  var pedido={cancion:cancion,artista:artista,nombre:nombre,genero:genero,ts:Date.now(),played:false};
   db.ref('musica').push(pedido).then(function(){
     localStorage.setItem('a52_ultPedido',Date.now());
     document.getElementById('cancion').value='';
@@ -131,7 +144,10 @@ function render(){
       +'<div class="num">'+(i+1)+'</div>'
       +'<div class="info"><div class="nm">'+esc(p.cancion)+'</div>'
       +(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')
-      +(p.nombre?'<div class="by">🙋 '+esc(p.nombre)+'</div>':'')+'</div>'
+      +'<div style="display:flex;gap:6px;align-items:center;margin-top:2px">'
+      +(p.genero?'<span style="background:#c4973a22;color:#c4973a;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px">'+esc(p.genero)+'</span>':'')
+      +(p.nombre?'<span class="by" style="margin:0">🙋 '+esc(p.nombre)+'</span>':'')
+      +'</div></div>'
       +(staffMode?'<button class="x" style="background:#22c55e18;color:#22c55e" onclick="marcarSonada(\''+p.key+'\')">✓</button><button class="x" onclick="borrar(\''+p.key+'\')">✕</button>':'')
     +'</div>';
   });
