@@ -53,7 +53,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="setupScreen"></div>
 <div class="layout" id="mainLayout" style="display:none">
   <div class="player-side">
-    <div class="player-box"><div id="ytplayer"></div></div>
+    <div class="player-box" style="position:relative">
+      <div id="ytplayer"></div>
+      <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000" allow="autoplay"></iframe>
+    </div>
     <div class="now">
       <div class="lbl">▶ Sonando ahora</div>
       <div class="t" id="nowTitle">—</div>
@@ -62,7 +65,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <button class="ctrl play" id="btnPlayPause" onclick="togglePlay()">⏸ Pausa</button>
         <button class="ctrl" onclick="siguiente()">⏭ Siguiente</button>
         <button class="ctrl" onclick="reproducirCola()">🔄 Reanudar cola</button>
+        <button class="ctrl" id="btnVideo" onclick="toggleVideoPromo()">🎬 Video promo</button>
       </div>
+    </div>
+    <div class="now">
+      <div class="lbl">🎵 Poner música (DJ)</div>
+      <input id="djBusqueda" placeholder="Busca una canción para agregar a la cola" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin:8px 0" onkeydown="if(event.key==='Enter')djBuscar()">
+      <select id="djGenero" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin-bottom:8px">
+        <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
+        <option value="Salsa">💃 Salsa</option>
+        <option value="Vallenato">🪗 Vallenato</option>
+        <option value="Crossover">🎉 Crossover / Fiesta</option>
+        <option value="Pop">🎤 Pop</option>
+        <option value="Rock">🎸 Rock</option>
+        <option value="Electrónica">🎧 Electrónica</option>
+        <option value="Popular">🎶 Popular / Despecho</option>
+        <option value="Otro">🎵 Otro</option>
+      </select>
+      <button class="ctrl play" style="width:100%" onclick="djBuscar()">🔍 Buscar</button>
+      <div id="djResultados"></div>
     </div>
   </div>
   <div class="queue-side">
@@ -171,7 +192,7 @@ function buscarVideo(pedido,cb){
   if(videoCache[pedido.key]){cb(videoCache[pedido.key]);return;}
   // Fallback: buscar (por si vino de una versión vieja sin videoId)
   var q=encodeURIComponent((pedido.cancion||'')+' '+(pedido.artista||''));
-  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=1&q='+q+'&key='+YT_API_KEY;
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&videoCategoryId=10&maxResults=1&q='+q+'&key='+YT_API_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(data.items&&data.items.length){
       var vid=data.items[0].id.videoId;
@@ -207,6 +228,57 @@ function marcarYsiguiente(){
   setTimeout(function(){reproducirCola();},600);
 }
 function siguiente(){marcarYsiguiente();}
+
+function djBuscar(){
+  var q=document.getElementById('djBusqueda').value.trim();
+  if(!q){return;}
+  if(!YT_API_KEY){alert('Configura primero la API Key.');return;}
+  var cont=document.getElementById('djResultados');
+  cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">🔎 Buscando...</div>';
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&videoCategoryId=10&maxResults=6&q='+encodeURIComponent(q)+'&key='+YT_API_KEY;
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    if(!data.items||!data.items.length){cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">Sin resultados.</div>';return;}
+    cont.innerHTML=data.items.map(function(it){
+      var v=it.id.videoId, sn=it.snippet;
+      var titulo=sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+      return'<div onclick="djAgregar(\''+v+'\',\''+encodeURIComponent(titulo)+'\',\''+encodeURIComponent(sn.channelTitle)+'\')" style="display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:7px;margin-top:7px;cursor:pointer">'
+        +'<img src="'+sn.thumbnails.default.url+'" style="width:70px;height:40px;border-radius:6px;object-fit:cover">'
+        +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+titulo+'</div><div style="font-size:11px;color:#999">'+sn.channelTitle+'</div></div>'
+      +'</div>';
+    }).join('');
+  }).catch(function(){cont.innerHTML='<div style="color:#ef4444;padding:12px;font-size:13px">Error de búsqueda.</div>';});
+}
+
+function djAgregar(videoId,tituloEnc,canalEnc){
+  var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
+  var genero=document.getElementById('djGenero').value||'Otro';
+  var pedido={cancion:titulo,artista:canal,genero:genero,nombre:'DJ',videoId:videoId,ts:Date.now(),played:false};
+  db.ref('musica').push(pedido).then(function(){
+    document.getElementById('djBusqueda').value='';
+    document.getElementById('djResultados').innerHTML='<div style="color:#22c55e;padding:10px;font-size:13px">✓ Agregada a la cola</div>';
+    setTimeout(function(){var r=document.getElementById('djResultados');if(r)r.innerHTML='';},1500);
+  });
+}
+
+var promoActivo=false;
+var PROMO_URL='https://area52gastrobar-glitch.github.io/ares52/Area52-Video.html';
+function toggleVideoPromo(){
+  promoActivo=!promoActivo;
+  var frame=document.getElementById('promoFrame');
+  var btn=document.getElementById('btnVideo');
+  if(promoActivo){
+    // Mostrar video promo encima (la música de YouTube sigue sonando por debajo)
+    frame.src=PROMO_URL;
+    frame.style.display='block';
+    btn.innerHTML='📺 Volver al video';
+    btn.classList.add('play');
+  } else {
+    frame.style.display='none';
+    frame.src='';  // detener el promo
+    btn.innerHTML='🎬 Video promo';
+    btn.classList.remove('play');
+  }
+}
 
 function quitar(key){db.ref('musica/'+key).remove();}
 function reproducirYa(key){

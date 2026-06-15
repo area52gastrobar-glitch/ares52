@@ -94,7 +94,7 @@ function buscar(){
   if(!YT_KEY){toast('⚠️ La rocola no está configurada. Avisa al staff.','#ef4444');return;}
   var cont=document.getElementById('resultados');
   cont.innerHTML='<div class="spin">🔎 Buscando...</div>';
-  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=5&q='+encodeURIComponent(q)+'&key='+YT_KEY;
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&videoCategoryId=10&maxResults=6&q='+encodeURIComponent(q)+'&key='+YT_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(!data.items||!data.items.length){cont.innerHTML='<div class="spin">Sin resultados. Prueba con otro nombre.</div>';return;}
     cont.innerHTML='<div class="label" style="margin-top:6px">👇 Toca la correcta para pedirla</div>'+data.items.map(function(it){
