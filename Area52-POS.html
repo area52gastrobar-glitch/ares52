@@ -774,7 +774,9 @@ function renderPanelPedido(){
       +'<div style="display:flex;gap:4px">'
       +'<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+((p.variantes&&p.variantes.length)?'desde '+fmt(Math.min.apply(null,p.variantes.map(function(v){return v.precio;}))):fmt(p.precio))+'</button>'
       +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+fmt(p.cubeta)+'</button>':'')
-      +'</div></div>';
+      +'</div>'
+      +(((p.cat||'').toLowerCase().indexOf('nacional')>=0)?'<button onclick="abrirCantidadPromo('+p.id+')" '+(okN?'':'disabled')+' style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:6px;padding:4px 0;font-size:11px;font-weight:800;cursor:'+(okN?'pointer':'not-allowed')+'">⭐ Promo '+fmt(PROMO_NACIONAL_PRECIO)+'</button>':'')
+      +'</div>';
   }).join('');
 
   var pedItems=ped.map(function(it,idx_){
@@ -1177,6 +1179,23 @@ function abrirCantidadVariante(pid,nom,pre){
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
 }
 
+function abrirCantidadPromo(pid){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  var btns=[1,2,3,4,5,6,8,10,12].map(function(q){
+    return'<button data-act="mesa-qty-promo" data-pid="'+pid+'" data-qty="'+q+'" '
+      +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 0;'
+      +'font-size:20px;font-weight:900;color:#f5a623;cursor:pointer">'+q+'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:14px">'
+    +'<div style="font-size:30px">⭐</div>'
+    +'<div style="font-weight:800;font-size:16px;margin-top:4px">Promo · '+esc(p.nombre)+'</div>'
+    +'<div style="color:#f5a623;font-weight:700;font-size:14px;margin-top:2px">'+fmt(PROMO_NACIONAL_PRECIO)+' c/u</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+}
+
 function abrirCantidadMesa(pid,cubeta){
   var p=menu.find(function(m){return m.id===pid;});
   if(!p)return;
@@ -1303,6 +1322,7 @@ function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
 // Cervezas que SÍ pueden ir en el cubetazo mixto (por nombre)
 var CUBE_MIX_NOMBRES=['heineken','sol','miller'];
 var CUBE_MIX_PRECIO=32000;  // precio del balde/cubetazo (5 cervezas)
+var PROMO_NACIONAL_PRECIO=5000;  // precio promo de cerveza nacional unitaria
 var CUBE_MIX_TAM=5;         // cantidad de cervezas por balde
 function abrirCubetazoMixto(){
   if(!mesaActiva)return;
@@ -5106,6 +5126,14 @@ document.addEventListener('click',function(e){
     var qtyV=parseInt(mqv.getAttribute('data-qty'));
     closeModal2();
     agregarItemQty(pidV,false,qtyV,nomV,preV);
+    return;
+  }
+  var mqp=e.target.closest('[data-act="mesa-qty-promo"]');
+  if(mqp){
+    var pidP=parseInt(mqp.getAttribute('data-pid'));
+    var qtyP=parseInt(mqp.getAttribute('data-qty'));
+    closeModal2();
+    agregarItemQty(pidP,false,qtyP,'Promo '+fmt(PROMO_NACIONAL_PRECIO),PROMO_NACIONAL_PRECIO);
     return;
   }
   var mq=e.target.closest('[data-act="mesa-qty"]');
