@@ -55,7 +55,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div class="player-side">
     <div class="player-box" style="position:relative">
       <div id="ytplayer"></div>
-      <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000" allow="autoplay"></iframe>
+      <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000" allow="autoplay; fullscreen" allowfullscreen></iframe>
+      <button id="btnFullPromo" onclick="pantallaCompletaPromo()" style="display:none;position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;z-index:5">⛶ Pantalla completa</button>
     </div>
     <div class="now">
       <div class="lbl">▶ Sonando ahora</div>
@@ -262,19 +263,30 @@ function djAgregar(videoId,tituloEnc,canalEnc){
 
 var promoActivo=false;
 var PROMO_URL='https://area52gastrobar-glitch.github.io/ares52/Area52-Video.html';
+function pantallaCompletaPromo(){
+  var frame=document.getElementById('promoFrame');
+  if(!frame)return;
+  if(frame.requestFullscreen)frame.requestFullscreen();
+  else if(frame.webkitRequestFullscreen)frame.webkitRequestFullscreen();
+  else if(frame.msRequestFullscreen)frame.msRequestFullscreen();
+}
+
 function toggleVideoPromo(){
   promoActivo=!promoActivo;
   var frame=document.getElementById('promoFrame');
   var btn=document.getElementById('btnVideo');
+  var btnFull=document.getElementById('btnFullPromo');
   if(promoActivo){
     // Mostrar video promo encima (la música de YouTube sigue sonando por debajo)
     frame.src=PROMO_URL;
     frame.style.display='block';
+    if(btnFull)btnFull.style.display='block';
     btn.innerHTML='📺 Volver al video';
     btn.classList.add('play');
   } else {
     frame.style.display='none';
     frame.src='';  // detener el promo
+    if(btnFull)btnFull.style.display='none';
     btn.innerHTML='🎬 Video promo';
     btn.classList.remove('play');
   }
