@@ -71,7 +71,10 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
     <input type="file" id="file-input" accept="image/png,image/jpeg">
   </div>
   <div>
-    <h2>Zonas</h2>
+    <h2>Mesas</h2>
+    <button class="btn-add-zone" style="background:#22c55e22;border-color:#22c55e;color:#22c55e;margin-bottom:8px" onclick="cargarMesasPOS()">🔄 Cargar mesas del POS</button>
+    <div id="pos-estado" style="font-size:11px;color:var(--muted);margin-bottom:10px"></div>
+    <h2 style="margin-top:6px">Zonas (manual)</h2>
     <div class="zone-list" id="zone-list"></div>
     <button class="btn-add-zone" onclick="addZone()">+ Agregar zona</button>
   </div>
@@ -99,6 +102,8 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 const QR_B64 = "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";
 
@@ -132,6 +137,50 @@ let zones=[
   {id:3,name:'Piso 2',from:17,to:26},
 ];
 let nextId=4, origImg=null, qrImg=null, generatedBlobs=[];
+
+// ── Conexión con el POS (Firebase) ──────────────────────────────────────────
+var ZONA_LABELS={'antejardín':'Antejardín','antejardIn':'Antejardín','piso1':'Piso 1','piso2':'Piso 2'};
+var ZONA_ORDER=['antejardín','antejardIn','piso1','piso2'];
+var mesasPOS=null;  // si se cargan del POS, se usan estas
+var _fbTarjetas=null;
+function initFB(){
+  if(_fbTarjetas)return _fbTarjetas;
+  var cfg={apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",authDomain:"area52bar-a36aa.firebaseapp.com",databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",projectId:"area52bar-a36aa",storageBucket:"area52bar-a36aa.firebasestorage.app",messagingSenderId:"79314921682",appId:"1:79314921682:web:abfa44eefbd0df7441250b"};
+  firebase.initializeApp(cfg);
+  _fbTarjetas=firebase.database();
+  return _fbTarjetas;
+}
+function cargarMesasPOS(){
+  var est=document.getElementById('pos-estado');
+  est.textContent='🔄 Conectando con el POS...';
+  try{
+    var db=initFB();
+    db.ref('mesas').once('value').then(function(snap){
+      var v=snap.val();
+      if(!v){est.innerHTML='<span style="color:#ef4444">No se encontraron mesas en el POS.</span>';return;}
+      var arr=Array.isArray(v)?v:Object.values(v);
+      arr=arr.filter(function(m){return m&&m.num!=null;});
+      // Ordenar por zona y número
+      arr.sort(function(a,b){
+        var za=ZONA_ORDER.indexOf(a.zona),zb=ZONA_ORDER.indexOf(b.zona);
+        if(za<0)za=99;if(zb<0)zb=99;
+        if(za!==zb)return za-zb;
+        return (a.num||0)-(b.num||0);
+      });
+      mesasPOS=arr.map(function(m){
+        var zlabel=ZONA_LABELS[m.zona]||m.zona||'';
+        return {num:m.num,nombre:m.nombre,zone:zlabel,zoneIdx:Math.max(0,ZONA_ORDER.indexOf(m.zona))};
+      });
+      est.innerHTML='<span style="color:#22c55e">✓ '+mesasPOS.length+' mesas cargadas del POS</span>';
+      // Ocultar config manual de zonas (ya no se necesita)
+      document.getElementById('zone-list').style.opacity='0.4';
+      updatePreview();
+    }).catch(function(err){
+      est.innerHTML='<span style="color:#ef4444">Error: '+err.message+'</span>';
+    });
+  }catch(e){est.innerHTML='<span style="color:#ef4444">Error de conexión.</span>';}
+}
+
 
 // Cargar QR
 qrImg=new Image();
@@ -201,6 +250,7 @@ function delZone(id){
 }
 
 function getMesas(){
+  if(mesasPOS&&mesasPOS.length)return mesasPOS;  // usar las mesas reales del POS
   const all=[];
   zones.forEach((z,zi)=>{for(let n=z.from;n<=z.to;n++)all.push({num:n,zone:z.name,zoneIdx:zi})});
   return all;

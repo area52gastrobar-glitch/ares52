@@ -378,10 +378,14 @@ var ventaSinStock=false;  // admin toggle: allow selling without stock
 var descuentos={};        // {mesaId: {pct:10, auth:'Nombre'}}
 var _invTab='carta';      // 'carta' or 'ingredientes'
 var mesaSize=80;  // px size of each mesa circle
+var vistaMesas='mapa';  // 'mapa' o 'lista'
 var catEmojis={};  // {catName: emoji} - saved in Firebase
 var combos=[];  // [{id,nombre,precio,emoji,ingredientes:[{prodId,cantidad}]}]
 var ingredientes=[];  // cocina ingredients - separate from menu
 var paredesData={antejardIn:[],piso1:[],piso2:[]};  // antejardIn = safe key for antejardín
+var formasData={antejardIn:[],piso1:[],piso2:[]};  // formas: rect/circ/texto por zona
+var _formaDragState=null;
+var _formaResizeState=null;
 
 // UI state
 var usuarioActivo=null;
@@ -444,6 +448,13 @@ function iniciarSync(){
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
+  fbOn('formas',function(v){
+    formasData={antejardIn:[],piso1:[],piso2:[]};
+    if(v){
+      ['antejardIn','piso1','piso2'].forEach(function(k){if(v[k])formasData[k]=Array.isArray(v[k])?v[k]:Object.values(v[k]);});
+    }
+    if(tabActual==='mesas')render();
+  });
   fbOn('paredes',function(v){
     if(v){
       paredesData={antejardIn:[],piso1:[],piso2:[]};
@@ -657,8 +668,63 @@ function colorMesa(id){
   if(mesaActiva&&mesaActiva.id===id)return'#38bdf8';
   return(pedidos[id]&&pedidos[id].length>0)?'#f5a623':'#22c55e';
 }
-function dimMesa(forma,ori){
-  var s=mesaSize;
+function menuFormas(){
+  if(!modoEdicion){alert('Activa "✏️ Editar plano" primero para agregar y mover formas.');return;}
+  modal1('<div style="color:var(--accent);font-weight:900;font-size:16px;margin-bottom:14px">🔷 Agregar forma</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:12px">Se agregan al plano y las arrastras a su lugar. Toca la ✕ de cada forma para borrarla.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<button class="btn btn-outline" onclick="agregarForma(\'rectangulo\')">▭ Rectángulo</button>'
+    +'<button class="btn btn-outline" onclick="agregarForma(\'cuadrado\')">◻ Cuadrado</button>'
+    +'<button class="btn btn-outline" onclick="agregarForma(\'circulo\')">⬭ Círculo</button>'
+    +'<button class="btn btn-outline" onclick="agregarFormaTexto()">🔤 Texto</button>'
+    +'</div>'
+    +'<button class="btn btn-outline btn-full" style="margin-top:10px" onclick="closeModal1()">Cerrar</button>');
+}
+
+function agregarForma(tipo){
+  var k=zonaKey(zonaActual);
+  if(!formasData[k])formasData[k]=[];
+  var nueva={tipo:(tipo==='cuadrado'?'cuadrado':tipo),x:40,y:40,
+    w:tipo==='circulo'?90:(tipo==='cuadrado'?80:140),
+    h:tipo==='circulo'?90:(tipo==='cuadrado'?80:70),
+    color:'#38bdf8',relleno:'transparent',grosor:2,r:'8px'};
+  formasData[k].push(nueva);
+  guardarFormas(k);closeModal1();render();
+}
+
+function agregarFormaTexto(){
+  var txt=prompt('Texto a mostrar (ej: BARRA, BAÑOS, COCINA, DJ):');
+  if(!txt)return;
+  var k=zonaKey(zonaActual);
+  if(!formasData[k])formasData[k]=[];
+  formasData[k].push({tipo:'texto',texto:txt,x:50,y:50,w:140,h:36,color:'#f5d676',fontSize:18});
+  guardarFormas(k);closeModal1();render();
+}
+
+function guardarFormas(k){
+  var rp=ref('formas/'+k);
+  if(rp)rp.set(formasData[k]); else fbSet('formas',formasData);
+}
+
+function cambiarFuenteForma(idx,delta){
+  var k=zonaKey(zonaActual);
+  var fo=formasData[k]&&formasData[k][idx];
+  if(fo){
+    fo.fontSize=Math.max(8,(fo.fontSize||16)+delta*2);
+    guardarFormas(k);render();
+  }
+}
+
+function borrarForma(idx){
+  var k=zonaKey(zonaActual);
+  if(formasData[k]&&formasData[k][idx]!==undefined){
+    formasData[k].splice(idx,1);
+    guardarFormas(k);render();
+  }
+}
+
+function dimMesa(forma,ori,sz){
+  var s=sz||mesaSize;
   if(forma==='redonda')return{w:s,h:s,r:'50%'};
   if(forma==='cuadrada')return{w:s,h:s,r:'10px'};
   return ori==='vertical'?{w:Math.round(s*0.82),h:Math.round(s*1.27),r:'10px'}:{w:Math.round(s*1.34),h:Math.round(s*0.82),r:'10px'};
@@ -676,8 +742,23 @@ function renderMesas(){
       +z.emoji+' '+z.label+' <span style="font-size:10px;opacity:.6">('+ocp+')</span></button>';
   }).join('');
 
+  var formasZona=formasData[zonaKey(zonaActual)]||[];
+  var formaNodes=formasZona.map(function(fo,fi){
+    var editable=modoEdicion;
+    var base='position:absolute;left:'+fo.x+'px;top:'+fo.y+'px;width:'+fo.w+'px;height:'+fo.h+'px;z-index:1;'
+      +(editable?'cursor:move;':'pointer-events:none;');
+    var delBtn=editable?'<span class="forma-del" data-fidx="'+fi+'" style="position:absolute;top:-9px;right:-9px;background:#ef4444;color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;z-index:6">✕</span>':'';
+    var resizeBtn=editable?'<span class="forma-resize" data-fidx="'+fi+'" style="position:absolute;bottom:-9px;right:-9px;background:#38bdf8;color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:nwse-resize;pointer-events:auto;z-index:6">⤡</span>':'';
+    if(fo.tipo==='texto'){
+      var fontCtrl=editable?'<span class="forma-font" data-fidx="'+fi+'" data-d="-1" style="position:absolute;bottom:-9px;left:-9px;background:#a855f7;color:#fff;border-radius:50%;width:20px;height:20px;font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;z-index:6">−</span><span class="forma-font" data-fidx="'+fi+'" data-d="1" style="position:absolute;bottom:-9px;right:-9px;background:#22c55e;color:#fff;border-radius:50%;width:20px;height:20px;font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;z-index:6">+</span>':'';
+      return'<div class="forma-node" data-fidx="'+fi+'" style="'+base+'display:flex;align-items:center;justify-content:center;color:'+(fo.color||'#fff')+';font-weight:800;font-size:'+(fo.fontSize||16)+'px;text-align:center;letter-spacing:1px'+(editable?';outline:1px dashed '+(fo.color||'#fff')+'55':'')+'">'+esc(fo.texto||'')+delBtn+fontCtrl+'</div>';
+    }
+    var r=fo.tipo==='circulo'?'50%':(fo.r||'8px');
+    return'<div class="forma-node" data-fidx="'+fi+'" style="'+base+'background:'+(fo.relleno||'transparent')+';border:'+(fo.grosor||2)+'px solid '+(fo.color||'#f5a623')+';border-radius:'+r+'">'+delBtn+resizeBtn+'</div>';
+  }).join('');
+
   var mesaNodes=ms.map(function(m){
-    var c=colorMesa(m.id);var dim=dimMesa(m.forma,m.ori);
+    var c=colorMesa(m.id);var dim=dimMesa(m.forma,m.ori,m.size);
     var its=(pedidos[m.id]||[]).reduce(function(a,b){return a+b.qty;},0);
     return '<div class="mesa-node" id="mn-'+m.id+'"'
       +' style="left:'+m.x+'px;top:'+m.y+'px;width:'+dim.w+'px;height:'+dim.h+'px;border-radius:'+dim.r
@@ -720,7 +801,7 @@ function renderMesas(){
   if(puedeEditar){
     ctrlBtns='<div class="flex">'
       +'<button class="btn btn-sm btn-green" onclick="abrirNuevaMesa()">+ Mesa</button>'
-      +'<button onclick="toggleParedes()" style="background:'+(modoParedes?'#38bdf8':'#38bdf818')+';color:'+(modoParedes?'#000':'#38bdf8')+';border:1px solid #38bdf844;border-radius:9px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">'+(modoParedes?'✓ Fin paredes':'🧱 Paredes')+'</button>'
+      +'<button onclick="menuFormas()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:9px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">🔷 Formas</button>'
       +'<button class="btn btn-sm '+(modoEdicion?'btn-accent':'btn-outline')+'" onclick="toggleEdicion()">'+(modoEdicion?'✓ Guardar':'✏️ Editar plano')+'</button>'
       +'</div>';
   }
@@ -728,9 +809,45 @@ function renderMesas(){
   var panelPedido='<div id="panel-pedido-slot"></div>';
 
   // Mesa size slider
-  var sizeSlider='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);border-radius:8px;padding:6px 12px">'    +'<span style="color:var(--muted);font-size:11px;white-space:nowrap">🔲 Tamaño:</span>'    +'<input type="range" min="50" max="130" value="'+mesaSize+'" style="flex:1;accent-color:var(--accent)" '    +'oninput="mesaSize=parseInt(this.value);render()"/>'    +'<span style="color:var(--accent);font-size:12px;font-weight:700;min-width:34px">'+mesaSize+'px</span>'    +'</div>';
+  var sizeSlider='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);border-radius:8px;padding:6px 12px">'    +'<span style="color:var(--muted);font-size:11px;white-space:nowrap">🔲 Tamaño:</span>'    +'<input type="range" min="20" max="160" value="'+mesaSize+'" style="flex:1;accent-color:var(--accent)" '    +'oninput="mesaSize=parseInt(this.value);render()"/>'    +'<span style="color:var(--accent);font-size:12px;font-weight:700;min-width:34px">'+mesaSize+'px</span>'    +'</div>';
 
-  return sizeSlider+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
+  // Selector de vista Mapa / Lista
+  var vistaToggle='<div style="display:flex;gap:6px;margin-bottom:10px">'
+    +'<button onclick="vistaMesas=\'mapa\';render()" style="flex:1;background:'+(vistaMesas==='mapa'?'var(--accent)':'var(--card)')+';color:'+(vistaMesas==='mapa'?'#fff':'var(--muted)')+';border:1px solid '+(vistaMesas==='mapa'?'var(--accent)':'var(--border)')+';border-radius:9px;padding:9px;font-weight:700;font-size:13px;cursor:pointer">🗺️ Mapa</button>'
+    +'<button onclick="vistaMesas=\'lista\';render()" style="flex:1;background:'+(vistaMesas==='lista'?'var(--accent)':'var(--card)')+';color:'+(vistaMesas==='lista'?'#fff':'var(--muted)')+';border:1px solid '+(vistaMesas==='lista'?'var(--accent)':'var(--border)')+';border-radius:9px;padding:9px;font-weight:700;font-size:13px;cursor:pointer">📋 Lista por zona</button>'
+  +'</div>';
+
+  // VISTA LISTA: mesas agrupadas por zona, ordenadas por número
+  if(vistaMesas==='lista'){
+    var listaHtml=ZONAS.map(function(z){
+      var msz=mesas.filter(function(m){return m.zona===z.id;}).sort(function(a,b){return (a.num||0)-(b.num||0);});
+      if(!msz.length)return'';
+      var cards=msz.map(function(m){
+        var c=colorMesa(m.id);
+        var its=(pedidos[m.id]||[]).reduce(function(a,b){return a+b.qty;},0);
+        var tot=totalPedido(m.id);
+        var activa=mesaActiva&&mesaActiva.id===m.id;
+        return'<button onclick="clickMesa('+m.id+')" style="text-align:left;background:'+c+'14;border:2px solid '+(activa?c:c+'44')+';border-radius:11px;padding:10px 12px;cursor:pointer;position:relative">'
+          +'<div style="font-weight:800;font-size:14px;color:#fff">'+esc(m.nombre||('Mesa '+m.num))+'</div>'
+          +'<div style="color:var(--muted);font-size:11px">👤 '+m.cap+(its>0?' · '+its+' ítems':'')+'</div>'
+          +(its>0?'<div style="color:'+c+';font-weight:800;font-size:13px;margin-top:2px">'+fmt(tot)+'</div>':'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-top:2px">Libre</div>')
+        +'</button>';
+      }).join('');
+      return'<div style="margin-bottom:16px">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+          +'<span style="color:'+z.color+';font-weight:800;font-size:14px">'+z.emoji+' '+z.label+'</span>'
+          +'<span style="color:var(--muted);font-size:11px">'+msz.length+' mesas</span>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+cards+'</div>'
+      +'</div>';
+    }).join('');
+    return vistaToggle
+      +'<div class="'+(mesaActiva?'grid2':'grid1')+'">'
+      +'<div>'+listaHtml+'</div>'
+      +panelPedido+'</div>';
+  }
+
+  return vistaToggle+sizeSlider+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
     +'<div class="flex">'+zonaBtns+'</div>'
     +ctrlBtns+'</div>'
     +(modoEdicion?'<div class="alert-box alert-gold mb12">💡 Arrastra para mover · Doble clic para editar nombre, forma o eliminar</div>':'')
@@ -739,7 +856,7 @@ function renderMesas(){
     +svgBg+paredesSvg
     +'<div style="position:absolute;top:10px;left:14px;color:'+(zona?zona.color:'#fff')+';font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;opacity:.5;z-index:4">'+(zona?zona.emoji+' '+zona.label:'')+'</div>'
     +(modoEdicion?'<div style="position:absolute;top:8px;right:14px;background:#f5a62318;color:#f5a623;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid #f5a62333;z-index:5">Arrastra · Doble clic = editar</div>':'')
-    +mesaNodes+leyenda
+    +formaNodes+mesaNodes+leyenda
     +'</div>'
     +panelPedido+'</div>';
 }
@@ -938,13 +1055,15 @@ function bindMapaEvents(){
 
   // ── TOUCH EVENTS (mobile - no delay) ──────────────────────────────────────
   el.addEventListener('touchstart',function(e){
+    var fdel=e.target.closest('.forma-del');
+    if(fdel&&modoEdicion){e.preventDefault();borrarForma(parseInt(fdel.getAttribute('data-fidx')));return;}
+    var ffont=e.target.closest('.forma-font');
+    if(ffont&&modoEdicion){e.preventDefault();cambiarFuenteForma(parseInt(ffont.getAttribute('data-fidx')),parseInt(ffont.getAttribute('data-d')));return;}
+    var fres=e.target.closest('.forma-resize');
+    if(fres&&modoEdicion){var tr=e.touches[0];var k=zonaKey(zonaActual);var fo0=formasData[k][parseInt(fres.getAttribute('data-fidx'))];_formaResizeState={idx:parseInt(fres.getAttribute('data-fidx')),sx:tr.clientX,sy:tr.clientY,w0:fo0.w,h0:fo0.h};e.preventDefault();return;}
+    var fn=e.target.closest('.forma-node');
+    if(fn&&modoEdicion){var t0=e.touches[0];_formaDragState={idx:parseInt(fn.getAttribute('data-fidx')),sx:t0.clientX,sy:t0.clientY};e.preventDefault();return;}
     var mn=e.target.closest('.mesa-node');
-    if(modoParedes){
-      if(mn||e.target.closest('#paredes-ui'))return;
-      var c=getCoords(e);
-      _paredDibujando={x1:c.x,y1:c.y,x2:c.x,y2:c.y};
-      e.preventDefault();return;
-    }
     if(mn&&modoEdicion){
       var t=e.touches[0];
       dragState={id:parseInt(mn.getAttribute('data-mesaid')),sx:t.clientX,sy:t.clientY};
@@ -952,8 +1071,19 @@ function bindMapaEvents(){
   },{passive:false});
 
   el.addEventListener('touchmove',function(e){
-    if(modoParedes&&_paredDibujando){
-      var c=getCoords(e); updatePreview(c.x,c.y);
+    if(_formaResizeState){
+      var tr=e.touches[0];var k=zonaKey(zonaActual);var fo=formasData[k]&&formasData[k][_formaResizeState.idx];
+      if(fo){fo.w=Math.max(20,_formaResizeState.w0+(tr.clientX-_formaResizeState.sx));fo.h=Math.max(20,_formaResizeState.h0+(tr.clientY-_formaResizeState.sy));
+        var node=el.querySelector('.forma-node[data-fidx="'+_formaResizeState.idx+'"]');if(node){node.style.width=fo.w+'px';node.style.height=fo.h+'px';}}
+      e.preventDefault();return;
+    }
+    if(_formaDragState){
+      var t0=e.touches[0];var dx0=t0.clientX-_formaDragState.sx,dy0=t0.clientY-_formaDragState.sy;
+      _formaDragState.sx=t0.clientX;_formaDragState.sy=t0.clientY;
+      var k=zonaKey(zonaActual);var fo=formasData[k]&&formasData[k][_formaDragState.idx];
+      if(fo){fo.x=Math.max(0,fo.x+dx0);fo.y=Math.max(0,fo.y+dy0);
+        var node=el.querySelector('.forma-node[data-fidx="'+_formaDragState.idx+'"]');
+        if(node){node.style.left=fo.x+'px';node.style.top=fo.y+'px';}}
       e.preventDefault();return;
     }
     if(dragState){
@@ -969,10 +1099,8 @@ function bindMapaEvents(){
   },{passive:false});
 
   el.addEventListener('touchend',function(e){
-    if(modoParedes&&_paredDibujando){
-      var c=getCoords(e.changedTouches?{touches:e.changedTouches}:e);
-      savePared(c.x,c.y); return;
-    }
+    if(_formaResizeState){guardarFormas(zonaKey(zonaActual));_formaResizeState=null;return;}
+    if(_formaDragState){guardarFormas(zonaKey(zonaActual));_formaDragState=null;return;}
     if(dragState){fbSet('mesas',mesasObj());dragState=null;return;}
     // Mesa click (touchend = tap)
     var mn=e.target.closest('.mesa-node');
@@ -991,6 +1119,14 @@ function bindMapaEvents(){
       _paredDibujando={x1:c.x,y1:c.y,x2:c.x,y2:c.y};
       e.preventDefault();return;
     }
+    var fdel=e.target.closest('.forma-del');
+    if(fdel&&modoEdicion){e.preventDefault();borrarForma(parseInt(fdel.getAttribute('data-fidx')));return;}
+    var ffont=e.target.closest('.forma-font');
+    if(ffont&&modoEdicion){e.preventDefault();cambiarFuenteForma(parseInt(ffont.getAttribute('data-fidx')),parseInt(ffont.getAttribute('data-d')));return;}
+    var fres=e.target.closest('.forma-resize');
+    if(fres&&modoEdicion){var k=zonaKey(zonaActual);var fo0=formasData[k][parseInt(fres.getAttribute('data-fidx'))];_formaResizeState={idx:parseInt(fres.getAttribute('data-fidx')),sx:e.clientX,sy:e.clientY,w0:fo0.w,h0:fo0.h};e.preventDefault();return;}
+    var fn=e.target.closest('.forma-node');
+    if(fn&&modoEdicion){_formaDragState={idx:parseInt(fn.getAttribute('data-fidx')),sx:e.clientX,sy:e.clientY};e.preventDefault();return;}
     var mn=e.target.closest('.mesa-node');
     if(mn&&modoEdicion){
       dragState={id:parseInt(mn.getAttribute('data-mesaid')),sx:e.clientX,sy:e.clientY};
@@ -998,6 +1134,21 @@ function bindMapaEvents(){
     }
   });
   el.addEventListener('mousemove',function(e){
+    if(_formaResizeState){
+      var k=zonaKey(zonaActual);var fo=formasData[k]&&formasData[k][_formaResizeState.idx];
+      if(fo){fo.w=Math.max(20,_formaResizeState.w0+(e.clientX-_formaResizeState.sx));fo.h=Math.max(20,_formaResizeState.h0+(e.clientY-_formaResizeState.sy));
+        var node=el.querySelector('.forma-node[data-fidx="'+_formaResizeState.idx+'"]');if(node){node.style.width=fo.w+'px';node.style.height=fo.h+'px';}}
+      return;
+    }
+    if(_formaDragState){
+      var dx0=e.clientX-_formaDragState.sx,dy0=e.clientY-_formaDragState.sy;
+      _formaDragState.sx=e.clientX;_formaDragState.sy=e.clientY;
+      var k=zonaKey(zonaActual);var fo=formasData[k]&&formasData[k][_formaDragState.idx];
+      if(fo){fo.x=Math.max(0,fo.x+dx0);fo.y=Math.max(0,fo.y+dy0);
+        var node=el.querySelector('.forma-node[data-fidx="'+_formaDragState.idx+'"]');
+        if(node){node.style.left=fo.x+'px';node.style.top=fo.y+'px';}}
+      return;
+    }
     if(modoParedes&&_paredDibujando){var c=getCoords(e);updatePreview(c.x,c.y);return;}
     if(dragState){
       var dx=e.clientX-dragState.sx, dy=e.clientY-dragState.sy;
@@ -1009,6 +1160,8 @@ function bindMapaEvents(){
     }
   });
   el.addEventListener('mouseup',function(e){
+    if(_formaResizeState){guardarFormas(zonaKey(zonaActual));_formaResizeState=null;return;}
+    if(_formaDragState){guardarFormas(zonaKey(zonaActual));_formaDragState=null;return;}
     if(modoParedes&&_paredDibujando){var c=getCoords(e);savePared(c.x,c.y);return;}
     if(dragState){fbSet('mesas',mesasObj());dragState=null;}
   });
@@ -4845,6 +4998,8 @@ function abrirEditorMesaModal(mesa){
         +'<button class="ori-btn'+(m.ori==='horizontal'?' sel':'')+'" id="ori-h" onclick="selOri(\'horizontal\')">Horizontal ↔</button>'
         +'<button class="ori-btn'+(m.ori==='vertical'?' sel':'')+'"   id="ori-v" onclick="selOri(\'vertical\')">Vertical ↕</button>'
       +'</div></div>'
+    +'<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-bottom:6px"><span>Tamaño de esta mesa</span><span id="em-size-val" style="color:var(--accent);font-weight:700">'+(m.size||mesaSize)+'px</span></div>'
+      +'<input type="range" id="em-size" min="20" max="160" value="'+(m.size||mesaSize)+'" style="width:100%;accent-color:var(--accent)" oninput="document.getElementById(\'em-size-val\').textContent=this.value+\'px\'"/></div>'
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-green btn-full" onclick="guardarMesa('+(isNew?'null':(mesa&&mesa.id))+')">Guardar</button>'
       +(!isNew?'<button class="btn btn-red" onclick="eliminarMesa('+(mesa&&mesa.id)+')">Eliminar</button>':'')
@@ -4869,8 +5024,9 @@ function guardarMesa(id){
   var num=parseInt((document.getElementById('em-num')||{}).value)||1;
   var cap=parseInt((document.getElementById('em-cap')||{}).value)||4;
   var nombre=((document.getElementById('em-nombre')||{}).value||'').trim()||('Mesa '+num);
-  if(id===null){var maxId=0;mesas.forEach(function(m){if(m.id>maxId)maxId=m.id;});mesas.push({id:maxId+1,num:num,nombre:nombre,zona:zonaActual,cap:cap,x:20,y:20,forma:_formaSel,ori:_oriSel});}
-  else{var m=mesas.find(function(m){return m.id===id;});if(m){m.num=num;m.nombre=nombre;m.cap=cap;m.forma=_formaSel;m.ori=_oriSel;}}
+  var size=parseInt((document.getElementById('em-size')||{}).value)||mesaSize;
+  if(id===null){var maxId=0;mesas.forEach(function(m){if(m.id>maxId)maxId=m.id;});mesas.push({id:maxId+1,num:num,nombre:nombre,zona:zonaActual,cap:cap,x:20,y:20,forma:_formaSel,ori:_oriSel,size:size});}
+  else{var m=mesas.find(function(m){return m.id===id;});if(m){m.num=num;m.nombre=nombre;m.cap=cap;m.forma=_formaSel;m.ori=_oriSel;m.size=size;}}
   fbSet('mesas',mesasObj());closeModal1();render();
 }
 function eliminarMesa(id){
