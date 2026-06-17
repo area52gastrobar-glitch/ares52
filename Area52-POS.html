@@ -847,7 +847,7 @@ function renderMesas(){
       +panelPedido+'</div>';
   }
 
-  return vistaToggle+sizeSlider+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
+  return vistaToggle+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
     +'<div class="flex">'+zonaBtns+'</div>'
     +ctrlBtns+'</div>'
     +(modoEdicion?'<div class="alert-box alert-gold mb12">💡 Arrastra para mover · Doble clic para editar nombre, forma o eliminar</div>':'')
@@ -3025,7 +3025,7 @@ function renderGastos(){
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago *</div>'
         +'<select class="inp" id="g-fp">'
-        +FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
+        +FPAGO.slice().sort(function(a,b){return (a.id==='efectivo'?-1:b.id==='efectivo'?1:0);}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
         +'<input class="inp" id="g-valor" type="number" placeholder="0"/></div>'
