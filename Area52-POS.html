@@ -1333,9 +1333,16 @@ function abrirCantidadVariante(pid,nom,pre){
     +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>'
     +'<div style="display:flex;gap:8px;margin-top:12px;align-items:center">'
-      +'<input id="qty-libre" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-size:16px;text-align:center" onkeydown="if(event.key===\'Enter\')confirmarQtyLibre('+pid+','+!!cubeta+')"/>'
-      +'<button onclick="confirmarQtyLibre('+pid+','+!!cubeta+')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer">✓</button>'
+      +'<input id="qty-libre-var" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-size:16px;text-align:center" onkeydown="if(event.key===\'Enter\')confirmarQtyLibreVar('+pid+',this.getAttribute(\'data-nom\'),'+pre+')" data-nom="'+esc(nom)+'"/>'
+      +'<button onclick="confirmarQtyLibreVar('+pid+',\''+esc(nom)+'\','+pre+')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer">✓</button>'
     +'</div>');
+}
+
+function confirmarQtyLibreVar(pid,nom,pre){
+  var q=parseInt((document.getElementById('qty-libre-var')||{}).value)||0;
+  if(q<=0)return;
+  closeModal2();
+  agregarItemQty(pid,false,q,nom,pre);
 }
 
 function confirmarQtyLibre(pid,cubeta){
