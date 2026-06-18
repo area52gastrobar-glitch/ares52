@@ -103,6 +103,7 @@ var db=firebase.database();
 
 // Orden de prioridad de géneros (para agrupar la cola)
 var GENRE_ORDER=['Reggaetón','Crossover','Salsa','Vallenato','Pop','Rock','Electrónica','Popular','Otro'];
+var CANCIONES_POR_GENERO=4;  // cuántas canciones suenan de un género antes de rotar al siguiente
 
 var YT_API_KEY=localStorage.getItem('a52_ytkey')||'';
 var player=null, playerReady=false;
@@ -164,26 +165,41 @@ function togglePlay(){
 function colaOrdenada(){
   // pendientes (no sonadas)
   var pend=pedidos.filter(function(p){return !p.played;});
-  // Agrupar por género
+  // Agrupar por género (cada grupo ordenado por llegada)
   var grupos={};
   pend.forEach(function(p){var g=p.genero||'Otro';(grupos[g]=grupos[g]||[]).push(p);});
-  // Ordenar cada grupo por ts
   Object.keys(grupos).forEach(function(g){grupos[g].sort(function(a,b){return a.ts-b.ts;});});
-  // Si hay algo sonando, su género va primero (para no cortar el bloque)
-  var orden=GENRE_ORDER.slice();
-  if(actual&&actual.genero){
-    orden=orden.filter(function(g){return g!==actual.genero;});
-    orden.unshift(actual.genero);
-  } else {
-    // el género con la canción más antigua va primero
-    orden.sort(function(a,b){
-      var ta=grupos[a]&&grupos[a][0]?grupos[a][0].ts:Infinity;
-      var tb=grupos[b]&&grupos[b][0]?grupos[b][0].ts:Infinity;
-      return ta-tb;
+
+  // Orden de los géneros a rotar: por prioridad, pero el que suena va primero
+  var generosActivos=Object.keys(grupos);
+  generosActivos.sort(function(a,b){
+    var ia=GENRE_ORDER.indexOf(a),ib=GENRE_ORDER.indexOf(b);
+    if(ia<0)ia=99;if(ib<0)ib=99;
+    if(ia!==ib)return ia-ib;
+    return (grupos[a][0].ts)-(grupos[b][0].ts);
+  });
+  if(actual&&actual.genero&&generosActivos.indexOf(actual.genero)>=0){
+    generosActivos=generosActivos.filter(function(g){return g!==actual.genero;});
+    generosActivos.unshift(actual.genero);
+  }
+
+  // Rotación: tomar hasta N canciones de cada género por vuelta, alternando
+  var resultado=[];
+  var idxPorGenero={};generosActivos.forEach(function(g){idxPorGenero[g]=0;});
+  var quedan=true;
+  while(quedan){
+    quedan=false;
+    generosActivos.forEach(function(g){
+      var lista=grupos[g];
+      for(var n=0;n<CANCIONES_POR_GENERO;n++){
+        if(idxPorGenero[g]<lista.length){
+          resultado.push(lista[idxPorGenero[g]]);
+          idxPorGenero[g]++;
+          quedan=true;
+        }
+      }
     });
   }
-  var resultado=[];
-  orden.forEach(function(g){if(grupos[g])resultado=resultado.concat(grupos[g]);});
   return resultado;
 }
 
