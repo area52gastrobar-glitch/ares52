@@ -73,6 +73,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="lbl">🎵 Poner música (DJ)</div>
       <input id="djBusqueda" placeholder="Busca una canción para agregar a la cola" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin:8px 0" onkeydown="if(event.key==='Enter')djBuscar()">
       <select id="djGenero" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin-bottom:8px">
+        <option value="auto">✨ Detectar automáticamente</option>
         <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
         <option value="Salsa">💃 Salsa</option>
         <option value="Vallenato">🪗 Vallenato</option>
@@ -230,6 +231,23 @@ function marcarYsiguiente(){
 }
 function siguiente(){marcarYsiguiente();}
 
+function detectarGenero(titulo,canal){
+  var t=((titulo||'')+' '+(canal||'')).toLowerCase();
+  t=t.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  var reglas=[
+    {g:'Vallenato',k:['vallenato','vallenata','acordeon','diomedes','silvestre dangond','jorge celedon','binomio','poncho zuleta','los betos','penalozas','ivan villazon','peter manjarres','martin elias','churo']},
+    {g:'Salsa',k:['salsa','grupo niche','guayacan','marc anthony','willie colon','hector lavoe','frankie ruiz','jerry rivera','la india','oscar de leon','salsa choke','gilberto santa rosa','tito rojas','fruko']},
+    {g:'Reggaetón',k:['reggaeton','reguetton','perreo','bad bunny','feid','karol g','j balvin','maluma','daddy yankee','ozuna','anuel','myke towers','rauw alejandro','blessd','ryan castro','sech','arcangel','wisin','yandel','jhayco','trap','urbano']},
+    {g:'Popular',k:['popular','despecho','arelys','jhonny rivera','luis alberto posada','dario gomez','el charrito','pipe bueno','yeison jimenez','jessi uribe','paola jara','cantina','ranchera','vicente fernandez','alacranes']},
+    {g:'Electrónica',k:['electronica','edm','techno','house','remix','tiesto','david guetta','calvin harris','progressive','dance','electro','martin garrix','deep house']},
+    {g:'Rock',k:['rock','metal','soda stereo','heroes del silencio','guns n','metallica','nirvana','queen','acdc','ac/dc','foo fighters','enanitos','cerati','caifanes','mana','la ley']},
+    {g:'Crossover',k:['crossover','cumbia','merengue','la makina','tropical','sonora','aventura','romeo santos','bachata','elvis crespo','fiesta mix','rumba']},
+    {g:'Pop',k:['pop','shakira','manu chao','juanes','sebastian yatra','camilo','morat','reik','sin bandera','luis fonsi','carlos vives','fonseca','justin bieber','dua lipa','taylor swift','ed sheeran']}
+  ];
+  for(var i=0;i<reglas.length;i++){for(var j=0;j<reglas[i].k.length;j++){if(t.indexOf(reglas[i].k[j])>=0)return reglas[i].g;}}
+  return 'Otro';
+}
+
 function djBuscar(){
   var q=document.getElementById('djBusqueda').value.trim();
   if(!q){return;}
@@ -252,7 +270,8 @@ function djBuscar(){
 
 function djAgregar(videoId,tituloEnc,canalEnc){
   var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
-  var genero=document.getElementById('djGenero').value||'Otro';
+  var genero=document.getElementById('djGenero').value||'auto';
+  if(genero==='auto')genero=detectarGenero(titulo,canal);
   var pedido={cancion:titulo,artista:canal,genero:genero,nombre:'DJ',videoId:videoId,ts:Date.now(),played:false};
   db.ref('musica').push(pedido).then(function(){
     document.getElementById('djBusqueda').value='';

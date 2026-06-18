@@ -50,8 +50,9 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
   <div class="card">
     <div class="label">🔍 Busca tu canción</div>
     <input class="inp" id="busqueda" placeholder="Ej: Bad Bunny Tití me preguntó" maxlength="90" onkeydown="if(event.key==='Enter')buscar()">
-    <div class="label">🎸 Género</div>
+    <div class="label">🎸 Género <span style="color:#666;font-weight:400">(se detecta solo)</span></div>
     <select class="inp" id="genero">
+      <option value="auto">✨ Detectar automáticamente</option>
       <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
       <option value="Salsa">💃 Salsa</option>
       <option value="Vallenato">🪗 Vallenato</option>
@@ -88,6 +89,30 @@ db.ref('config/ytkey').on('value',function(s){YT_KEY=s.val()||'';});
 
 function toast(msg,color){var t=document.getElementById('toast');t.style.borderColor=color||'#22c55e';t.innerHTML=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2400);}
 
+
+// Autodetección de género por palabras clave en título y canal
+function detectarGenero(titulo,canal){
+  var t=((titulo||'')+' '+(canal||'')).toLowerCase();
+  // normalizar acentos
+  t=t.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  var reglas=[
+    {g:'Vallenato',k:['vallenato','vallenata','acordeon','diomedes','silvestre dangond','jorge celedon','binomio','poncho zuleta','los betos','penalozas','ivan villazon','peter manjarres','martin elias','churo']},
+    {g:'Salsa',k:['salsa','grupo niche','guayacan','marc anthony','willie colon','hector lavoe','frankie ruiz','jerry rivera','la india','oscar de leon','salsa choke','gilberto santa rosa','tito rojas','salsa romantica','fruko']},
+    {g:'Reggaetón',k:['reggaeton','reguetton','perreo','bad bunny','feid','karol g','j balvin','maluma','daddy yankee','ozuna','anuel','myke towers','rauw alejandro','blessd','ryan castro','sech','arcangel','wisin','yandel','jhayco','trap','urbano','reggaeton']},
+    {g:'Popular',k:['popular','despecho','carnaval','arelys','jhonny rivera','luis alberto posada','dario gomez','el charrito','pipe bueno','yeison jimenez','jessi uribe','paola jara','musica popular','cantina','ranchera','vicente fernandez','alacranes']},
+    {g:'Electrónica',k:['electronica','edm','techno','house','remix','dj ','tiesto','david guetta','calvin harris','progressive','dance','electro','martin garrix','deep house']},
+    {g:'Rock',k:['rock','metal','soda stereo','heroes del silencio','guns n','metallica','nirvana','queen','acdc','ac/dc','foo fighters','enanitos','cerati','caifanes','mana','la ley','band']},
+    {g:'Crossover',k:['crossover','mix fiesta','cumbia','grupo','merengue','la makina','tropical','sonora','aventura','romeo santos','bachata','tono rosario','elvis crespo','fiesta mix','rumba']},
+    {g:'Pop',k:['pop','shakira','manu chao','juanes','sebastian yatra','camilo','morat','reik','sin bandera','luis fonsi','carlos vives','fonseca','justin bieber','dua lipa','taylor swift','ed sheeran']}
+  ];
+  for(var i=0;i<reglas.length;i++){
+    for(var j=0;j<reglas[i].k.length;j++){
+      if(t.indexOf(reglas[i].k[j])>=0)return reglas[i].g;
+    }
+  }
+  return 'Otro';
+}
+
 function buscar(){
   var q=document.getElementById('busqueda').value.trim();
   if(!q){toast('✍️ Escribe el nombre de la canción','#ef4444');return;}
@@ -112,7 +137,8 @@ function pedir(videoId,tituloEnc,canalEnc){
   var ultimo=parseInt(localStorage.getItem('a52_ultPedido')||'0');
   if(Date.now()-ultimo<20000){toast('⏳ Espera un momento antes de pedir otra','#f5a623');return;}
   var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
-  var genero=document.getElementById('genero').value||'Otro';
+  var genero=document.getElementById('genero').value||'auto';
+  if(genero==='auto')genero=detectarGenero(titulo,canal);  // autodetectar por título/canal
   var nombre=document.getElementById('nombre').value.trim();
   var pedido={cancion:titulo,artista:canal,genero:genero,nombre:nombre,videoId:videoId,ts:Date.now(),played:false};
   db.ref('musica').push(pedido).then(function(){
