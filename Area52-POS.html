@@ -1331,7 +1331,18 @@ function abrirCantidadVariante(pid,nom,pre){
     +'<div style="color:var(--accent);font-weight:700;font-size:14px;margin-top:2px">'+fmt(pre)+' c/u</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;align-items:center">'
+      +'<input id="qty-libre" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-size:16px;text-align:center" onkeydown="if(event.key===\'Enter\')confirmarQtyLibre('+pid+','+!!cubeta+')"/>'
+      +'<button onclick="confirmarQtyLibre('+pid+','+!!cubeta+')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer">✓</button>'
+    +'</div>');
+}
+
+function confirmarQtyLibre(pid,cubeta){
+  var q=parseInt((document.getElementById('qty-libre')||{}).value)||0;
+  if(q<=0){return;}
+  closeModal2();
+  agregarItemQty(pid,!!cubeta,q);
 }
 
 function abrirCantidadPromo(pid){
@@ -1348,7 +1359,18 @@ function abrirCantidadPromo(pid){
     +'<div style="color:#f5a623;font-weight:700;font-size:14px;margin-top:2px">'+fmt(PROMO_NACIONAL_PRECIO)+' c/u</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;align-items:center">'
+      +'<input id="qty-libre-promo" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-size:16px;text-align:center" onkeydown="if(event.key===\'Enter\')confirmarQtyLibrePromo('+pid+')"/>'
+      +'<button onclick="confirmarQtyLibrePromo('+pid+')" style="background:#f5a623;color:#1a1208;border:none;border-radius:10px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer">✓</button>'
+    +'</div>');
+}
+
+function confirmarQtyLibrePromo(pid){
+  var q=parseInt((document.getElementById('qty-libre-promo')||{}).value)||0;
+  if(q<=0)return;
+  closeModal2();
+  agregarItemQty(pid,false,q,'Promo '+fmt(PROMO_NACIONAL_PRECIO),PROMO_NACIONAL_PRECIO);
 }
 
 function abrirCantidadMesa(pid,cubeta){
@@ -4794,7 +4816,18 @@ function abrirCantidadSocio(pid,esCubeta){
     +'<div style="color:#22c55e;font-weight:700;font-size:14px;margin-top:2px">'+fmt(precioSocio)+' c/u</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;align-items:center">'
+      +'<input id="qty-libre-soc" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-size:16px;text-align:center" onkeydown="if(event.key===\'Enter\')confirmarQtyLibreSocio('+pid+','+!!esCubeta+')"/>'
+      +'<button onclick="confirmarQtyLibreSocio('+pid+','+!!esCubeta+')" style="background:#22c55e;color:#fff;border:none;border-radius:10px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer">✓</button>'
+    +'</div>');
+}
+
+function confirmarQtyLibreSocio(pid,esCubeta){
+  var q=parseInt((document.getElementById('qty-libre-soc')||{}).value)||0;
+  if(q<=0)return;
+  closeModal2();
+  agregarConsumoSocio(pid,!!esCubeta,q);
 }
 
 function agregarConsumoSocio(pid,esCubeta,cantidad){
