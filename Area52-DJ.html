@@ -373,6 +373,23 @@ function toggleVideoPromo(){
   }
 }
 
+function moverCancion(key,dir){
+  var cola=colaOrdenada();
+  var idx=cola.findIndex(function(p){return p.key===key;});
+  if(idx<0)return;
+  var vecinoIdx=idx+dir;
+  if(vecinoIdx<0||vecinoIdx>=cola.length)return;
+  var a=cola[idx], b=cola[vecinoIdx];
+  if(!a.key||!b.key)return;
+  // Intercambiar el timestamp (orden de llegada) entre las dos canciones
+  var tsA=a.ts, tsB=b.ts;
+  // Si quedaran iguales, separar levemente
+  if(tsA===tsB){tsB=tsA+(dir>0?1:-1);}
+  db.ref('musica/'+a.key+'/ts').set(tsB);
+  db.ref('musica/'+b.key+'/ts').set(tsA);
+  // Si cambian de género entre sí no se moverá fuera del bloque; dentro del mismo género sí reordena.
+}
+
 function quitar(key){db.ref('musica/'+key).remove();}
 function reproducirYa(key){
   var p=pedidos.find(function(x){return x.key===key;});
@@ -394,7 +411,13 @@ function render(){
       lastG=p.genero;
     }
     var esActual=actual&&actual.key===p.key;
+    var idxEnCola=cola.indexOf(p);
+    var puedeSubir=idxEnCola>0, puedeBajar=idxEnCola<cola.length-1;
     html+='<div class="qsong'+(esActual?' current':'')+'">'
+      +'<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">'
+        +'<button onclick="moverCancion(\''+p.key+'\',-1)" '+(puedeSubir&&!esActual?'':'disabled')+' style="background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer;font-size:12px;opacity:'+(puedeSubir&&!esActual?'1':'.25')+'">▲</button>'
+        +'<button onclick="moverCancion(\''+p.key+'\',1)" '+(puedeBajar&&!esActual?'':'disabled')+' style="background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer;font-size:12px;opacity:'+(puedeBajar&&!esActual?'1':'.25')+'">▼</button>'
+      +'</div>'
       +'<div class="info"><div class="nm">'+(esActual?'▶ ':'')+esc(p.cancion)+'</div>'
       +(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')
       +(p.nombre?'<div class="by">🙋 '+esc(p.nombre)+'</div>':'')+'</div>'
