@@ -110,6 +110,8 @@ var player=null, playerReady=false;
 var pedidos=[];
 var actual=null;  // pedido sonando
 var videoCache={};  // {key: videoId}
+var historialMusica={};  // {videoId:{cancion,artista,genero,veces}}
+var _autoIdx=0;
 
 // ---------- SETUP API KEY ----------
 function renderSetup(){
@@ -145,6 +147,11 @@ function crearPlayer(){
       'onStateChange':function(e){
         if(e.data===YT.PlayerState.ENDED){marcarYsiguiente();}
         actualizarBotonPlay();
+      },
+      'onError':function(e){
+        // 101/150 = no permite reproducción incrustada · 100 = no existe · 2 = id inválido
+        document.getElementById('nowTitle').textContent='⚠️ Video no disponible, pasando a la siguiente...';
+        setTimeout(marcarYsiguiente,1500);
       }
     }
   });
@@ -227,8 +234,33 @@ function reproducirCola(){
     // ya hay algo sonando, no reiniciar
     return;
   }
-  if(!cola.length){document.getElementById('nowTitle').textContent='Cola vacía';document.getElementById('nowArtist').textContent='';return;}
+  if(!cola.length){
+    // Cola vacía -> modo automático: poner las más reproducidas del histórico
+    reproducirMasSonadas();
+    return;
+  }
   reproducirPedido(cola[0]);
+}
+
+function reproducirMasSonadas(){
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId;});
+  if(!lista.length){
+    document.getElementById('nowTitle').textContent='Cola vacía';
+    document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
+    return;
+  }
+  // Ordenar por veces reproducidas (desc)
+  lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
+  // Tomar el top 30 y rotar entre ellas
+  var top=lista.slice(0,30);
+  if(_autoIdx>=top.length)_autoIdx=0;
+  var h=top[_autoIdx];_autoIdx++;
+  // Reproducir como pedido automático (sin key, no marca played; cuenta para histórico)
+  actual={cancion:'🔁 '+h.cancion,artista:(h.artista||'')+' · Auto (más sonadas)',genero:h.genero||'Otro',videoId:h.videoId,auto:true};
+  document.getElementById('nowTitle').textContent=actual.cancion;
+  document.getElementById('nowArtist').textContent=actual.artista;
+  if(player&&player.loadVideoById){player.loadVideoById(h.videoId);player.playVideo();}
+  render();
 }
 function reproducirPedido(pedido){
   actual=pedido;
@@ -241,9 +273,23 @@ function reproducirPedido(pedido){
   render();
 }
 function marcarYsiguiente(){
-  if(actual&&actual.key)db.ref('musica/'+actual.key+'/played').set(true);
+  if(actual){
+    if(actual.key)db.ref('musica/'+actual.key+'/played').set(true);
+    registrarReproduccion(actual);  // sumar al histórico de más reproducidas
+  }
   actual=null;
   setTimeout(function(){reproducirCola();},600);
+}
+
+function registrarReproduccion(p){
+  if(!p||!p.videoId)return;
+  var ref=db.ref('historialMusica/'+p.videoId);
+  ref.transaction(function(cur){
+    if(!cur){return {videoId:p.videoId,cancion:p.cancion,artista:p.artista,genero:p.genero||'Otro',veces:1,ultima:Date.now()};}
+    cur.veces=(cur.veces||0)+1;cur.ultima=Date.now();
+    if(p.cancion)cur.cancion=p.cancion;if(p.artista)cur.artista=p.artista;
+    return cur;
+  });
 }
 function siguiente(){marcarYsiguiente();}
 
@@ -360,6 +406,10 @@ function render(){
 }
 
 function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+db.ref('historialMusica').on('value',function(snap){
+  historialMusica=snap.val()||{};
+});
 
 db.ref('musica').on('value',function(snap){
   var v=snap.val()||{};
