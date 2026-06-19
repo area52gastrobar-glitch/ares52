@@ -145,13 +145,14 @@ function crearPlayer(){
     events:{
       'onReady':function(){playerReady=true;reproducirCola();},
       'onStateChange':function(e){
+        if(e.data===YT.PlayerState.PLAYING){iniciarMonitorFin();}
         if(e.data===YT.PlayerState.ENDED){marcarYsiguiente();}
         actualizarBotonPlay();
       },
       'onError':function(e){
         // 101/150 = no permite reproducción incrustada · 100 = no existe · 2 = id inválido
         document.getElementById('nowTitle').textContent='⚠️ Video no disponible, pasando a la siguiente...';
-        setTimeout(marcarYsiguiente,1500);
+        setTimeout(marcarYsiguiente,800);
       }
     }
   });
@@ -268,17 +269,30 @@ function reproducirPedido(pedido){
   document.getElementById('nowArtist').textContent=(pedido.artista||'')+(pedido.genero?'  ·  '+pedido.genero:'');
   buscarVideo(pedido,function(vid){
     if(vid&&player&&player.loadVideoById){player.loadVideoById(vid);player.playVideo();}
-    else{document.getElementById('nowTitle').textContent='⚠️ No encontrada: '+pedido.cancion;setTimeout(marcarYsiguiente,2000);}
+    else{document.getElementById('nowTitle').textContent='⚠️ No encontrada: '+pedido.cancion;setTimeout(marcarYsiguiente,800);}
   });
   render();
 }
+var _monitorFin=null;
+function iniciarMonitorFin(){
+  clearInterval(_monitorFin);
+  _monitorFin=setInterval(function(){
+    if(!player||!player.getCurrentTime||!player.getDuration)return;
+    var dur=player.getDuration(), cur=player.getCurrentTime();
+    if(dur>0 && (dur-cur)<=0.7 && player.getPlayerState()===YT.PlayerState.PLAYING){
+      clearInterval(_monitorFin);
+      marcarYsiguiente();  // adelantar el cambio para reducir el silencio
+    }
+  },250);
+}
+
 function marcarYsiguiente(){
   if(actual){
     if(actual.key)db.ref('musica/'+actual.key+'/played').set(true);
     registrarReproduccion(actual);  // sumar al histórico de más reproducidas
   }
   actual=null;
-  setTimeout(function(){reproducirCola();},600);
+  reproducirCola();
 }
 
 function registrarReproduccion(p){
