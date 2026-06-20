@@ -145,7 +145,7 @@ function crearPlayer(){
     events:{
       'onReady':function(){playerReady=true;reproducirCola();},
       'onStateChange':function(e){
-        if(e.data===YT.PlayerState.PLAYING){iniciarMonitorFin();}
+        if(e.data===YT.PlayerState.PLAYING){_avanzando=false;iniciarMonitorFin();}
         if(e.data===YT.PlayerState.ENDED){marcarYsiguiente();}
         actualizarBotonPlay();
       },
@@ -274,25 +274,31 @@ function reproducirPedido(pedido){
   render();
 }
 var _monitorFin=null;
+var _avanzando=false;  // seguro para no saltar varias canciones de golpe
 function iniciarMonitorFin(){
   clearInterval(_monitorFin);
   _monitorFin=setInterval(function(){
     if(!player||!player.getCurrentTime||!player.getDuration)return;
     var dur=player.getDuration(), cur=player.getCurrentTime();
-    if(dur>0 && (dur-cur)<=0.7 && player.getPlayerState()===YT.PlayerState.PLAYING){
+    if(dur>0 && (dur-cur)<=0.5 && player.getPlayerState()===YT.PlayerState.PLAYING){
       clearInterval(_monitorFin);
-      marcarYsiguiente();  // adelantar el cambio para reducir el silencio
+      marcarYsiguiente();
     }
-  },250);
+  },300);
 }
 
 function marcarYsiguiente(){
+  if(_avanzando)return;  // ya se está cambiando de canción, ignorar el doble disparo
+  _avanzando=true;
+  clearInterval(_monitorFin);
   if(actual){
     if(actual.key)db.ref('musica/'+actual.key+'/played').set(true);
-    registrarReproduccion(actual);  // sumar al histórico de más reproducidas
+    registrarReproduccion(actual);
   }
   actual=null;
   reproducirCola();
+  // liberar el seguro tras un instante (ya cargó la siguiente)
+  setTimeout(function(){_avanzando=false;},1200);
 }
 
 function registrarReproduccion(p){
