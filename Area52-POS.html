@@ -1956,12 +1956,64 @@ function confirmarCobro(){
   fbPush('ventas',venta);
   // Stock ya fue descontado al agregar a la mesa - no se descuenta aquí
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
-  imprimirTicket(mesa,ped,total,pagosList);
+  // Guardar el último ticket por si el cliente quiere imprimirlo
+  window._ultimoTicket={mesa:mesa,ped:JSON.parse(JSON.stringify(ped)),total:total,pagos:pagosList,ts:Date.now()};
 
   var r=ref('pedidos/'+mesa.id);if(r)r.set(null);
   // Limpiar abonos de la mesa
   if(abonosMesa[mesa.id]){delete abonosMesa[mesa.id];fbSet('abonosMesa',abonosMesa);}
   mesaActiva=null;closeModal1();render();
+  // Aviso con opción de imprimir recibo
+  var nombreMesa=mesa.nombre||('Mesa '+mesa.num);
+  showToast('✅ Cobro registrado · '+fmt(total)+'<br><button onclick="reimprimirUltimoTicket()" style="margin-top:6px;background:#fff;color:#1a1a22;border:none;border-radius:7px;padding:6px 14px;font-weight:800;font-size:12px;cursor:pointer">🖨️ Imprimir recibo</button>','#22c55e',5000);
+}
+
+var MODO_IMPRESION='estacion';  // 'estacion' = manda a la estación USB · 'local' = ventana de impresión
+
+function enviarAImpresora(mesa,ped,total,pagosList){
+  // Construir items en formato simple para la estación
+  var items=(ped||[]).map(function(it){
+    var nombre,pr;
+    if(it.isCustom){nombre=it.customNombre||'Personalizado';pr=it.customPrecio||0;}
+    else if(it.isCombo){nombre=(it.comboNombre||'Combo');pr=it.comboPrecio||0;}
+    else if(it.isCubetazoMix){nombre='Cubetazo mixto';pr=it.cubMixPrecio||0;}
+    else{
+      var p=menu.find(function(m){return m.id==it.pid;});
+      nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'');
+      pr=precioItem(it);
+    }
+    return {nombre:nombre,qty:it.qty||1,total:pr*(it.qty||1)};
+  });
+  var pagos=Array.isArray(pagosList)?pagosList:(function(){
+    var f=FPAGO.find(function(x){return x.id===pagosList;});
+    return [{label:(f?f.label:pagosList),monto:total}];
+  })();
+  var trabajo={
+    mesa:(mesa.nombre||('Mesa '+(mesa.num||''))),
+    items:items,total:total,pagos:pagos,ts:Date.now()
+  };
+  var r=ref('impresion');
+  if(r){r.push(trabajo);showToast('🖨️ Recibo enviado a la impresora','#38bdf8');}
+  else{alert('No hay conexión para enviar a la impresora.');}
+}
+
+function imprimirRecibo(mesa,ped,total,pagosList){
+  // Punto único: según el modo, manda a la estación o abre ventana local
+  if(MODO_IMPRESION==='estacion'){enviarAImpresora(mesa,ped,total,pagosList);}
+  else{imprimirTicket(mesa,ped,total,pagosList);}
+}
+
+function reimprimirVenta(fbkey){
+  var v=ventas.find(function(x){return x._fbkey===fbkey;});
+  if(!v){alert('Venta no encontrada.');return;}
+  var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+  imprimirRecibo({nombre:v.mesa,num:''},its,v.total,v.pagos||v.fp);
+}
+
+function reimprimirUltimoTicket(){
+  var t=window._ultimoTicket;
+  if(!t){alert('No hay un recibo reciente para imprimir.');return;}
+  imprimirRecibo(t.mesa,t.ped,t.total,t.pagos);
 }
 
 /* ═══════════════ INVENTARIO ═══════════════ */
@@ -3881,6 +3933,7 @@ function histTodasVentas(){
         +'<div style="color:var(--muted);font-size:10px">'+fmtDT(v.ts)+' · '+esc(v.uidNombre||v.uid||'')+'</div></div>'
         +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(v.total)+'</span>'
       +'</div>'+itemsHtml
+      +(v._fbkey?'<button onclick="reimprimirVenta(\''+v._fbkey+'\')" style="width:100%;margin-top:6px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Imprimir recibo</button>':'')
       +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey)?'<button data-act="venta-editfp" data-key="'+v._fbkey+'" style="width:100%;margin-top:6px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✏️ Corregir forma de pago</button>':'')
     +'</div>';
   }
@@ -4788,7 +4841,7 @@ function renderSocios(){
 }
 
 
-function showToast(msg,color){
+function showToast(msg,color,dur){
   var t=document.getElementById('app-toast');
   if(!t){
     t=document.createElement('div');
@@ -4804,7 +4857,7 @@ function showToast(msg,color){
   t._timer=setTimeout(function(){
     t.style.transform='translateX(-50%) translateY(-80px)';
     t.style.opacity='0';
-  },1800);
+  },dur||1800);
 }
 
 function abrirCantidadSocio(pid,esCubeta){
