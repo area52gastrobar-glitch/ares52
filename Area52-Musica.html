@@ -113,27 +113,62 @@ function detectarGenero(titulo,canal){
   return 'Otro';
 }
 
+// ── Caché de búsquedas para ahorrar cuota de YouTube ──
+function cacheGet(q){
+  try{
+    var raw=localStorage.getItem('a52_busqcache');
+    if(!raw)return null;
+    var obj=JSON.parse(raw);
+    var e=obj[q.toLowerCase()];
+    if(e&&(Date.now()-e.ts)<7*24*3600*1000)return e.items;  // válido 7 días
+  }catch(err){}
+  return null;
+}
+function cacheSet(q,items){
+  try{
+    var raw=localStorage.getItem('a52_busqcache');
+    var obj=raw?JSON.parse(raw):{};
+    obj[q.toLowerCase()]={items:items,ts:Date.now()};
+    // limitar tamaño del caché
+    var keys=Object.keys(obj);
+    if(keys.length>120){keys.slice(0,keys.length-120).forEach(function(k){delete obj[k];});}
+    localStorage.setItem('a52_busqcache',JSON.stringify(obj));
+  }catch(err){}
+}
+function pintarResultados(items){
+  var cont=document.getElementById('resultados');
+  if(!items||!items.length){cont.innerHTML='<div class="spin">Sin resultados. Prueba con otro nombre.</div>';return;}
+  cont.innerHTML='<div class="label" style="margin-top:6px">👇 Toca la correcta para pedirla</div>'+items.map(function(it){
+    return'<div class="result" onclick="pedir(\''+it.v+'\',\''+encodeURIComponent(it.titulo)+'\',\''+encodeURIComponent(it.canal)+'\')">'
+      +'<img src="'+it.thumb+'">'
+      +'<div><div class="rt">'+esc(it.titulo)+'</div><div class="rc">'+esc(it.canal)+'</div></div>'
+    +'</div>';
+  }).join('');
+}
+
 function buscar(){
   var q=document.getElementById('busqueda').value.trim();
   if(!q){toast('✍️ Escribe el nombre de la canción','#ef4444');return;}
   if(!YT_KEY){toast('⚠️ La rocola no está configurada. Avisa al staff.','#ef4444');return;}
   var cont=document.getElementById('resultados');
+  // 1) Si ya se buscó lo mismo, usar caché (no gasta cuota)
+  var cached=cacheGet(q);
+  if(cached){pintarResultados(cached);return;}
   cont.innerHTML='<div class="spin">🔎 Buscando...</div>';
   var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=6&q='+encodeURIComponent(q+' música')+'&key='+YT_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(data.error){
       var msg=(data.error.errors&&data.error.errors[0]&&data.error.errors[0].reason)||'error';
-      cont.innerHTML='<div class="spin" style="color:#ef4444">⚠️ '+msg+'. Avisa al staff.</div>';return;
+      var extra=(msg==='rateLimitExceeded'||msg==='quotaExceeded')?'Se agotaron las búsquedas de hoy. Vuelve más tarde.':'Avisa al staff.';
+      cont.innerHTML='<div class="spin" style="color:#ef4444">⚠️ '+extra+'</div>';return;
     }
     if(!data.items||!data.items.length){cont.innerHTML='<div class="spin">Sin resultados. Prueba con otro nombre.</div>';return;}
-    cont.innerHTML='<div class="label" style="margin-top:6px">👇 Toca la correcta para pedirla</div>'+data.items.map(function(it){
-      var v=it.id.videoId, sn=it.snippet;
-      var titulo=sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
-      return'<div class="result" onclick="pedir(\''+v+'\',\''+encodeURIComponent(titulo)+'\',\''+encodeURIComponent(sn.channelTitle)+'\')">'
-        +'<img src="'+sn.thumbnails.default.url+'">'
-        +'<div><div class="rt">'+titulo+'</div><div class="rc">'+sn.channelTitle+'</div></div>'
-      +'</div>';
-    }).join('');
+    var items=data.items.map(function(it){
+      var sn=it.snippet;
+      return {v:it.id.videoId,titulo:sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'"),canal:sn.channelTitle,thumb:sn.thumbnails.default.url};
+    });
+    cacheSet(q,items);  // guardar para no volver a gastar cuota
+    pintarResultados(items);
   }).catch(function(){cont.innerHTML='<div class="spin">Error de búsqueda. Intenta de nuevo.</div>';});
 }
 

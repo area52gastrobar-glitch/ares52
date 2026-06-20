@@ -234,7 +234,7 @@ function buscarVideo(pedido,cb){
   if(videoCache[pedido.key]){cb(videoCache[pedido.key]);return;}
   // Fallback: buscar (por si vino de una versión vieja sin videoId)
   var q=encodeURIComponent((pedido.cancion||'')+' '+(pedido.artista||''));
-  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=strict&videoCategoryId=10&maxResults=1&q='+q+'&key='+YT_API_KEY;
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=1&q='+q+'&key='+YT_API_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(data.items&&data.items.length){
       var vid=data.items[0].id.videoId;
@@ -396,29 +396,47 @@ function detectarGenero(titulo,canal){
   return 'Otro';
 }
 
+function djCacheGet(q){
+  try{var raw=localStorage.getItem('a52_busqcache');if(!raw)return null;var o=JSON.parse(raw);var e=o[q.toLowerCase()];if(e&&(Date.now()-e.ts)<7*24*3600*1000)return e.items;}catch(err){}
+  return null;
+}
+function djCacheSet(q,items){
+  try{var raw=localStorage.getItem('a52_busqcache');var o=raw?JSON.parse(raw):{};o[q.toLowerCase()]={items:items,ts:Date.now()};var ks=Object.keys(o);if(ks.length>120){ks.slice(0,ks.length-120).forEach(function(k){delete o[k];});}localStorage.setItem('a52_busqcache',JSON.stringify(o));}catch(err){}
+}
+function djPintar(items){
+  var cont=document.getElementById('djResultados');
+  if(!items||!items.length){cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">Sin resultados.</div>';return;}
+  cont.innerHTML=items.map(function(it){
+    return'<div onclick="djAgregar(\''+it.v+'\',\''+encodeURIComponent(it.titulo)+'\',\''+encodeURIComponent(it.canal)+'\')" style="display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:7px;margin-top:7px;cursor:pointer">'
+      +'<img src="'+it.thumb+'" style="width:70px;height:40px;border-radius:6px;object-fit:cover">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(it.titulo)+'</div><div style="font-size:11px;color:#999">'+esc(it.canal)+'</div></div>'
+    +'</div>';
+  }).join('');
+}
+
 function djBuscar(){
   var q=document.getElementById('djBusqueda').value.trim();
   if(!q){return;}
   if(!YT_API_KEY){alert('Configura primero la API Key.');return;}
   var cont=document.getElementById('djResultados');
+  var cached=djCacheGet(q);
+  if(cached){djPintar(cached);return;}  // usa caché, no gasta cuota
   cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">🔎 Buscando...</div>';
-  // Sin videoCategoryId (es demasiado restrictivo en búsqueda por texto). Mantenemos safeSearch.
   var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=6&q='+encodeURIComponent(q+' música')+'&key='+YT_API_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(data.error){
       var msg=(data.error.errors&&data.error.errors[0]&&data.error.errors[0].reason)||data.error.message||'error';
-      cont.innerHTML='<div style="color:#ef4444;padding:12px;font-size:12px">⚠️ '+msg+'<br><span style="color:#888">Revisa que la API Key tenga habilitada YouTube Data API v3 y el dominio permitido.</span></div>';
+      var extra=(msg==='rateLimitExceeded'||msg==='quotaExceeded')?'Se agotaron las búsquedas de hoy (cuota de YouTube). Se reinicia ~2am.':'Revisa la API Key (YouTube Data API v3 y dominio permitido).';
+      cont.innerHTML='<div style="color:#ef4444;padding:12px;font-size:12px">⚠️ '+msg+'<br><span style="color:#888">'+extra+'</span></div>';
       return;
     }
     if(!data.items||!data.items.length){cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">Sin resultados. Prueba con otro nombre.</div>';return;}
-    cont.innerHTML=data.items.map(function(it){
-      var v=it.id.videoId, sn=it.snippet;
-      var titulo=sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
-      return'<div onclick="djAgregar(\''+v+'\',\''+encodeURIComponent(titulo)+'\',\''+encodeURIComponent(sn.channelTitle)+'\')" style="display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:7px;margin-top:7px;cursor:pointer">'
-        +'<img src="'+sn.thumbnails.default.url+'" style="width:70px;height:40px;border-radius:6px;object-fit:cover">'
-        +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+titulo+'</div><div style="font-size:11px;color:#999">'+sn.channelTitle+'</div></div>'
-      +'</div>';
-    }).join('');
+    var items=data.items.map(function(it){
+      var sn=it.snippet;
+      return {v:it.id.videoId,titulo:sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'"),canal:sn.channelTitle,thumb:sn.thumbnails.default.url};
+    });
+    djCacheSet(q,items);
+    djPintar(items);
   }).catch(function(){cont.innerHTML='<div style="color:#ef4444;padding:12px;font-size:13px">Error de búsqueda.</div>';});
 }
 
