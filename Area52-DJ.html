@@ -54,7 +54,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="layout" id="mainLayout" style="display:none">
   <div class="player-side">
     <div class="player-box" style="position:relative">
-      <div id="ytplayer"></div>
+      <div id="ytplayerA" style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
+      <div id="ytplayerB" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none"></div>
       <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000" allow="autoplay; fullscreen" allowfullscreen></iframe>
       <button id="btnFullPromo" onclick="pantallaCompletaPromo()" style="display:none;position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;z-index:5">⛶ Pantalla completa</button>
     </div>
@@ -106,7 +107,10 @@ var GENRE_ORDER=['Reggaetón','Crossover','Salsa','Vallenato','Pop','Rock','Elec
 var CANCIONES_POR_GENERO=4;  // cuántas canciones suenan de un género antes de rotar al siguiente
 
 var YT_API_KEY=localStorage.getItem('a52_ytkey')||'';
-var player=null, playerReady=false;
+var players=[null,null], playerReady=false, activeIdx=0;
+var siguientePreload=null;  // pedido precargado en el reproductor inactivo
+function P(){return players[activeIdx];}      // reproductor activo
+function PInact(){return players[1-activeIdx];} // reproductor inactivo (precarga)
 var pedidos=[];
 var actual=null;  // pedido sonando
 var videoCache={};  // {key: videoId}
@@ -138,35 +142,47 @@ function iniciarPlayer(){
   document.head.appendChild(tag);
   window.onYouTubeIframeAPIReady=crearPlayer;
 }
+var _readyCount=0;
 function crearPlayer(){
-  player=new YT.Player('ytplayer',{
-    height:'100%',width:'100%',
-    playerVars:{autoplay:0,controls:1,rel:0,playsinline:1},
-    events:{
-      'onReady':function(){playerReady=true;reproducirCola();},
-      'onStateChange':function(e){
-        if(e.data===YT.PlayerState.PLAYING){_avanzando=false;iniciarMonitorFin();}
-        if(e.data===YT.PlayerState.ENDED){marcarYsiguiente();}
-        actualizarBotonPlay();
-      },
-      'onError':function(e){
-        // 101/150 = no permite reproducción incrustada · 100 = no existe · 2 = id inválido
-        document.getElementById('nowTitle').textContent='⚠️ Video no disponible, pasando a la siguiente...';
-        setTimeout(marcarYsiguiente,800);
+  ['A','B'].forEach(function(suf,idx){
+    players[idx]=new YT.Player('ytplayer'+suf,{
+      height:'100%',width:'100%',
+      playerVars:{autoplay:0,controls:1,rel:0,playsinline:1},
+      events:{
+        'onReady':function(){_readyCount++;if(_readyCount>=2){playerReady=true;reproducirCola();}},
+        'onStateChange':function(e){ onStateDual(idx,e); },
+        'onError':function(e){ onErrorDual(idx,e); }
       }
-    }
+    });
   });
 }
+function onStateDual(idx,e){
+  if(idx!==activeIdx)return;
+  if(e.data===YT.PlayerState.PLAYING){_avanzando=false;iniciarMonitorFin();precargarSiguiente();}
+  if(e.data===YT.PlayerState.ENDED){marcarYsiguiente();}
+  actualizarBotonPlay();
+}
+function onErrorDual(idx,e){
+  // Si el video bloqueado es el del reproductor ACTIVO, saltar a la siguiente
+  if(idx===activeIdx){
+    document.getElementById('nowTitle').textContent='⚠️ Video bloqueado, pasando a la siguiente...';
+    setTimeout(marcarYsiguiente,600);
+  } else {
+    // Si el bloqueado era el precargado, descartar esa precarga
+    siguientePreload=null;
+  }
+}
 function actualizarBotonPlay(){
-  if(!player||!player.getPlayerState)return;
-  var st=player.getPlayerState();
+  var p=P();
+  if(!p||!p.getPlayerState)return;
+  var st=p.getPlayerState();
   var b=document.getElementById('btnPlayPause');
   b.innerHTML=(st===YT.PlayerState.PLAYING)?'⏸ Pausa':'▶ Reproducir';
 }
 function togglePlay(){
-  if(!player)return;
-  var st=player.getPlayerState();
-  if(st===YT.PlayerState.PLAYING)player.pauseVideo();else player.playVideo();
+  var p=P();if(!p)return;
+  var st=p.getPlayerState();
+  if(st===YT.PlayerState.PLAYING)p.pauseVideo();else p.playVideo();
 }
 
 // ---------- COLA AGRUPADA POR GÉNERO ----------
@@ -256,31 +272,73 @@ function reproducirMasSonadas(){
   var top=lista.slice(0,30);
   if(_autoIdx>=top.length)_autoIdx=0;
   var h=top[_autoIdx];_autoIdx++;
-  // Reproducir como pedido automático (sin key, no marca played; cuenta para histórico)
-  actual={cancion:'🔁 '+h.cancion,artista:(h.artista||'')+' · Auto (más sonadas)',genero:h.genero||'Otro',videoId:h.videoId,auto:true};
-  document.getElementById('nowTitle').textContent=actual.cancion;
-  document.getElementById('nowArtist').textContent=actual.artista;
-  if(player&&player.loadVideoById){player.loadVideoById(h.videoId);player.playVideo();}
+  // Guardar valores LIMPIOS en actual; decorar solo lo que se muestra
+  actual={cancion:limpiarTexto(h.cancion),artista:limpiarTexto(h.artista),genero:h.genero||'Otro',videoId:h.videoId,auto:true};
+  document.getElementById('nowTitle').textContent='🔁 '+actual.cancion;
+  document.getElementById('nowArtist').textContent=(actual.artista||'')+' · Auto (más sonadas)';
+  mostrarActivo();
+  var p=P();
+  if(p&&p.loadVideoById){p.loadVideoById(h.videoId);p.playVideo();}
   render();
 }
 function reproducirPedido(pedido){
   actual=pedido;
+  siguientePreload=null;
   document.getElementById('nowTitle').textContent=pedido.cancion;
   document.getElementById('nowArtist').textContent=(pedido.artista||'')+(pedido.genero?'  ·  '+pedido.genero:'');
+  mostrarActivo();
   buscarVideo(pedido,function(vid){
-    if(vid&&player&&player.loadVideoById){player.loadVideoById(vid);player.playVideo();}
+    var p=P();
+    if(vid&&p&&p.loadVideoById){p.loadVideoById(vid);p.playVideo();}
     else{document.getElementById('nowTitle').textContent='⚠️ No encontrada: '+pedido.cancion;setTimeout(marcarYsiguiente,800);}
   });
   render();
+}
+
+function mostrarActivo(){
+  var a=document.getElementById('ytplayerA'), b=document.getElementById('ytplayerB');
+  if(!a||!b)return;
+  var act=(activeIdx===0)?a:b, inact=(activeIdx===0)?b:a;
+  act.style.opacity='1';act.style.pointerEvents='auto';act.style.zIndex='2';
+  inact.style.opacity='0';inact.style.pointerEvents='none';inact.style.zIndex='1';
+}
+
+function precargarSiguiente(){
+  var cola=colaOrdenada();
+  var prox=cola[0];
+  if(!prox||prox.played){siguientePreload=null;return;}
+  if(siguientePreload&&siguientePreload.key===prox.key)return;
+  siguientePreload=prox;
+  buscarVideo(prox,function(vid){
+    var pin=PInact();
+    if(vid&&pin&&pin.cueVideoById){pin.cueVideoById(vid);}
+  });
+}
+
+function cambiarAlSiguiente(){
+  var prox=siguientePreload;
+  if(!prox)return false;
+  var cola=colaOrdenada();
+  if(!cola.length||cola[0].key!==prox.key)return false;
+  activeIdx=1-activeIdx;
+  actual=prox;siguientePreload=null;
+  document.getElementById('nowTitle').textContent=prox.cancion;
+  document.getElementById('nowArtist').textContent=(prox.artista||'')+(prox.genero?'  ·  '+prox.genero:'');
+  mostrarActivo();
+  var p=P();
+  if(p&&p.playVideo){p.playVideo();}
+  render();
+  return true;
 }
 var _monitorFin=null;
 var _avanzando=false;  // seguro para no saltar varias canciones de golpe
 function iniciarMonitorFin(){
   clearInterval(_monitorFin);
   _monitorFin=setInterval(function(){
-    if(!player||!player.getCurrentTime||!player.getDuration)return;
-    var dur=player.getDuration(), cur=player.getCurrentTime();
-    if(dur>0 && (dur-cur)<=0.5 && player.getPlayerState()===YT.PlayerState.PLAYING){
+    var p=P();
+    if(!p||!p.getCurrentTime||!p.getDuration)return;
+    var dur=p.getDuration(), cur=p.getCurrentTime();
+    if(dur>0 && (dur-cur)<=0.4 && p.getPlayerState()===YT.PlayerState.PLAYING){
       clearInterval(_monitorFin);
       marcarYsiguiente();
     }
@@ -288,26 +346,34 @@ function iniciarMonitorFin(){
 }
 
 function marcarYsiguiente(){
-  if(_avanzando)return;  // ya se está cambiando de canción, ignorar el doble disparo
+  if(_avanzando)return;
   _avanzando=true;
   clearInterval(_monitorFin);
-  if(actual){
-    if(actual.key)db.ref('musica/'+actual.key+'/played').set(true);
-    registrarReproduccion(actual);
+  var anterior=actual;
+  if(anterior){
+    if(anterior.key)db.ref('musica/'+anterior.key+'/played').set(true);
+    registrarReproduccion(anterior);
   }
   actual=null;
-  reproducirCola();
-  // liberar el seguro tras un instante (ya cargó la siguiente)
-  setTimeout(function(){_avanzando=false;},1200);
+  // Intentar cambio rápido al reproductor que ya tiene la siguiente precargada
+  var ok=cambiarAlSiguiente();
+  if(!ok){reproducirCola();}
+  setTimeout(function(){_avanzando=false;},900);
 }
 
+function limpiarTexto(s){
+  return String(s||'').replace(/^🔁\s*/,'').replace(/\s*·\s*Auto \(más sonadas\)/g,'').trim();
+}
 function registrarReproduccion(p){
   if(!p||!p.videoId)return;
+  var cancionLimpia=limpiarTexto(p.cancion);
+  var artistaLimpio=limpiarTexto(p.artista);
   var ref=db.ref('historialMusica/'+p.videoId);
   ref.transaction(function(cur){
-    if(!cur){return {videoId:p.videoId,cancion:p.cancion,artista:p.artista,genero:p.genero||'Otro',veces:1,ultima:Date.now()};}
+    if(!cur){return {videoId:p.videoId,cancion:cancionLimpia,artista:artistaLimpio,genero:p.genero||'Otro',veces:1,ultima:Date.now()};}
     cur.veces=(cur.veces||0)+1;cur.ultima=Date.now();
-    if(p.cancion)cur.cancion=p.cancion;if(p.artista)cur.artista=p.artista;
+    if(cancionLimpia)cur.cancion=cancionLimpia;
+    if(artistaLimpio)cur.artista=artistaLimpio;
     return cur;
   });
 }
@@ -452,6 +518,16 @@ function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&
 
 db.ref('historialMusica').on('value',function(snap){
   historialMusica=snap.val()||{};
+  // Reparar entradas con texto repetido (de versiones anteriores)
+  Object.keys(historialMusica).forEach(function(vid){
+    var h=historialMusica[vid];if(!h)return;
+    var c=limpiarTexto(h.cancion), a=limpiarTexto(h.artista);
+    if(c!==h.cancion||a!==h.artista){
+      h.cancion=c;h.artista=a;
+      db.ref('historialMusica/'+vid+'/cancion').set(c);
+      db.ref('historialMusica/'+vid+'/artista').set(a);
+    }
+  });
 });
 
 db.ref('musica').on('value',function(snap){
