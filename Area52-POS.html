@@ -1632,6 +1632,8 @@ function quitarItem(pid,cubeta){
   var id=mesaActiva.id;
   var idx=(pedidos[id]||[]).findIndex(function(it){return it.pid===pid&&it.cubeta===cubeta;});
   if(idx<0)return;
+  // Devolver 1 unidad al inventario (se había descontado al agregar)
+  ajustarStockItem(pedidos[id][idx],+1);
   if(pedidos[id][idx].qty===1)pedidos[id].splice(idx,1);
   else pedidos[id][idx].qty--;
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id].length?pedidos[id]:null);
