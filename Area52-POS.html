@@ -297,9 +297,10 @@ var FPAGO=[
   {id:'efectivo', label:'Efectivo',       color:'#22C55E',emoji:'💵'}
 ];
 var ROLES={
-  admin: {label:'Administrador',color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina','admin']},
-  cajero:{label:'Cajero',       color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
-  mesero:{label:'Mesero',       color:'#22c55e',tabs:['mesas','gastos','socios','cocina']}
+  admin:   {label:'Administrador',  color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina','admin']},
+  subadmin:{label:'Subadministrador',color:'#38bdf8',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
+  cajero:  {label:'Cajero',         color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
+  mesero:  {label:'Mesero',         color:'#22c55e',tabs:['mesas','gastos','socios','cocina']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
   caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',rappi:'🛵 Rappi',socios:'🤝 Socios',empleados:'👷 Empleados',creditos:'📒 Fiados',saneamiento:'🧼 Saneamiento',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
@@ -309,6 +310,7 @@ var CATG_GASTOS=['Mercancía','Insumos','Servicios','Personal','Mantenimiento','
 /* ═══════════════ ESTADO ═══════════════ */
 var usuarios=[
   {id:'admin',   nombre:'Administrador',pin:'1234',rol:'admin', emoji:'👑'},
+  {id:'socio1',  nombre:'Socio',         pin:'5678',rol:'subadmin',emoji:'🤝'},
   {id:'cajero1', nombre:'Cajero',        pin:'0000',rol:'cajero',emoji:'💰'},
   {id:'mesera1', nombre:'Mesera 1',      pin:'1111',rol:'mesero',emoji:'🌸'},
   {id:'mesera2', nombre:'Mesera 2',      pin:'2222',rol:'mesero',emoji:'⭐'},
@@ -910,7 +912,7 @@ function renderPanelPedido(){
       +(it.isCubetazoMix?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO MIXTO · '+(it.cubMixDetalle||[]).map(function(dd){return dd.cantidad+'×'+dd.emoji;}).join(' ')+'</div>':'')
       +(it.cubeta?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO ×5</div>':'')
       +(it.varianteNombre?'<div style="color:var(--accent);font-size:10px;font-weight:700">📐 '+esc(it.varianteNombre)+'</div>':'')+'</div>'
-      +'<button data-act="ped-minus" data-idx="'+idx_+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">−</button>'
+      +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button data-act="ped-minus" data-idx="'+idx_+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">−</button>':'<button data-act="ped-minus-bloq" style="background:rgba(255,255,255,.05);color:var(--dim);border:none;border-radius:6px;width:26px;height:26px;cursor:not-allowed;font-size:13px;line-height:1" title="Solo admin o subadmin pueden restar">🔒</button>')
       +'<span style="color:#fff;font-weight:800;min-width:24px;text-align:center">'+it.qty+'</span>'
       +'<button data-act="ped-plus" data-idx="'+idx_+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">+</button>'
       +'<span style="color:var(--gold);font-size:12px;font-weight:700;min-width:72px;text-align:right">'+fmt(pr*it.qty)+'</span>'
@@ -1629,6 +1631,9 @@ function abrirSelectorVariante(pid){
 }
 function quitarItem(pid,cubeta){
   if(!mesaActiva)return;
+  if(!(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))){
+    showToast('🔒 Solo admin o subadmin pueden restar productos.','#ef4444',3500);return;
+  }
   var id=mesaActiva.id;
   var idx=(pedidos[id]||[]).findIndex(function(it){return it.pid===pid&&it.cubeta===cubeta;});
   if(idx<0)return;
@@ -5630,9 +5635,18 @@ document.addEventListener('click',function(e){
       render();
       return;
     }
+    if(act2==='ped-minus-bloq'){
+      showToast('🔒 Solo el administrador o subadministrador pueden restar productos de una mesa.','#ef4444',3500);
+      return;
+    }
     if(act2==='ped-minus'||act2==='ped-plus'){
       var pidx=parseInt(btn2.getAttribute('data-idx'));
       if(isNaN(pidx)||!mesaActiva)return;
+      // Restar productos solo admin o subadmin
+      if(act2==='ped-minus' && !(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))){
+        showToast('🔒 No tienes permiso para restar productos. Pide al administrador o subadministrador.','#ef4444',3500);
+        return;
+      }
       var pped=pedidos[mesaActiva.id]||[];
       var pit=pped[pidx];if(!pit)return;
       if(act2==='ped-minus'){
