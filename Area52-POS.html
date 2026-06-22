@@ -5359,6 +5359,28 @@ function exportarExcel(){
   // Por usuario
   var pu={};ventas.forEach(function(v){var u=v.uidNombre||v.uid||'?';if(!pu[u])pu[u]={Usuario:u,Cobros:0,'Total COP':0};pu[u].Cobros++;pu[u]['Total COP']+=v.total;});
   X.utils.book_append_sheet(wb,X.utils.json_to_sheet(Object.values(pu)),'Por usuario');
+  // Consumo de socios - detalle
+  var socDet=[];
+  (consumoSocios||[]).forEach(function(c){
+    var ts=new Date(c.ts);
+    (c.items||[]).forEach(function(it){
+      socDet.push({Fecha:ts.toLocaleDateString('es-CO'),Hora:ts.toLocaleTimeString('es-CO'),Socio:c.socio||'',Producto:it.nombre||'',Tipo:it.cubeta?'Cubetazo x5':'Detal',Cantidad:it.qty,'Precio base':it.precioBase||0,'Precio socio':it.precioSocio||0,Subtotal:(it.precioSocio||0)*(it.qty||1)});
+    });
+  });
+  if(socDet.length){
+    var wsS=X.utils.json_to_sheet(socDet);wsS['!cols']=[10,8,10,22,11,9,12,12,12].map(function(w){return{wch:w};});
+    X.utils.book_append_sheet(wb,wsS,'Consumo socios');
+  } else {
+    X.utils.book_append_sheet(wb,X.utils.json_to_sheet([{Aviso:'Sin consumos de socios registrados'}]),'Consumo socios');
+  }
+  // Consumo de socios - resumen por socio
+  var resS={};
+  (consumoSocios||[]).forEach(function(c){
+    var s=c.socio||'?';if(!resS[s])resS[s]={Socio:s,'Items totales':0,'Total COP':0,'Num registros':0};
+    resS[s]['Num registros']++;resS[s]['Total COP']+=(c.total||0);
+    (c.items||[]).forEach(function(it){resS[s]['Items totales']+=(it.qty||0);});
+  });
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(Object.values(resS).length?Object.values(resS):[{Aviso:'Sin consumos'}]),'Socios resumen');
   // Cierres
   var cDet=cierres.map(function(c){return{Fecha:fmtDate(c.ts),Hora:fmtTime(c.ts),'Caja inicial':c.cajaInicial,'Total ventas':c.ventas,'Total gastos':c.gastos,'Utilidad bruta':c.utilidad,'Num ventas':c.numVentas,'Num gastos':c.numGastos,Usuario:c.uid||''};});
   X.utils.book_append_sheet(wb,X.utils.json_to_sheet(cDet),'Cierres');
