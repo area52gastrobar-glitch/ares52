@@ -2703,7 +2703,7 @@ function imprimirTicketPrueba(){
     {pid:9,cubeta:false,qty:1}
   ];
   var total=menu[0]?menu[0].precio*2+(menu[0].cubeta||menu[0].precio*5)+4000:0;
-  imprimirTicket(mesaMock,pedMock,total,[{fp:'efectivo',label:'Efectivo',monto:total}]);
+  imprimirRecibo(mesaMock,pedMock,total,[{fp:'efectivo',label:'Efectivo',monto:total}]);
 }
 
 // Event delegation for combos
@@ -5244,43 +5244,43 @@ function imprimirPrecuenta(){
   if(!mesaActiva)return;
   var mesa=mesaActiva;
   var ped=pedidos[mesa.id]||[];
+  if(!ped.length){alert('La mesa no tiene productos.');return;}
   var total=totalPedido(mesa.id);
+  if(MODO_IMPRESION==='estacion'){
+    // Construir items y mandar a la estación como PRE-ORDEN (sin forma de pago)
+    var items=ped.map(function(it){
+      var nombre,pr;
+      if(it.isCustom){nombre='✏️ '+(it.customNombre||'');pr=it.customPrecio||0;}
+      else if(it.isCombo){nombre='🎁 '+(it.comboNombre||'Combo');pr=it.comboPrecio||0;}
+      else if(it.isCubetazoMix){nombre='🪣 Cubetazo mixto';pr=it.cubMixPrecio||0;}
+      else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'');pr=precioItem(it);}
+      return {nombre:nombre,qty:it.qty||1,total:pr*(it.qty||1)};
+    });
+    var r=ref('impresion');
+    if(r){r.push({mesa:(mesa.nombre||('Mesa '+mesa.num)),items:items,total:total,preorden:true,ts:Date.now()});showToast('🖨️ Pre-orden enviada a la impresora','#38bdf8');}
+    else{alert('No hay conexión para enviar a la impresora.');}
+    return;
+  }
+  // Modo local (ventana de impresión) - respaldo
   var zona=ZONAS.find(function(z){return z.id===mesa.zona;});
   var rows=ped.map(function(it){
     var nombre,pr;
     if(it.isCustom){nombre='✏️ '+esc(it.customNombre||'');pr=it.customPrecio||0;}
     else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
-          else if(it.isCubetazoMix){nombre='🪣 Cubetazo mixto ('+(it.cubMixDetalle||[]).map(function(dd){return dd.cantidad+'×'+dd.emoji;}).join(' ')+')';pr=it.cubMixPrecio||0;}
+    else if(it.isCubetazoMix){nombre='🪣 Cubetazo mixto';pr=it.cubMixPrecio||0;}
     else{var p=menu.find(function(m){return m.id===it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||'?');pr=it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0);}
     return'<tr><td>'+nombre+'</td><td align="center">'+it.qty+'</td><td align="right">'+fmt(pr*it.qty)+'</td></tr>';
   }).join('');
-  var fs=ticketConfig.fontSize||14;
-  var pw=ticketConfig.paperWidth||280;
   var w=window.open('','_blank','width=340,height=600');
   if(!w)return;
-  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-    +'@page{margin:0;size:'+pw+'px auto}'
-    +'html,body{margin:0;padding:0;width:'+pw+'px}'
-    +'body{font-family:"Courier New",monospace;font-size:'+fs+'px;padding:8px 10px 16px}'
-    +'.t{font-size:'+(fs+4)+'px;font-weight:900;letter-spacing:3px;text-align:center}'
-    +'hr{border:none;border-top:1px dashed #000;margin:6px 0}'
-    +'table{width:100%;border-collapse:collapse}th{font-size:'+(fs-2)+'px;border-bottom:1px solid #000;padding:2px 0}'
-    +'td{padding:2px 0;font-size:'+(fs-1)+'px}'
-    +'.pre{background:#f0f0f0;text-align:center;padding:5px;font-size:'+(fs+2)+'px;font-weight:900;letter-spacing:2px;border:2px dashed #333;margin-bottom:8px}'
-    +'.tot{font-size:'+(fs+4)+'px;font-weight:900;text-align:right;margin-top:6px}'
-    +'</style></head><body>');
-  w.document.write('<div class="pre">PRE-ORDEN</div>');
-  w.document.write('<div class="t">AREA 52</div>');
-  w.document.write('<p style="text-align:center;font-size:'+(fs-2)+'px">GASTRO BAR</p><hr/>');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{margin:0;size:280px auto}html,body{margin:0;padding:0;width:280px}body{font-family:"Courier New",monospace;font-size:13px;padding:8px 10px 16px}.t{font-size:17px;font-weight:900;text-align:center}.pre{text-align:center;padding:5px;font-weight:900;border:2px dashed #333;margin-bottom:8px}table{width:100%}td{padding:2px 0}</style></head><body>');
+  w.document.write('<div class="pre">PRE-ORDEN</div><div class="t">AREA 52</div><hr/>');
   w.document.write('<p style="text-align:center">'+esc((zona?zona.label:'')+' · '+(mesa.nombre||'Mesa '+mesa.num))+'</p>');
-  w.document.write('<p style="text-align:center;font-size:'+(fs-2)+'px">'+new Date().toLocaleString('es-CO')+'</p>');
-  w.document.write('<p style="text-align:center;font-size:'+(fs-2)+'px">'+usuarioActivo.emoji+' '+esc(usuarioActivo.nombre)+'</p><hr/>');
-  w.document.write('<table><thead><tr><th align="left">Producto</th><th>Cant</th><th align="right">Valor</th></tr></thead><tbody>'+rows+'</tbody></table><hr/>');
-  w.document.write('<div class="tot">TOTAL: '+fmt(total)+'</div>');
-  w.document.write('<p style="text-align:center;font-size:'+(fs-3)+'px;margin-top:10px;color:#777">** No es comprobante de pago **</p>');
-  w.document.write('</body></html>');
+  w.document.write('<table>'+rows+'</table><hr/><div style="text-align:right;font-weight:900">TOTAL: '+fmt(total)+'</div>');
+  w.document.write('<p style="text-align:center;font-size:10px;color:#777">** No es comprobante de pago **</p></body></html>');
   w.document.close();w.print();
 }
+
 function imprimirTicket(mesa,ped,total,fpId){
   // fpId can be array of {fp,label,monto} or string
   var pagosList=Array.isArray(fpId)?fpId:null;

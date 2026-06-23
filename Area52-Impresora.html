@@ -27,7 +27,13 @@ input[type=checkbox]{width:18px;height:18px;accent-color:#c4973a}
 .log-item{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between}
 .log-item .ok{color:#22c55e}
 #area-print{position:absolute;left:-9999px;top:0}
-@media print{body *{visibility:hidden}#area-print,#area-print *{visibility:visible}#area-print{position:absolute;left:0;top:0;width:100%}}
+@page{size:80mm auto;margin:0}
+@media print{
+  html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important;height:auto!important;min-height:0!important}
+  body>*{display:none!important}
+  #area-print{display:block!important;position:static!important;width:80mm;margin:0;padding:0}
+  #area-print *{visibility:visible}
+}
 </style>
 </head>
 <body>
@@ -76,13 +82,15 @@ function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&
 function fmt(n){return '$'+(Math.round(n)||0).toLocaleString('es-CO');}
 
 function ticketHTML(t){
+  var pre=!!t.preorden;
   var its=(t.items&&t.items.length?t.items:[]).map(function(i){
     return '<div style="display:flex;justify-content:space-between"><span>'+(i.qty||1)+'x '+esc(i.nombre)+'</span><span>'+fmt(i.total)+'</span></div>';
   }).join('');
   var pagos=(t.pagos&&t.pagos.length?t.pagos:[]).map(function(p){
     return '<div style="display:flex;justify-content:space-between"><span>'+esc(p.label)+'</span><span>'+fmt(p.monto)+'</span></div>';
   }).join('');
-  return '<div style="width:280px;font-family:monospace;color:#000;font-size:12px;padding:6px">'
+  return '<div style="width:76mm;font-family:monospace;color:#000;font-size:12px;padding:4px 2mm 6mm">'
+    +(pre?'<div style="text-align:center;font-weight:bold;font-size:13px;border:2px dashed #000;padding:4px;margin-bottom:6px;letter-spacing:2px">PRE-ORDEN</div>':'')
     +'<div style="text-align:center;font-weight:bold;font-size:15px">ÁREA 52 GASTRO BAR</div>'
     +'<div style="text-align:center;font-size:10px">Calle 53 # 85H-10, Bogotá<br>Tel: 321 350 2772 · @area52.gastrobar</div>'
     +'<div style="text-align:center;font-size:10px;margin:4px 0">'+new Date(t.ts||Date.now()).toLocaleString('es-CO')+'</div>'
@@ -93,8 +101,8 @@ function ticketHTML(t){
     +'<div style="border-top:1px dashed #000;margin:6px 0"></div>'
     +'<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>TOTAL</span><span>'+fmt(t.total)+'</span></div>'
     +(pagos?'<div style="border-top:1px dashed #000;margin:6px 0"></div>'+pagos:'')
-    +'<div style="text-align:center;margin-top:10px;font-size:11px">¡Gracias por tu visita!</div>'
-    +'<div style="text-align:center;font-size:18px">👽</div>'
+    +(pre?'<div style="text-align:center;margin-top:10px;font-size:10px;color:#555">** No es comprobante de pago **</div>'
+        :'<div style="text-align:center;margin-top:10px;font-size:11px">¡Gracias por tu visita!</div><div style="text-align:center;font-size:18px">👽</div>')
     +'</div>';
 }
 
