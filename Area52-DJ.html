@@ -124,6 +124,7 @@ var actual=null;  // pedido sonando
 var videoCache={};  // {key: videoId}
 var historialMusica={};  // {videoId:{cancion,artista,genero,veces}}
 var _autoIdx=0;
+var _ultimaAutoVid=null;  // para no repetir la última en modo aleatorio
 
 // ---------- SETUP API KEYS (con rotación) ----------
 function arrancarConKeys(){
@@ -317,12 +318,17 @@ function reproducirMasSonadas(){
     document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
     return;
   }
-  // Ordenar por veces reproducidas (desc)
+  // Tomar el top 40 de las más sonadas y elegir una AL AZAR (evitando repetir la última)
   lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
-  // Tomar el top 30 y rotar entre ellas
-  var top=lista.slice(0,30);
-  if(_autoIdx>=top.length)_autoIdx=0;
-  var h=top[_autoIdx];_autoIdx++;
+  var top=lista.slice(0,40);
+  var h;
+  if(top.length===1){h=top[0];}
+  else{
+    var intentos=0;
+    do{ h=top[Math.floor(Math.random()*top.length)]; intentos++; }
+    while(_ultimaAutoVid && h.videoId===_ultimaAutoVid && intentos<10);
+  }
+  _ultimaAutoVid=h.videoId;
   // Guardar valores LIMPIOS en actual; decorar solo lo que se muestra
   actual={cancion:limpiarTexto(h.cancion),artista:limpiarTexto(h.artista),genero:h.genero||'Otro',videoId:h.videoId,auto:true};
   document.getElementById('nowTitle').textContent='🔁 '+actual.cancion;
