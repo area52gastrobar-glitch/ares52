@@ -155,16 +155,35 @@ function guardarKey(){
 }
 // Para editar las llaves después desde el DJ
 function reconfigurarKeys(){
-  var actual=YT_KEYS.join('\n');
-  var nuevo=prompt('Edita tus API Keys (una por línea, máximo 2):',actual);
-  if(nuevo===null)return;
-  var keys=nuevo.split('\n').map(function(s){return s.trim();}).filter(Boolean).slice(0,2);
-  if(!keys.length){alert('Debes dejar al menos una llave.');return;}
+  var s=document.getElementById('setupScreen');
+  var k1=YT_KEYS[0]||'', k2=YT_KEYS[1]||'';
+  document.getElementById('mainLayout').style.display='none';
+  s.innerHTML='<div class="setup"><b>🔑 Tus API Keys de YouTube</b><br>'
+    +'<div style="font-size:13px;color:#888;margin:6px 0">Cada llave da ~100 búsquedas al día. Pon dos para tener ~200. Pega una en cada casilla.</div>'
+    +'<div style="font-size:12px;color:#c4973a;margin-bottom:3px">Llave 1 (obligatoria)</div>'
+    +'<input id="kEdit1" placeholder="Pega aquí la primera API Key" value="'+k1.replace(/"/g,"&quot;")+'">'
+    +'<div style="font-size:12px;color:#c4973a;margin:8px 0 3px">Llave 2 (opcional)</div>'
+    +'<input id="kEdit2" placeholder="Pega aquí la segunda API Key" value="'+k2.replace(/"/g,"&quot;")+'">'
+    +'<button onclick="guardarKeysEditadas()" style="margin-top:10px">💾 Guardar llaves</button>'
+    +'<button onclick="cancelarEdicionKeys()" style="margin-top:8px;background:rgba(255,255,255,.1);color:#fff">Cancelar</button>'
+    +'<div id="kEstado" style="margin-top:10px;font-size:13px"></div>'
+    +'</div>';
+}
+function guardarKeysEditadas(){
+  var k1=(document.getElementById('kEdit1')||{}).value;k1=(k1||'').trim();
+  var k2=(document.getElementById('kEdit2')||{}).value;k2=(k2||'').trim();
+  if(!k1){document.getElementById('kEstado').innerHTML='<span style="color:#ef4444">⚠️ La primera llave es obligatoria.</span>';return;}
+  var keys=[k1];if(k2)keys.push(k2);
   YT_KEYS=keys;_keyIdx=0;setActiveKey();
   localStorage.setItem('a52_ytkeys',JSON.stringify(keys));
   db.ref('config/ytkeys').set(keys);
-  db.ref('config/ytkey').set(keys[0]);
-  alert('✓ Llaves actualizadas ('+keys.length+').');
+  db.ref('config/ytkey').set(k1);
+  document.getElementById('kEstado').innerHTML='<span style="color:#22c55e">✓ Guardadas '+keys.length+' llave(s). Se sincronizan a todos los equipos.</span>';
+  setTimeout(cancelarEdicionKeys,1200);
+}
+function cancelarEdicionKeys(){
+  document.getElementById('setupScreen').innerHTML='';
+  document.getElementById('mainLayout').style.display='';
 }
 
 // ---------- YOUTUBE PLAYER ----------
