@@ -71,7 +71,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       </div>
     </div>
     <div class="now">
-      <div class="lbl">🎵 Poner música (DJ)</div>
+      <div class="lbl" style="display:flex;justify-content:space-between;align-items:center">🎵 Poner música (DJ)<button onclick="reconfigurarKeys()" style="background:rgba(255,255,255,.08);color:#888;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer" title="Editar las API Keys">🔑 Llaves</button></div>
       <input id="djBusqueda" placeholder="Busca una canción para agregar a la cola" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin:8px 0" onkeydown="if(event.key==='Enter')djBuscar()">
       <select id="djGenero" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin-bottom:8px">
         <option value="auto">✨ Detectar automáticamente</option>
@@ -106,7 +106,15 @@ var db=firebase.database();
 var GENRE_ORDER=['Reggaetón','Crossover','Salsa','Vallenato','Pop','Rock','Electrónica','Popular','Otro'];
 var CANCIONES_POR_GENERO=4;  // cuántas canciones suenan de un género antes de rotar al siguiente
 
-var YT_API_KEY=localStorage.getItem('a52_ytkey')||'';
+var YT_KEYS=[];          // las dos (o más) llaves
+var _keyIdx=0;            // cuál se está usando
+var YT_API_KEY='';        // la activa (compatibilidad con el resto del código)
+function setActiveKey(){YT_API_KEY=YT_KEYS[_keyIdx]||'';}
+function rotarKey(){
+  // Pasar a la siguiente llave si hay; devuelve true si cambió
+  if(_keyIdx<YT_KEYS.length-1){_keyIdx++;setActiveKey();return true;}
+  return false;
+}
 var players=[null,null], playerReady=false, activeIdx=0;
 var siguientePreload=null;  // pedido precargado en el reproductor inactivo
 function P(){return players[activeIdx];}      // reproductor activo
@@ -117,22 +125,46 @@ var videoCache={};  // {key: videoId}
 var historialMusica={};  // {videoId:{cancion,artista,genero,veces}}
 var _autoIdx=0;
 
-// ---------- SETUP API KEY ----------
+// ---------- SETUP API KEYS (con rotación) ----------
+function arrancarConKeys(){
+  setActiveKey();
+  document.getElementById('setupScreen').innerHTML='';
+  document.getElementById('mainLayout').style.display='';
+  iniciarPlayer();
+}
 function renderSetup(){
   var s=document.getElementById('setupScreen');
-  if(YT_API_KEY){s.innerHTML='';document.getElementById('mainLayout').style.display='';iniciarPlayer();return;}
+  if(YT_KEYS.length){arrancarConKeys();return;}
   s.innerHTML='<div class="setup"><b>🔑 Configuración inicial (una sola vez)</b><br>'
-    +'Para que el DJ busque y reproduzca las canciones necesitas una API Key gratuita de YouTube (Google Cloud → YouTube Data API v3).<br>'
-    +'<input id="keyInput" placeholder="Pega aquí tu YouTube API Key">'
+    +'Pega tus API Keys de YouTube (Google Cloud → YouTube Data API v3). Puedes poner dos para tener más búsquedas al día; la segunda es opcional.<br>'
+    +'<input id="keyInput" placeholder="API Key 1 (obligatoria)">'
+    +'<input id="keyInput2" placeholder="API Key 2 (opcional, para más búsquedas)" style="margin-top:8px">'
     +'<button onclick="guardarKey()">Guardar y empezar</button></div>';
 }
 function guardarKey(){
-  var k=document.getElementById('keyInput').value.trim();
-  if(!k){alert('Pega la API key');return;}
-  localStorage.setItem('a52_ytkey',k);YT_API_KEY=k;
-  // Guardar en Firebase para que la página de clientes también pueda buscar
-  db.ref('config/ytkey').set(k);
-  renderSetup();
+  var k1=document.getElementById('keyInput').value.trim();
+  var k2=(document.getElementById('keyInput2')||{}).value;k2=(k2||'').trim();
+  if(!k1){alert('Pega al menos la primera API key');return;}
+  var keys=[k1];if(k2)keys.push(k2);
+  YT_KEYS=keys;_keyIdx=0;setActiveKey();
+  localStorage.setItem('a52_ytkeys',JSON.stringify(keys));
+  // Guardar en Firebase para que cualquier equipo nuevo y la página de clientes las tomen solas
+  db.ref('config/ytkeys').set(keys);
+  db.ref('config/ytkey').set(k1);  // compatibilidad con versión anterior
+  arrancarConKeys();
+}
+// Para editar las llaves después desde el DJ
+function reconfigurarKeys(){
+  var actual=YT_KEYS.join('\n');
+  var nuevo=prompt('Edita tus API Keys (una por línea, máximo 2):',actual);
+  if(nuevo===null)return;
+  var keys=nuevo.split('\n').map(function(s){return s.trim();}).filter(Boolean).slice(0,2);
+  if(!keys.length){alert('Debes dejar al menos una llave.');return;}
+  YT_KEYS=keys;_keyIdx=0;setActiveKey();
+  localStorage.setItem('a52_ytkeys',JSON.stringify(keys));
+  db.ref('config/ytkeys').set(keys);
+  db.ref('config/ytkey').set(keys[0]);
+  alert('✓ Llaves actualizadas ('+keys.length+').');
 }
 
 // ---------- YOUTUBE PLAYER ----------
@@ -426,7 +458,13 @@ function djBuscar(){
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(data.error){
       var msg=(data.error.errors&&data.error.errors[0]&&data.error.errors[0].reason)||data.error.message||'error';
-      var extra=(msg==='rateLimitExceeded'||msg==='quotaExceeded')?'Se agotaron las búsquedas de hoy (cuota de YouTube). Se reinicia ~2am.':'Revisa la API Key (YouTube Data API v3 y dominio permitido).';
+      // Si se agotó la cuota y hay otra llave, rotar y reintentar una vez
+      if((msg==='rateLimitExceeded'||msg==='quotaExceeded')&&rotarKey()){
+        cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">🔄 Cambiando a la segunda llave...</div>';
+        setTimeout(djBuscar,300);
+        return;
+      }
+      var extra=(msg==='rateLimitExceeded'||msg==='quotaExceeded')?'Se agotaron las búsquedas de hoy en todas las llaves. Se reinicia ~2am.':'Revisa la API Key (YouTube Data API v3 y dominio permitido).';
       cont.innerHTML='<div style="color:#ef4444;padding:12px;font-size:12px">⚠️ '+msg+'<br><span style="color:#888">'+extra+'</span></div>';
       return;
     }
@@ -563,7 +601,31 @@ db.ref('musica').on('value',function(snap){
   if(playerReady&&(!actual||actual.played))reproducirCola();
 });
 
-renderSetup();
+// Cargar llaves: primero las locales, si no hay, las de Firebase (equipo nuevo)
+(function cargarKeysYArrancar(){
+  try{
+    var localKeys=JSON.parse(localStorage.getItem('a52_ytkeys')||'null');
+    if(localKeys&&localKeys.length){YT_KEYS=localKeys;_keyIdx=0;setActiveKey();renderSetup();return;}
+    // compatibilidad: una sola llave vieja
+    var vieja=localStorage.getItem('a52_ytkey');
+    if(vieja){YT_KEYS=[vieja];_keyIdx=0;setActiveKey();renderSetup();return;}
+  }catch(e){}
+  // No hay llaves locales -> buscar en Firebase
+  db.ref('config/ytkeys').once('value').then(function(snap){
+    var keys=snap.val();
+    if(keys&&keys.length){
+      YT_KEYS=Array.isArray(keys)?keys:Object.values(keys);
+      localStorage.setItem('a52_ytkeys',JSON.stringify(YT_KEYS));
+      _keyIdx=0;setActiveKey();renderSetup();return;
+    }
+    // intentar la llave única vieja en Firebase
+    db.ref('config/ytkey').once('value').then(function(s2){
+      var k=s2.val();
+      if(k){YT_KEYS=[k];localStorage.setItem('a52_ytkeys',JSON.stringify(YT_KEYS));_keyIdx=0;setActiveKey();}
+      renderSetup();
+    });
+  }).catch(function(){renderSetup();});
+})();
 </script>
 </body>
 </html>
