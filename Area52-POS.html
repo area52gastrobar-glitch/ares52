@@ -987,7 +987,7 @@ function renderPanelPedido(){
     +'<div style="color:var(--muted);font-size:11px">👤 cap. '+mesaActiva.cap+' · '+usuarioActivo.emoji+' '+esc(usuarioActivo.nombre)+'</div></div>'
     +'<button class="btn btn-sm btn-dark" onclick="cerrarPanel()">✕</button></div>'
     // PEDIDO ACTIVO ARRIBA
-    +'<div style="background:var(--bg);border-radius:10px;border:2px solid var(--accent)44;padding:10px 12px;margin-bottom:10px;min-height:90px">'
+    +'<div style="background:var(--bg);border-radius:10px;border:2px solid var(--accent)44;padding:10px 12px;margin-bottom:10px;min-height:90px;max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch">'
     +'<div class="section-title" style="color:var(--accent);margin-bottom:6px">🧾 Pedido activo'+(ped.length?' · '+ped.reduce(function(a,b){return a+b.qty;},0)+' ítems':'')+'</div>'
     +(ped.length?pedItems:'<div style="color:var(--dim);font-size:13px;text-align:center;padding:20px 14px">Sin productos aún<br><span style="font-size:11px">Selecciona productos abajo 👇</span></div>')
     +'</div>'
@@ -1007,7 +1007,7 @@ function renderSoloPedido(){
   var pp=document.getElementById('panel-pedido')||document.getElementById('panel-pedido-slot');
   if(pp&&mesaActiva){
     pp.id='panel-pedido';
-    pp.style.cssText='background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:85vh';
+    pp.style.cssText='background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;display:block';
     pp.innerHTML=renderPanelPedido();
     // Re-bind combo/pedido events since innerHTML was replaced
     var c=document.getElementById('content');
