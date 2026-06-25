@@ -125,6 +125,28 @@ var videoCache={};  // {key: videoId}
 var historialMusica={};  // {videoId:{cancion,artista,genero,veces}}
 var _autoIdx=0;
 var _ultimaAutoVid=null;  // para no repetir la última en modo aleatorio
+var _videosBloqueados={};  // videoIds que YouTube bloquea (LatinAutor, etc.) para no repetirlos
+var _ultProgreso={t:Date.now(),pos:-1};
+setInterval(function(){
+  // Vigilante anti-trabado: si hay canción activa pero no avanza en 9s, saltar
+  if(!playerReady||!actual)return;
+  var p=P&&P();if(!p||!p.getCurrentTime||!p.getPlayerState)return;
+  var st=p.getPlayerState();
+  // -1 sin iniciar, 3 buffering -> permitir; 1 playing -> debe avanzar la posición
+  var pos=0;try{pos=p.getCurrentTime();}catch(e){return;}
+  if(st===YT.PlayerState.PLAYING){
+    if(Math.abs(pos-_ultProgreso.pos)>0.3){_ultProgreso={t:Date.now(),pos:pos};}
+    else if(Date.now()-_ultProgreso.t>9000){
+      // Trabado reproduciendo sin avanzar -> saltar
+      _ultProgreso={t:Date.now(),pos:-1};saltarPorError();
+    }
+  } else if(st===YT.PlayerState.UNSTARTED||st===YT.PlayerState.CUED){
+    // Cargada pero nunca arranca en 9s -> saltar
+    if(Date.now()-_ultProgreso.t>9000){_ultProgreso={t:Date.now(),pos:-1};saltarPorError();}
+  } else {
+    _ultProgreso.t=Date.now();
+  }
+},2500);
 
 // ---------- SETUP API KEYS (con rotación) ----------
 function arrancarConKeys(){
@@ -215,14 +237,25 @@ function onStateDual(idx,e){
   actualizarBotonPlay();
 }
 function onErrorDual(idx,e){
-  // Si el video bloqueado es el del reproductor ACTIVO, saltar a la siguiente
   if(idx===activeIdx){
+    // Marcar este video como bloqueado para no volver a ponerlo
+    if(actual&&actual.videoId)_videosBloqueados[actual.videoId]=true;
     document.getElementById('nowTitle').textContent='⚠️ Video bloqueado, pasando a la siguiente...';
-    setTimeout(marcarYsiguiente,600);
+    // Liberar el seguro y saltar SIN contar la reproducción (fue error)
+    _avanzando=false;
+    setTimeout(function(){saltarPorError();},400);
   } else {
-    // Si el bloqueado era el precargado, descartar esa precarga
+    // El bloqueado era el precargado -> descartarlo
+    if(siguientePreload&&siguientePreload.videoId)_videosBloqueados[siguientePreload.videoId]=true;
     siguientePreload=null;
   }
+}
+function saltarPorError(){
+  // Igual que marcarYsiguiente pero NO cuenta el video (estaba bloqueado)
+  clearInterval(_monitorFin);
+  actual=null;
+  _avanzando=false;  // nunca quedarse trabado por error
+  reproducirCola();
 }
 function actualizarBotonPlay(){
   var p=P();
@@ -239,8 +272,8 @@ function togglePlay(){
 
 // ---------- COLA AGRUPADA POR GÉNERO ----------
 function colaOrdenada(){
-  // pendientes (no sonadas)
-  var pend=pedidos.filter(function(p){return !p.played;});
+  // pendientes (no sonadas y no bloqueadas)
+  var pend=pedidos.filter(function(p){return !p.played && !(p.videoId&&_videosBloqueados[p.videoId]);});
   // Agrupar por género (cada grupo ordenado por llegada)
   var grupos={};
   pend.forEach(function(p){var g=p.genero||'Otro';(grupos[g]=grupos[g]||[]).push(p);});
@@ -312,7 +345,7 @@ function reproducirCola(){
 }
 
 function reproducirMasSonadas(){
-  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId;});
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId&&!_videosBloqueados[h.videoId];});
   if(!lista.length){
     document.getElementById('nowTitle').textContent='Cola vacía';
     document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
