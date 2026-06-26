@@ -56,8 +56,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="player-box" style="position:relative">
       <div id="ytplayerA" style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
       <div id="ytplayerB" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none"></div>
-      <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000" allow="autoplay; fullscreen" allowfullscreen></iframe>
-      <button id="btnFullPromo" onclick="pantallaCompletaPromo()" style="display:none;position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;z-index:5">⛶ Pantalla completa</button>
+      <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000;z-index:10" allow="autoplay; fullscreen" allowfullscreen></iframe>
+      <button id="btnFullPromo" onclick="pantallaCompletaPromo()" style="display:none;position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;z-index:11">⛶ Pantalla completa</button>
     </div>
     <div class="now">
       <div class="lbl">▶ Sonando ahora</div>
@@ -567,6 +567,7 @@ function toggleVideoPromo(){
     // Mostrar video promo encima (la música de YouTube sigue sonando por debajo)
     frame.src=PROMO_URL;
     frame.style.display='block';
+    frame.style.zIndex='10';
     if(btnFull)btnFull.style.display='block';
     btn.innerHTML='📺 Volver al video';
     btn.classList.add('play');
