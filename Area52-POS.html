@@ -2932,7 +2932,7 @@ function renderCombos(){
     var c=isNuevo
       ?{nombre:'',precio:'',emoji:'🎁',ingredientes:[]}
       :(combos.find(function(x){return x.id===editandoCombo;})||{nombre:'',precio:'',emoji:'🎁',ingredientes:[]});
-    var curEmoji=c.emoji||'🎁';
+    var curEmoji=_comboTemp.emoji||c.emoji||'🎁';
 
     // Emoji buttons for combos (same EMOJIS list plus 🎁)
     var COMBO_EMOJIS=['🎁','🎉','🍻','🥃','🍺','🍷','🍹','🎊','⭐','🔥','💫','🎯'];
@@ -2941,8 +2941,8 @@ function renderCombos(){
       return'<button class="emj-btn" data-cei="'+i+'" style="font-size:22px;padding:4px;border:2px solid '+(sel?'#a855f7':'transparent')+';background:'+(sel?'#a855f722':'transparent')+';border-radius:8px;cursor:pointer;transition:all .15s">'+e+'</button>';
     }).join('');
 
-    // Ingredientes actuales del combo
-    var ingRows=(c.ingredientes||[]).map(function(ing,idx){
+    // Ingredientes actuales del combo (desde _comboTemp = ediciones en vivo)
+    var ingRows=(_comboTemp.ingredientes||[]).map(function(ing,idx){
       var esCat=ing.tipo==='categoria';
       var p=esCat?null:menu.find(function(m){return m.id===ing.prodId;});
       var emoji=esCat?'🗂️':(p?p.emoji:'?');
@@ -2983,7 +2983,7 @@ function renderCombos(){
       }).join('');
 
     // Costo aproximado
-    var costoAprox=(c.ingredientes||[]).reduce(function(a,ing){
+    var costoAprox=(_comboTemp.ingredientes||[]).reduce(function(a,ing){
       var p=menu.find(function(m){return m.id===ing.prodId;});
       return a+(p?p.precio*ing.cantidad:0);
     },0);
@@ -2993,9 +2993,9 @@ function renderCombos(){
       +'<div style="color:var(--accent);font-weight:800;font-size:14px;margin-bottom:14px">'+(isNuevo?'🎁 Nuevo combo':'✏️ Editar: '+esc(c.nombre||''))+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre del combo *</div>'
-          +'<input class="inp" id="cb-nombre" value="'+esc(c.nombre||'')+'" placeholder="Ej: Combo Rumba, Happy Hour..."/></div>'
+          +'<input class="inp" id="cb-nombre" value="'+esc(_comboTemp.nombre!=null?_comboTemp.nombre:(c.nombre||''))+'" placeholder="Ej: Combo Rumba, Happy Hour..."/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio de venta (COP) *</div>'
-          +'<input class="inp" id="cb-precio" type="number" value="'+(c.precio||'')+'" placeholder="0" oninput="actualizarInfoCombo()"/></div>'
+          +'<input class="inp" id="cb-precio" type="number" value="'+(_comboTemp.precio!=null&&_comboTemp.precio!==''?_comboTemp.precio:(c.precio||''))+'" placeholder="0" oninput="actualizarInfoCombo()"/></div>'
       +'</div>'
       // Info de ahorro
       +(costoAprox>0?'<div style="display:flex;gap:10px;margin-bottom:12px">'
@@ -3095,14 +3095,14 @@ var _comboTemp={ingredientes:[]};
 
 function nuevoCombo(){
   editandoCombo='nuevo';
-  _comboTemp={ingredientes:[]};
+  _comboTemp={ingredientes:[],nombre:'',precio:'',emoji:'🎁'};
   render();setTimeout(bindComboEmojiPicker,50);
 }
 function cancelarCombo(){editandoCombo=null;render();}
 function editarCombo(id){
   editandoCombo=id;
   var c=combos.find(function(x){return x.id===id;});
-  _comboTemp={ingredientes:c?JSON.parse(JSON.stringify(c.ingredientes)):[]};
+  _comboTemp={ingredientes:c?JSON.parse(JSON.stringify(c.ingredientes)):[],nombre:c?c.nombre:'',precio:c?c.precio:'',emoji:c?c.emoji:'🎁'};
   render();setTimeout(bindComboEmojiPicker,50);
 }
 function borrarCombo(id){
@@ -3132,7 +3132,14 @@ function bindComboEmojiPicker(){
 function limpiarCatSel(){var s=document.getElementById('cb-cat-sel');if(s)s.value='';}
 function limpiarProdSel(){var s=document.getElementById('cb-prod-sel');if(s)s.value='';}
 
+function _capturarCombo(){
+  var n=document.getElementById('cb-nombre');if(n)_comboTemp.nombre=n.value;
+  var p=document.getElementById('cb-precio');if(p)_comboTemp.precio=p.value;
+  var e=document.getElementById('cb-emoji');if(e)_comboTemp.emoji=e.value;
+}
+
 function agregarIngCombo(){
+  _capturarCombo();
   var prodSel=document.getElementById('cb-prod-sel');
   var catSel=document.getElementById('cb-cat-sel');
   var cantEl=document.getElementById('cb-prod-cant');
@@ -3182,6 +3189,7 @@ function agregarIngCombo(){
 }
 
 function quitarIngCombo(idx){
+  _capturarCombo();
   _comboTemp.ingredientes.splice(idx,1);
   render();setTimeout(bindComboEmojiPicker,50);
 }
