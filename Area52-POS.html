@@ -912,11 +912,11 @@ function renderPanelPedido(){
     return'<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1">'
       +'<div style="color:var(--text);font-size:12px;font-weight:600">'
-        +(it.isCustom?'✏️ '+esc(it.customNombre):it.isCombo?(it.comboEmoji+' '+esc(it.comboNombre)):it.isCubetazoMix?'🪣 Cubetazo mixto':(p?p.emoji+' ':'')+esc((p&&p.nombre)||'?'))
+        +(it.isCustom?'✏️ '+esc(it.customNombre):it.isCombo?(it.comboEmoji+' '+esc(it.comboNombre)):it.isCubetazoMix?('🪣 '+esc(it.cubMixNombre||'Cubetazo mixto')):(p?p.emoji+' ':'')+esc((p&&p.nombre)||'?'))
       +'</div>'
       +(it.isCustom?'<div style="color:#f5a623;font-size:10px;font-weight:700">Producto personalizado</div>':'')
       +(it.isCombo?'<div style="color:var(--gold);font-size:10px;font-weight:700">🎁 Combo · '+ingDesc+'</div>':'')
-      +(it.isCubetazoMix?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO MIXTO · '+(it.cubMixDetalle||[]).map(function(dd){return dd.cantidad+'×'+dd.emoji;}).join(' ')+'</div>':'')
+      +(it.isCubetazoMix?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 '+esc((it.cubMixNombre||'Cubetazo mixto').toUpperCase())+' · '+(it.cubMixDetalle||[]).map(function(dd){return dd.cantidad+'×'+dd.emoji;}).join(' ')+'</div>':'')
       +(it.cubeta?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO ×5</div>':'')
       +(it.varianteNombre?'<div style="color:var(--accent);font-size:10px;font-weight:700">📐 '+esc(it.varianteNombre)+'</div>':'')+'</div>'
       +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button data-act="ped-minus" data-idx="'+idx_+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">−</button>':'<button data-act="ped-minus-bloq" style="background:rgba(255,255,255,.05);color:var(--dim);border:none;border-radius:6px;width:26px;height:26px;cursor:not-allowed;font-size:13px;line-height:1" title="Solo admin o subadmin pueden restar">🔒</button>')
@@ -1003,7 +1003,7 @@ function renderPanelPedido(){
     // SELECTOR DE PRODUCTOS ABAJO
     +'<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:10px" class="mb8">'+pills
   +'<button onclick="abrirItemPersonalizado()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✏️ Otro</button>'
-  +'<button onclick="abrirCubetazoMixto()" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo mixto</button>'
+  +'<button onclick="abrirCubetazoMixto()" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo mixto</button>'+'<button onclick="abrirCubetazoNacional()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo nacional</button>'
   +'</div>'
     +'<div class="carta-grid">'
     +(esCombosTab?combosItems:cartaItems)
@@ -1517,6 +1517,28 @@ var CUBE_MIX_NOMBRES=['heineken','sol','miller'];
 var CUBE_MIX_PRECIO=32000;  // precio del balde/cubetazo (5 cervezas)
 var PROMO_NACIONAL_PRECIO=5000;  // precio promo de cerveza nacional unitaria
 var CUBE_MIX_TAM=5;         // cantidad de cervezas por balde
+var CUBE_NAC_NOMBRES=['aguila','poker'];  // coincide con Águila, Águila Light y Poker
+var CUBE_NAC_PRECIO=25000;  // precio del cubetazo nacional (5 cervezas)
+function abrirCubetazoNacional(){
+  if(!mesaActiva)return;
+  // Solo Águila, Águila Light y Poker
+  var cervezas=menu.filter(function(m){
+    var n=(m.nombre||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    var match=CUBE_NAC_NOMBRES.some(function(x){return n.indexOf(x)>=0;});
+    return match&&(ventaSinStock||m.stock>0);
+  });
+  if(!cervezas.length){alert('No hay Águila, Águila Light o Poker disponibles para el cubetazo nacional.');return;}
+  abrirDistribucion({
+    titulo:'Cubetazo nacional '+fmt(CUBE_NAC_PRECIO)+' (elige '+CUBE_MIX_TAM+')',
+    emoji:'🪣',
+    total:CUBE_MIX_TAM,
+    productos:cervezas.map(function(p){return {id:p.id,nombre:p.nombre,emoji:p.emoji,precio:Math.round(CUBE_NAC_PRECIO/CUBE_MIX_TAM),stock:p.stock};}),
+    onConfirm:function(cantidades){
+      confirmarCubetazoMixto(cantidades,CUBE_MIX_TAM,CUBE_NAC_PRECIO,'Cubetazo nacional');
+    }
+  });
+}
+
 function abrirCubetazoMixto(){
   if(!mesaActiva)return;
   // Solo Heineken, Sol y Miller
@@ -1538,27 +1560,25 @@ function abrirCubetazoMixto(){
   });
 }
 
-function confirmarCubetazoMixto(cantidades,tam){
+function confirmarCubetazoMixto(cantidades,tam,precioFijo,nombreCub){
   if(!mesaActiva)return;
   var id=mesaActiva.id;
   if(!pedidos[id])pedidos[id]=[];
-  // Construir lista de cervezas elegidas y calcular precio (cubeta/5 por unidad)
+  var precioBalde=(precioFijo!=null)?precioFijo:CUBE_MIX_PRECIO;
+  var etiqueta=nombreCub||'Cubetazo mixto';
+  // Construir lista de cervezas elegidas
   var detalle=[];
-  var precioTotal=0;
   Object.keys(cantidades).forEach(function(pid){
     var q=cantidades[pid];if(!q)return;
     var p=menu.find(function(m){return Number(m.id)===Number(pid);});
     if(!p)return;
-    var precioUnidad=Math.round((p.cubeta||p.precio*5)/5);
-    precioTotal+=precioUnidad*q;
+    var precioUnidad=Math.round(precioBalde/tam);
     detalle.push({prodId:p.id,nombre:p.nombre,emoji:p.emoji,cantidad:q,precioUnidad:precioUnidad});
   });
-  // El balde tiene precio fijo, sin importar el redondeo por unidad
-  precioTotal=CUBE_MIX_PRECIO;
   var newItem={
     pid:'cubmix_'+Date.now(),
     cubeta:false,qty:1,isCubetazoMix:true,
-    cubMixDetalle:detalle,cubMixPrecio:precioTotal,cubMixTam:tam
+    cubMixDetalle:detalle,cubMixPrecio:precioBalde,cubMixTam:tam,cubMixNombre:etiqueta
   };
   pedidos[id].push(newItem);
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
@@ -1569,7 +1589,7 @@ function confirmarCubetazoMixto(cantidades,tam){
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   var resumen=detalle.map(function(dd){return dd.cantidad+'× '+dd.nombre;}).join(', ');
-  showToast('🪣 Cubetazo mixto<br><span style="font-size:12px;opacity:.85">'+esc(resumen)+' · '+fmt(precioTotal)+'</span>','#22c55e');
+  showToast('🪣 '+esc(etiqueta)+'<br><span style="font-size:12px;opacity:.85">'+esc(resumen)+' · '+fmt(precioBalde)+'</span>','#22c55e');
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
 
@@ -1857,7 +1877,7 @@ function abrirDividirCuenta(){
 function nombreItemPed(it){
   if(it.isCustom)return '✏️ '+(it.customNombre||'');
   if(it.isCombo)return '🎁 '+(it.comboNombre||'Combo');
-  if(it.isCubetazoMix)return '🪣 Cubetazo mixto';
+  if(it.isCubetazoMix)return '🪣 '+(it.cubMixNombre||'Cubetazo mixto');
   var p=menu.find(function(m){return m.id==it.pid;});
   return (p?p.emoji+' '+p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'');
 }
@@ -1990,7 +2010,7 @@ function enviarAImpresora(mesa,ped,total,pagosList){
     var nombre,pr;
     if(it.isCustom){nombre=it.customNombre||'Personalizado';pr=it.customPrecio||0;}
     else if(it.isCombo){nombre=(it.comboNombre||'Combo');pr=it.comboPrecio||0;}
-    else if(it.isCubetazoMix){nombre='Cubetazo mixto';pr=it.cubMixPrecio||0;}
+    else if(it.isCubetazoMix){nombre=(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
     else{
       var p=menu.find(function(m){return m.id==it.pid;});
       nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'');
@@ -5278,7 +5298,7 @@ function imprimirPrecuenta(){
       var nombre,pr;
       if(it.isCustom){nombre='✏️ '+(it.customNombre||'');pr=it.customPrecio||0;}
       else if(it.isCombo){nombre='🎁 '+(it.comboNombre||'Combo');pr=it.comboPrecio||0;}
-      else if(it.isCubetazoMix){nombre='🪣 Cubetazo mixto';pr=it.cubMixPrecio||0;}
+      else if(it.isCubetazoMix){nombre='🪣 '+(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
       else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'');pr=precioItem(it);}
       return {nombre:nombre,qty:it.qty||1,total:pr*(it.qty||1)};
     });
@@ -5293,7 +5313,7 @@ function imprimirPrecuenta(){
     var nombre,pr;
     if(it.isCustom){nombre='✏️ '+esc(it.customNombre||'');pr=it.customPrecio||0;}
     else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
-    else if(it.isCubetazoMix){nombre='🪣 Cubetazo mixto';pr=it.cubMixPrecio||0;}
+    else if(it.isCubetazoMix){nombre='🪣 '+(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
     else{var p=menu.find(function(m){return m.id===it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||'?');pr=it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0);}
     return'<tr><td>'+nombre+'</td><td align="center">'+it.qty+'</td><td align="right">'+fmt(pr*it.qty)+'</td></tr>';
   }).join('');
