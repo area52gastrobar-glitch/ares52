@@ -350,7 +350,7 @@ var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var empleados=[];      // [{id, nombre, cargo, activo}]
 var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid}]
 var clientesCredito=[];// [{id, nombre, telefono, activo}]
-var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false};  // secciones plegables
+var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true};  // secciones plegables
 var ventasRappi=[];   // [{id,ts,items,total,uid}]
 var _rappiPedido=[];  // pedido en construcción
 var _rappiCat='Todos';
@@ -415,6 +415,11 @@ var fmtDate=function(ts){return new Date(ts).toLocaleDateString('es-CO');};
 var fmtTime=function(ts){return new Date(ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});};
 var fmtDT=function(ts){return fmtDate(ts)+' '+fmtTime(ts);};
 function todayStr(){return new Date().toLocaleDateString('es-CO');}
+// ── DÍA DE NEGOCIO (11am–5am): lo que pasa entre 00:00 y 04:59 cuenta para el día anterior ──
+var HORA_CIERRE_NEGOCIO=5;  // a las 5am cambia el día de negocio
+function fechaNegocio(ts){var d=new Date(ts);d.setHours(d.getHours()-HORA_CIERRE_NEGOCIO);return d;}
+function diaNegocioStr(ts){return fechaNegocio(ts).toLocaleDateString('es-CO');}
+function hoyNegocioStr(){return diaNegocioStr(Date.now());}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function precioItem(it){
   if(it.isCombo) return it.comboPrecio||0;
@@ -3614,6 +3619,36 @@ function verCierre(id){
 }
 
 /* ═══════════════ VENTAS ═══════════════ */
+function ventasDiariasHTML(){
+  if(!ventas.length)return '<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin ventas registradas</div>';
+  // Agrupar por día de negocio
+  var dias={};
+  ventas.forEach(function(v){
+    var k=diaNegocioStr(v.ts);
+    if(!dias[k])dias[k]={fecha:k,ts:fechaNegocio(v.ts).getTime(),total:0,n:0,porPago:{}};
+    dias[k].total+=v.total;dias[k].n++;
+    if(v.pagos&&v.pagos.length){v.pagos.forEach(function(p){dias[k].porPago[p.fp]=(dias[k].porPago[p.fp]||0)+p.monto;});}
+    else{dias[k].porPago[v.fp]=(dias[k].porPago[v.fp]||0)+v.total;}
+  });
+  // Ordenar por fecha desc (más reciente primero)
+  var lista=Object.values(dias).sort(function(a,b){return b.ts-a.ts;});
+  var hoyNeg=hoyNegocioStr();
+  return lista.map(function(d){
+    var esHoy=(d.fecha===hoyNeg);
+    var pagosTxt=FPAGO.filter(function(f){return d.porPago[f.id];}).map(function(f){
+      return '<span style="display:inline-flex;align-items:center;gap:3px;margin-right:10px;font-size:11px;color:var(--muted)">'+f.emoji+' '+fmt(d.porPago[f.id])+'</span>';
+    }).join('');
+    return '<div style="background:'+(esHoy?'#f5a62312':'var(--bg)')+';border:1px solid '+(esHoy?'#f5a62344':'var(--border)')+';border-radius:11px;padding:12px 14px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+        +'<div style="font-weight:800;font-size:14px">'+(esHoy?'🟢 Hoy · ':'📅 ')+d.fecha+'</div>'
+        +'<div style="color:var(--gold);font-weight:900;font-size:17px">'+fmt(d.total)+'</div>'
+      +'</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">'+d.n+' cobros</div>'
+      +'<div style="display:flex;flex-wrap:wrap">'+pagosTxt+'</div>'
+    +'</div>';
+  }).join('');
+}
+
 function renderVentas(){
   var puedeExcel=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='cajero');
   var hoyV=ventasTurno();
@@ -3753,6 +3788,9 @@ function renderVentas(){
       }).join('')
     +'</div>'
     +'</div>'
+    // ── VENTAS DIARIAS (por día de negocio 11am-5am) ──
+    +'<button data-act="toggle-sec" data-sec="ventasDiarias" style="width:100%;text-align:left;background:#f5a62318;border:1px solid #f5a62333;border-radius:10px;padding:10px 14px;margin:14px 0 8px;font-size:12px;color:#f5a623;font-weight:700;cursor:pointer">'+(_secOpen.ventasDiarias?'▼':'▶')+' 📅 Ventas por día (11am–5am)</button>'
+    +(_secOpen.ventasDiarias?'<div class="res-card full-col">'+ventasDiariasHTML()+'</div>':'')
     // ── HISTORIAL COMPLETO DE TODAS LAS VENTAS ──
     +'<button data-act="toggle-sec" data-sec="ranking" style="width:100%;text-align:left;background:#22c55e18;border:1px solid #22c55e33;border-radius:10px;padding:10px 14px;margin:14px 0 8px;font-size:12px;color:#22c55e;font-weight:700;cursor:pointer">'+(_secOpen.ranking?'▼':'▶')+' 📦 Unidades vendidas por producto (histórico)</button>'
     +(_secOpen.ranking?'<div class="res-card full-col">'+rankingTotalProductos()+'</div>':'')
@@ -5400,7 +5438,7 @@ function exportarExcel(){
   var gastDet=gastos.map(function(g){return{Fecha:fmtDate(g.ts),Hora:fmtTime(g.ts),Concepto:g.concepto,Categoria:g.categoria,Valor:g.valor,Usuario:g.uidNombre||g.uid||'',Notas:g.notas||''};});
   var ws2=X.utils.json_to_sheet(gastDet);X.utils.book_append_sheet(wb,ws2,'Gastos');
   // Por día
-  var pd={};ventas.forEach(function(v){var d=fmtDate(v.ts);if(!pd[d])pd[d]={Fecha:d,Ventas:0,Cobros:0};pd[d].Ventas+=v.total;pd[d].Cobros++;});
+  var pd={};ventas.forEach(function(v){var d=diaNegocioStr(v.ts);if(!pd[d])pd[d]={Fecha:d,Ventas:0,Cobros:0};pd[d].Ventas+=v.total;pd[d].Cobros++;});
   X.utils.book_append_sheet(wb,X.utils.json_to_sheet(Object.values(pd)),'Por día');
   // Por forma pago
   var pp={};ventas.forEach(function(v){var l=(FPAGO.find(function(f){return f.id===v.fp;})||{label:v.fp}).label;if(!pp[l])pp[l]={'Forma de pago':l,Cobros:0,'Total COP':0};pp[l].Cobros++;pp[l]['Total COP']+=v.total;});
