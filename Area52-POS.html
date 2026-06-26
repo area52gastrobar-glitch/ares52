@@ -893,8 +893,9 @@ function renderPanelPedido(){
   var cartaItems=fil.map(function(p){
     var ago=!ventaSinStock&&p.stock<=0;
     var enUso=(ped.filter(function(it){return it.pid===p.id;})).reduce(function(a,it){return a+(it.cubeta?it.qty*5:it.qty);},0);
-    var okN=!ago&&(p.stock-enUso)>=1;
-    var okC=!ago&&(p.stock-enUso)>=5;
+    // Si "vender sin stock" está activo, siempre se puede agregar
+    var okN=ventaSinStock||(!ago&&(p.stock-enUso)>=1);
+    var okC=ventaSinStock||(!ago&&(p.stock-enUso)>=5);
     return'<div class="carta-item" style="opacity:'+(p.stock<=0&&!ventaSinStock?0.4:1)+'">'
       +'<div class="flex-between"><span style="font-size:18px">'+p.emoji+'</span>'
       +(p.stock<=0&&!ventaSinStock?'<span class="tag" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;font-size:10px">AGOTADO</span>'
@@ -3185,6 +3186,7 @@ function agregarIngCombo(){
   if(prodSel)prodSel.value='';
   if(catSel)catSel.value='';
   cantEl.value=1;
+  showToast('✓ Ingrediente agregado al combo','#22c55e');
   render();setTimeout(bindComboEmojiPicker,50);
 }
 
