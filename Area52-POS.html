@@ -377,6 +377,7 @@ var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos
 var _socioActivo='CARLOS';  // currently selected socio
 var _socCatFiltro='Todos';  // category filter in socios tab
 var ventaSinStock=false;  // admin toggle: allow selling without stock
+var descuentoHabilitado=true;  // admin toggle: permitir el 10% de descuento
 var descuentos={};        // {mesaId: {pct:10, auth:'Nombre'}}
 var _invTab='carta';      // 'carta' or 'ingredientes'
 var mesaSize=80;  // px size of each mesa circle
@@ -455,6 +456,10 @@ function iniciarSync(){
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
+  fbOn('configBar',function(v){
+    if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
+    if(tabActual==='mesas'||tabActual==='admin')render();
+  });
   fbOn('formas',function(v){
     formasData={antejardIn:[],piso1:[],piso2:[]};
     if(v){
@@ -944,7 +949,7 @@ function renderPanelPedido(){
       +(desc?'<div class="flex-between mb8" style="background:#22c55e18;border-radius:8px;padding:4px 8px"><span style="color:#22c55e;font-size:12px;font-weight:700">🏷️ 10% · '+esc(desc.auth)+'</span><span style="color:#22c55e;font-weight:800">-'+fmt(Math.round(total*0.1))+'</span></div><div class="flex-between mb8"><span style="color:var(--gold);font-weight:800">CON DESCUENTO</span><span style="color:var(--gold);font-size:18px;font-weight:900">'+fmt(Math.round(total*0.9))+'</span></div>':'')
       +'<div style="display:flex;gap:7px">'
       +'<button class="btn btn-sm btn-blue btn-full" onclick="imprimirPrecuenta()" '+(ped.length?'':'disabled')+'>🖨️ Preorden</button>'
-      +(ped.length?'<button data-act="toggle-desc" style="flex:1;background:'+(desc?'#ef444418':'#22c55e18')+';color:'+(desc?'#ef4444':'#22c55e')+';border:1px solid '+(desc?'#ef444433':'#22c55e33')+';border-radius:8px;padding:5px 4px;font-size:10px;font-weight:700;cursor:pointer">'+(desc?'❌ Quitar desc':'🏷️ 10% Desc')+'</button>':'')
+      +((ped.length&&(descuentoHabilitado||desc))?'<button data-act="toggle-desc" style="flex:1;background:'+(desc?'#ef444418':'#22c55e18')+';color:'+(desc?'#ef4444':'#22c55e')+';border:1px solid '+(desc?'#ef444433':'#22c55e33')+';border-radius:8px;padding:5px 4px;font-size:10px;font-weight:700;cursor:pointer">'+(desc?'❌ Quitar desc':'🏷️ 10% Desc')+'</button>':'')
       +'<button class="btn btn-sm btn-outline btn-full" onclick="abrirTrasladoMesa()" '+(ped.length?'':'disabled')+' style="font-size:11px">🔀 Trasladar</button>'
       +'</div>'
       +(function(){
@@ -1985,12 +1990,19 @@ function confirmarCobro(){
   var fpPrincipal=pagosList.length===1?pagosList[0].fp:'mixto';
   var fpLabel=pagosList.length===1?pagosList[0].label:pagosList.map(function(p){return p.label+' '+fmt(p.monto);}).join(' + ');
 
+  // Detectar si algún producto se vendió sin stock (quedó en negativo)
+  var sinStock=ped.some(function(it){
+    if(it.isCustom||it.isCombo||it.isCubetazoMix)return false;
+    var p=menu.find(function(m){return m.id===it.pid;});
+    return p&&(parseInt(p.stock)||0)<0;
+  });
   var venta={
     mesa:mesa.nombre||('Mesa '+mesa.num),zona:mesa.zona,
     ts:Date.now(),total:total,
     items:JSON.parse(JSON.stringify(ped)),
     fp:fpPrincipal,fpLabel:fpLabel,
     pagos:pagosList,
+    sinStock:sinStock,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
   fbPush('ventas',venta);
@@ -2070,6 +2082,17 @@ function renderInventario(){
     +bajos.map(function(m){return'<div>'+m.emoji+' '+esc(m.nombre)+' — '+m.stock+' '+m.und+(m.stock===0?' · AGOTADO':'')+'</div>';}).join('')
     +bajosIng.map(function(i){return'<div>🧂 '+esc(i.nombre)+' — '+i.stock+' '+i.und+(i.stock===0?' · AGOTADO':'')+'</div>';}).join('')
     +'</div>':'';
+
+  // ── Reporte de stock NEGATIVO (vendido sin stock) ──
+  var negativos=menu.filter(function(m){return (parseInt(m.stock)||0)<0;});
+  var negIng=ingredientes.filter(function(i){return (parseInt(i.stock)||0)<0;});
+  var negHtml=(negativos.length||negIng.length)?'<div class="alert-box mb12" style="background:#38bdf812;border:1px solid #38bdf844">'
+    +'<div style="font-weight:700;margin-bottom:6px;color:#38bdf8">📉 Vendido sin stock (stock negativo)</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estas cantidades se vendieron sin tener inventario. El número es lo que debes reponer.</div>'
+    +negativos.map(function(m){return'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>'+m.emoji+' '+esc(m.nombre)+'</span><span style="color:#ef4444;font-weight:800">'+m.stock+' '+m.und+' ('+Math.abs(m.stock)+' de más)</span></div>';}).join('')
+    +negIng.map(function(i){return'<div style="display:flex;justify-content:space-between;padding:2px 0"><span>🧂 '+esc(i.nombre)+'</span><span style="color:#ef4444;font-weight:800">'+i.stock+' '+i.und+'</span></div>';}).join('')
+    +'</div>':'';
+  alertHtml=negHtml+alertHtml;
 
   // ── Tab pills ──────────────────────────────────────────────────────────────
   var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
@@ -2726,6 +2749,15 @@ function exportarInventarioExcel(){
 
 function toggleVentaSinStock(){
   ventaSinStock=!ventaSinStock;
+  render();
+}
+
+function toggleDescuento10(){
+  descuentoHabilitado=!descuentoHabilitado;
+  var r=ref('configBar/descuentoHabilitado');
+  if(r)r.set(descuentoHabilitado);
+  else fbSet('configBar',{descuentoHabilitado:descuentoHabilitado});
+  showToast(descuentoHabilitado?'🏷️ Descuento del 10% habilitado':'🚫 Descuento del 10% deshabilitado',descuentoHabilitado?'#22c55e':'#ef4444');
   render();
 }
 
@@ -4011,7 +4043,7 @@ function histTodasVentas(){
       }).join('')+'</div>'):'';
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-        +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+(z?z.label+' · ':'')+esc(v.mesa||'?')+'</div>'
+        +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+(z?z.label+' · ':'')+esc(v.mesa||'?')+(v.sinStock?' <span style="background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844;border-radius:99px;padding:1px 7px;font-size:9px;font-weight:700">⚠️ sin stock</span>':'')+'</div>'
         +'<div style="color:var(--accent);font-size:11px;font-weight:600">'+fpDisplay+(v.editadoFP?' <span style="color:#f5a623;font-size:9px">✏️ corregido</span>':'')+'</div>'
         +'<div style="color:var(--muted);font-size:10px">'+fmtDT(v.ts)+' · '+esc(v.uidNombre||v.uid||'')+'</div></div>'
         +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(v.total)+'</span>'
@@ -5143,6 +5175,19 @@ function renderAdmin(){
         +'border:none;border-radius:99px;width:52px;height:28px;cursor:pointer;'
         +'position:relative;transition:background .2s">'
         +'<div style="position:absolute;top:3px;'+(ventaSinStock?'right:3px':'left:3px')+';'
+          +'width:22px;height:22px;background:#fff;border-radius:50%;transition:all .2s"></div>'
+      +'</button>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0">'
+      +'<div>'
+        +'<div style="font-weight:700;font-size:13px">Descuento del 10%</div>'
+        +'<div style="color:var(--muted);font-size:11px;margin-top:2px">Permite aplicar el 10% de descuento en las mesas. Si lo apagas, el botón 🏷️ desaparece para todos.</div>'
+      +'</div>'
+      +'<button onclick="toggleDescuento10()" style="'
+        +'background:'+(descuentoHabilitado?'#22c55e':'var(--dim)')+';'
+        +'border:none;border-radius:99px;width:52px;height:28px;cursor:pointer;'
+        +'position:relative;transition:background .2s">'
+        +'<div style="position:absolute;top:3px;'+(descuentoHabilitado?'right:3px':'left:3px')+';'
           +'width:22px;height:22px;background:#fff;border-radius:50%;transition:all .2s"></div>'
       +'</button>'
     +'</div>'
