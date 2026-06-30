@@ -53,13 +53,13 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
 .hint{font-size:11px;color:var(--muted);line-height:1.5}
 @page{size:A4 portrait;margin:0}
 @media print{
-  body{background:#fff}
+  html,body{background:#0a0612;margin:0;padding:0}
   .sidebar,.btn-dl-single,.main-header{display:none!important}
-  .main{padding:0;display:block}
-  .grid{display:block}
-  .thumb-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100vh;page-break-after:always;break-after:page;margin:0;padding:0;overflow:hidden}
+  .main{padding:0;margin:0;display:block}
+  .grid{display:block;gap:0}
+  .thumb-wrap{display:block;width:100%;height:100vh;page-break-after:always;break-after:page;margin:0;padding:0;overflow:hidden}
   .thumb-wrap:last-child{page-break-after:auto;break-after:auto}
-  .thumb-wrap img{box-shadow:none;width:auto;height:auto;max-width:92vw;max-height:96vh;object-fit:contain;border-radius:0}
+  .thumb-wrap img{box-shadow:none;display:block;width:100%;height:100%;object-fit:cover;border-radius:0;margin:0}
 }
 </style>
 </head>
@@ -193,7 +193,7 @@ function updatePreview(){
   }).join('');
 }
 
-var CARD_W=720, CARD_H=1080;
+var CARD_W=794, CARD_H=1123;  // proporción A4 (llena la hoja al imprimir)
 function hexToRgb(h){h=h.replace('#','');return {r:parseInt(h.substr(0,2),16),g:parseInt(h.substr(2,2),16),b:parseInt(h.substr(4,2),16)};}
 function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();
@@ -246,14 +246,13 @@ function makeCardCanvas(mesa){
   ctx.fillStyle=rg;ctx.fillRect(0,0,CARD_W,CARD_H);
 
   ctx.strokeStyle=col;ctx.lineWidth=6;
-  roundRect(ctx,18,18,CARD_W-36,CARD_H-36,28);ctx.stroke();
+  roundRect(ctx,20,20,CARD_W-40,CARD_H-40,30);ctx.stroke();
   ctx.strokeStyle='rgba(255,255,255,0.10)';ctx.lineWidth=2;
-  roundRect(ctx,32,32,CARD_W-64,CARD_H-64,22);ctx.stroke();
+  roundRect(ctx,34,34,CARD_W-68,CARD_H-68,24);ctx.stroke();
 
   ctx.textAlign='center';
-  var MAXW=CARD_W-120;  // ancho máximo de texto (con márgenes)
+  var MAXW=CARD_W-160;  // ancho máximo de texto (con márgenes)
 
-  // Ajusta el tamaño de fuente para que el texto no exceda maxw
   function fitFont(text, weight, px, family, maxw){
     var s=px;
     ctx.font=weight+' '+s+"px '"+family+"', sans-serif";
@@ -263,49 +262,52 @@ function makeCardCanvas(mesa){
     return s;
   }
 
-  // Header (se reduce solo si no cabe)
+  // Alien aparte (el emoji mide mal junto al texto)
+  ctx.font="50px sans-serif";
+  ctx.fillText('👽', CARD_W/2, 110);
+  // Título "ÁREA 52" sin emoji, se ajusta para que siempre quepa
   ctx.fillStyle='#c9a0ff';
-  fitFont('👽 ÁREA 52','900',54,'Orbitron',MAXW);
-  ctx.fillText('👽 ÁREA 52', CARD_W/2, 118);
+  fitFont('ÁREA 52','900',66,'Orbitron',MAXW);
+  ctx.fillText('ÁREA 52', CARD_W/2, 182);
   ctx.fillStyle='#9a7ac0';
-  ctx.font="700 22px 'Orbitron', sans-serif";
-  ctx.fillText('G A S T R O   B A R', CARD_W/2, 156);
+  ctx.font="700 24px 'Orbitron', sans-serif";
+  ctx.fillText('G A S T R O   B A R', CARD_W/2, 222);
 
   // Badge de zona
   if(mesa.zone){
     var zt=mesa.zone.toUpperCase();
-    ctx.font="700 24px sans-serif";
-    var zw=ctx.measureText(zt).width+52;
-    roundRect(ctx,(CARD_W-zw)/2,182,zw,46,23);
+    ctx.font="700 26px sans-serif";
+    var zw=ctx.measureText(zt).width+56;
+    roundRect(ctx,(CARD_W-zw)/2,258,zw,50,25);
     ctx.fillStyle=col;ctx.fill();
     ctx.fillStyle='#ffffff';
-    ctx.fillText(zt, CARD_W/2, 214);
+    ctx.fillText(zt, CARD_W/2, 292);
   }
 
   // MESA + número grande
   ctx.fillStyle='#9a7ac0';
-  ctx.font="700 38px 'Orbitron', sans-serif";
-  ctx.fillText('MESA', CARD_W/2, 290);
+  ctx.font="700 42px 'Orbitron', sans-serif";
+  ctx.fillText('MESA', CARD_W/2, 380);
   ctx.fillStyle='#ffffff';
-  fitFont(String(mesa.num),'900',200,'Orbitron',MAXW);
-  ctx.shadowColor=col;ctx.shadowBlur=36;
-  ctx.fillText(String(mesa.num), CARD_W/2, 470);
+  fitFont(String(mesa.num),'900',220,'Orbitron',MAXW);
+  ctx.shadowColor=col;ctx.shadowBlur=40;
+  ctx.fillText(String(mesa.num), CARD_W/2, 562);
   ctx.shadowBlur=0;
 
-  // QR grande (centrado, dentro de los límites)
-  var qrSize=360;
-  var qrX=(CARD_W-qrSize)/2, qrY=540;
+  // QR grande
+  var qrSize=400;
+  var qrX=(CARD_W-qrSize)/2, qrY=602;
   var url=document.getElementById('qr-url').value.trim();
   var sep=url.indexOf('?')>=0?'&':'?';
   drawQR(ctx, url+sep+'mesa='+mesa.num, qrX, qrY, qrSize);
 
-  // Pie (dentro de la tarjeta)
+  // Pie
   ctx.fillStyle='#e8d5ff';
-  ctx.font="26px 'Special Elite', serif";
-  ctx.fillText('📲 Carta · Rocola · y más', CARD_W/2, qrY+qrSize+62);
+  ctx.font="28px 'Special Elite', serif";
+  ctx.fillText('📲 Carta · Rocola · y más', CARD_W/2, qrY+qrSize+58);
   ctx.fillStyle='#9a7ac0';
-  ctx.font="19px 'Special Elite', serif";
-  ctx.fillText('@area52.gastrobar', CARD_W/2, qrY+qrSize+96);
+  ctx.font="20px 'Special Elite', serif";
+  ctx.fillText('@area52.gastrobar', CARD_W/2, qrY+qrSize+92);
 
   return canvas;
 }
@@ -313,6 +315,21 @@ function makeCardCanvas(mesa){
 function generateAll(){
   var mesas=getMesas();
   if(!mesas.length){alert('No hay mesas para generar. Carga del POS o agrega zonas.');return;}
+  var grid=document.getElementById('grid');
+  grid.innerHTML='<div class="empty"><div class="icon">🛸</div><p>Generando...</p></div>';
+  // Esperar a que las fuentes (Orbitron) estén cargadas para medir bien el texto
+  var fontsReady = (document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
+  // Forzar la carga de las fuentes que usamos
+  try{
+    if(document.fonts&&document.fonts.load){
+      document.fonts.load("900 54px 'Orbitron'");
+      document.fonts.load("700 24px 'Orbitron'");
+      document.fonts.load("26px 'Special Elite'");
+    }
+  }catch(e){}
+  fontsReady.then(function(){ _doGenerate(mesas); });
+}
+function _doGenerate(mesas){
   var grid=document.getElementById('grid');
   grid.innerHTML='';
   generatedCards=[];
