@@ -2101,10 +2101,29 @@ function reimprimirUltimoTicket(){
 
 /* ═══════════ PROVEEDORES E INGRESO DE INVENTARIO ═══════════ */
 function abrirProveedores(){
+  function gastosProv(pv){
+    return gastos.filter(function(g){return g.provId===pv.id||(g.provNombre&&g.provNombre===pv.nombre);});
+  }
+  function ingresosProv(pv){
+    return ingresosInv.filter(function(r){return r.proveedor===pv.nombre;});
+  }
   var rows=proveedores.length?proveedores.map(function(pv){
-    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
-      +'<span style="font-size:13px">🏭 '+esc(pv.nombre)+'</span>'
-      +'<button onclick="borrarProveedor(\''+pv.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer">✕</button>'
+    var gs=gastosProv(pv);
+    var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
+    var ents=ingresosProv(pv);
+    return'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<span style="font-size:14px;font-weight:700">🏭 '+esc(pv.nombre)+'</span>'
+        +'<button onclick="borrarProveedor(\''+pv.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer">✕</button>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:8px">'
+        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">PAGADO</div><div style="color:#22c55e;font-weight:800;font-size:13px">'+fmt(totalPagado)+'</div></div>'
+        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">ENTRADAS INV.</div><div style="color:#38bdf8;font-weight:800;font-size:13px">'+ents.length+'</div></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px">'
+        +'<button onclick="pagarProveedor(\''+pv.id+'\')" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:7px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">💵 Pagar</button>'
+        +'<button onclick="verCuentaProveedor(\''+pv.id+'\')" style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">📋 Ver detalle</button>'
+      +'</div>'
     +'</div>';
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:14px;font-size:13px">Sin proveedores. Agrega el primero.</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:12px">🏭 Proveedores</div>'
@@ -2112,7 +2131,58 @@ function abrirProveedores(){
       +'<input class="inp" id="prov-nombre" placeholder="Nombre del proveedor" style="flex:1"/>'
       +'<button class="btn btn-green" onclick="agregarProveedor()">+ Agregar</button>'
     +'</div>'
-    +'<div style="max-height:50vh;overflow-y:auto">'+rows+'</div>');
+    +'<div style="max-height:55vh;overflow-y:auto">'+rows+'</div>');
+}
+function pagarProveedor(provId){
+  var pv=proveedores.find(function(p){return p.id===provId;});
+  if(!pv)return;
+  var fpOpts=FPAGO.slice().sort(function(a,b){return a.id==='efectivo'?-1:b.id==='efectivo'?1:0;}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💵 Pagar a proveedor</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">🏭 '+esc(pv.nombre)+'</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto *</div>'
+    +'<input class="inp" id="pp-concepto" placeholder="Ej: Factura #123, mercancía semana..."/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
+    +'<input class="inp money" id="pp-valor" type="text" inputmode="numeric" placeholder="0"/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Categoría</div>'
+    +'<select class="inp" id="pp-cat"><option value="Mercancía">Mercancía</option><option value="Insumos">Insumos</option></select></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de (forma de pago)</div>'
+    +'<select class="inp" id="pp-fp">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPagoProveedor(\''+provId+'\')">✓ Registrar pago</button>');
+}
+function confirmarPagoProveedor(provId){
+  var pv=proveedores.find(function(p){return p.id===provId;});
+  if(!pv)return;
+  var concepto=((document.getElementById('pp-concepto')||{}).value||'').trim();
+  var valor=moneyVal('pp-valor')||0;
+  var cat=(document.getElementById('pp-cat')||{}).value||'Mercancía';
+  var fp=(document.getElementById('pp-fp')||{}).value||'efectivo';
+  if(!concepto){alert('Escribe el concepto.');return;}
+  if(valor<=0){alert('Escribe el valor.');return;}
+  var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:cat,valor:valor,notas:'Pago a proveedor',fp:fp,provId:provId,provNombre:pv.nombre,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  fbPush('gastos',g);
+  closeModal1();
+  showToast('💵 Pago a '+esc(pv.nombre)+'<br><span style="font-size:12px;opacity:.85">'+fmt(valor)+' · sale de caja</span>','#22c55e');
+  render();
+}
+function verCuentaProveedor(provId){
+  var pv=proveedores.find(function(p){return p.id===provId;});
+  if(!pv)return;
+  var gs=gastos.filter(function(g){return g.provId===pv.id||(g.provNombre&&g.provNombre===pv.nombre);}).slice().sort(function(a,b){return b.ts-a.ts;});
+  var ents=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;}).slice().sort(function(a,b){return b.ts-a.ts;});
+  var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
+  var pagosRows=gs.length?gs.map(function(g){
+    return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>💵 '+esc(g.concepto)+'<br><span style="color:var(--muted);font-size:10px">'+fmtFechaCorta(g.ts)+' · '+esc(g.categoria)+'</span></span><span style="color:#22c55e;font-weight:700;white-space:nowrap">'+fmt(g.valor)+'</span></div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">Sin pagos registrados.</div>';
+  var entRows=ents.length?ents.map(function(r){
+    return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>📦 '+r.cantidad+'× '+esc(r.prodNombre)+'<br><span style="color:var(--muted);font-size:10px">'+(r.fecha||fmtFecha(r.ts))+(r.factura?' · Fact: '+esc(r.factura):'')+'</span></span></div>';
+  }).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">Sin entradas de inventario.</div>';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🏭 '+esc(pv.nombre)+'</div>'
+    +'<div style="background:var(--card2);border-radius:9px;padding:10px;margin-bottom:12px;text-align:center"><div style="color:var(--muted);font-size:10px">TOTAL PAGADO</div><div style="color:#22c55e;font-weight:900;font-size:20px">'+fmt(totalPagado)+'</div></div>'
+    +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">💵 PAGOS</div>'
+    +'<div style="max-height:25vh;overflow-y:auto;margin-bottom:12px">'+pagosRows+'</div>'
+    +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">📦 ENTRADAS DE INVENTARIO</div>'
+    +'<div style="max-height:25vh;overflow-y:auto;margin-bottom:14px">'+entRows+'</div>'
+    +'<button class="btn btn-full" onclick="abrirProveedores()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">‹ Volver</button>');
 }
 function agregarProveedor(){
   var n=(document.getElementById('prov-nombre')||{}).value;n=(n||'').trim();
@@ -3409,12 +3479,16 @@ function renderGastos(){
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto *</div>'
         +'<input class="inp" id="g-concepto" placeholder="Ej: 2 cajas cerveza, gas, taxi..."/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Categoría</div>'
-        +'<select class="inp" id="g-cat" onchange="toggleGastoEmpleado()">'
+        +'<select class="inp" id="g-cat" onchange="toggleGastoExtras()">'
         +CATG_GASTOS.map(function(c){return'<option>'+c+'</option>';}).join('')
         +'</select></div>'
       +'<div id="g-emp-wrap" style="grid-column:1/-1;display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">👷 Empleado (opcional, lo enlaza a su nómina)</div>'
         +'<select class="inp" id="g-emp"><option value="">— Sin empleado específico —</option>'
         +empleados.filter(function(e){return e.activo!==false;}).map(function(e){return'<option value="'+e.id+'">'+esc(e.nombre)+(e.cargo?' · '+esc(e.cargo):'')+'</option>';}).join('')
+        +'</select></div>'
+      +'<div id="g-prov-wrap" style="grid-column:1/-1;display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">🏭 Proveedor (le pagas este gasto)</div>'
+        +'<select class="inp" id="g-prov"><option value="">— Sin proveedor específico —</option>'
+        +proveedores.map(function(pv){return'<option value="'+pv.id+'">'+esc(pv.nombre)+'</option>';}).join('')
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago *</div>'
         +'<select class="inp" id="g-fp">'
@@ -3499,6 +3573,10 @@ function fmtFecha(ts){
   var d=new Date(ts);
   return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
 }
+function fmtFechaCorta(ts){
+  var d=new Date(ts);
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+String(d.getFullYear()).slice(-2)+' '+fmtTime(ts);
+}
 
 function exportarGastosExcel(){
   var rows=[['Fecha','Hora','Concepto','Categoría','Forma de pago','Valor','Usuario','Notas']];
@@ -3546,7 +3624,14 @@ function guardarGasto(){
   if(!concepto){alert('Escribe el concepto.');return;}
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
   var empId=(document.getElementById('g-emp')||{}).value||'';
+  var provId=(document.getElementById('g-prov')||{}).value||'';
   var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:categoria,valor:valor,notas:notas,fp:fp,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  if((categoria==='Mercancía'||categoria==='Insumos')&&provId){
+    var pv=proveedores.find(function(p){return p.id===provId;});
+    g.provId=provId;
+    g.provNombre=pv?pv.nombre:'';
+    showToast('🏭 Gasto enlazado a '+(pv?esc(pv.nombre):'proveedor'),'#38bdf8');
+  }
   if(categoria==='Personal'&&empId){
     var emp=empleados.find(function(e){return e.id===empId;});
     g.empId=empId;
@@ -3560,11 +3645,14 @@ function guardarGasto(){
   fbPush('gastos',g);
   render();
 }
-function toggleGastoEmpleado(){
+function toggleGastoExtras(){
   var cat=(document.getElementById('g-cat')||{}).value||'';
-  var wrap=document.getElementById('g-emp-wrap');
-  if(wrap)wrap.style.display=(cat==='Personal')?'block':'none';
+  var we=document.getElementById('g-emp-wrap');
+  if(we)we.style.display=(cat==='Personal')?'block':'none';
+  var wp=document.getElementById('g-prov-wrap');
+  if(wp)wp.style.display=(cat==='Mercancía'||cat==='Insumos')?'block':'none';
 }
+function toggleGastoEmpleado(){toggleGastoExtras();}
 function borrarGasto(id){
   if(!confirm('¿Eliminar este gasto?'))return;
   gastos=gastos.filter(function(g){return g.id!==id;});
@@ -4939,6 +5027,12 @@ function renderEmpleados(){
       return s;
     },0);
   }
+  // Detalle de movimientos de LARGO PLAZO (préstamos y abonos), ordenados por fecha
+  function movsLargoPlazo(empId){
+    return movEmpleados.filter(function(m){
+      return m.empId===empId && ((m.tipo==='prestamo'&&m.largoPlazo)||m.tipo==='abono');
+    }).sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+  }
   // Préstamos de ESTA semana (se descuentan del pago semanal)
   function prestamosSemana(empId){
     return movEmpleados.filter(function(m){
@@ -4991,8 +5085,25 @@ function renderEmpleados(){
         +(prestRows?'<div style="border-top:1px dashed var(--border);margin:5px 0;padding-top:5px">'+prestRows+'</div>':'')
         +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:5px;padding-top:6px"><span style="font-weight:800;font-size:13px">SALDO A PAGAR</span><span style="color:'+(saldoPagar>=0?'#22c55e':'#ef4444')+';font-weight:900;font-size:16px">'+fmt(saldoPagar)+'</span></div>'
       +'</div>'
-      // Largo plazo
-      +(largoP>0?'<div style="background:#f5a62312;border:1px solid #f5a62333;border-radius:9px;padding:8px 11px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center"><span style="color:#f5a623;font-size:12px;font-weight:700">📌 Préstamo largo plazo pendiente</span><span style="color:#f5a623;font-weight:900">'+fmt(largoP)+'</span></div>':'')
+      // Largo plazo CON DETALLE (cuáles, fecha, abonos)
+      +(largoP>0?(function(){
+          var movs=movsLargoPlazo(e.id);
+          var filas=movs.map(function(m){
+            if(m.tipo==='prestamo'){
+              return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #f5a62322">'
+                +'<span style="color:#e8d5c0">📌 '+(m.nota?esc(m.nota):'Préstamo')+'<br><span style="color:#9a7ac0;font-size:10px">'+fmtFechaCorta(m.ts)+'</span></span>'
+                +'<span style="color:#f5a623;font-weight:700;white-space:nowrap">'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
+            } else {
+              return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #22c55e22">'
+                +'<span style="color:#9fe8b0">✅ Abono<br><span style="color:#9a7ac0;font-size:10px">'+fmtFechaCorta(m.ts)+'</span></span>'
+                +'<span style="color:#22c55e;font-weight:700;white-space:nowrap">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
+            }
+          }).join('');
+          return '<div style="background:#f5a62312;border:1px solid #f5a62333;border-radius:9px;padding:9px 11px;margin-bottom:10px">'
+            +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="color:#f5a623;font-size:12px;font-weight:700">📌 Préstamos a largo plazo</span><span style="color:#f5a623;font-weight:900">Debe: '+fmt(largoP)+'</span></div>'
+            +filas
+          +'</div>';
+        })():'')
       // Botones
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
         +'<button data-act="emp-prestamo" data-emp="'+e.id+'" style="flex:1;min-width:90px;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">💸 Préstamo</button>'
