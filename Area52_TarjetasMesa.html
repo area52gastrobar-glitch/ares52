@@ -51,7 +51,16 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
 .empty .icon{font-size:48px}
 .empty p{font-size:13px;letter-spacing:1px;text-align:center;line-height:1.7}
 .hint{font-size:11px;color:var(--muted);line-height:1.5}
-@media print{.sidebar{display:none}.main{padding:4px}.grid{grid-template-columns:repeat(3,1fr);gap:8px}.btn-dl-single,.main-header{display:none}.thumb-wrap img{box-shadow:none}}
+@page{size:A4 portrait;margin:0}
+@media print{
+  body{background:#fff}
+  .sidebar,.btn-dl-single,.main-header{display:none!important}
+  .main{padding:0;display:block}
+  .grid{display:block}
+  .thumb-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100vh;page-break-after:always;break-after:page;margin:0;padding:0}
+  .thumb-wrap:last-child{page-break-after:auto;break-after:auto}
+  .thumb-wrap img{box-shadow:none;width:auto;height:94vh;max-width:94vw;border-radius:0}
+}
 </style>
 </head>
 <body>
@@ -86,7 +95,8 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
     <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
     <button class="btn btn-gen" id="btn-gen" onclick="generateAll()">⚡ Generar todas</button>
     <button class="btn btn-dl" id="btn-dl-all" onclick="downloadAll()" disabled>📦 Descargar ZIP</button>
-    <button class="btn btn-ghost" onclick="window.print()">🖨️ Imprimir vista</button>
+    <button class="btn btn-ghost" onclick="window.print()">🖨️ Imprimir (1 por hoja)</button>
+    <div class="hint" style="margin-top:2px">Para 4/6/8 por hoja usa la opción <b>«Páginas por hoja»</b> del diálogo de impresión.</div>
   </div>
 </div>
 
