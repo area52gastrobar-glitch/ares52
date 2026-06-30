@@ -300,7 +300,7 @@ var ROLES={
   admin:   {label:'Administrador',  color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina','admin']},
   subadmin:{label:'Subadministrador',color:'#38bdf8',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
   cajero:  {label:'Cajero',         color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
-  mesero:  {label:'Mesero',         color:'#22c55e',tabs:['mesas','gastos','socios','cocina']}
+  mesero:  {label:'Mesero',         color:'#22c55e',tabs:['mesas','inventario','gastos','socios','cocina']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
   caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',rappi:'🛵 Rappi',socios:'🤝 Socios',empleados:'👷 Empleados',creditos:'📒 Fiados',saneamiento:'🧼 Saneamiento',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
@@ -347,13 +347,17 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
-var empleados=[];      // [{id, nombre, cargo, activo}]
-var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid}]
+var proveedores=[];  // [{id, nombre}]
+var ingresosInv=[];  // [{id, ts, fecha, prodId, prodNombre, cantidad, proveedor, factura, uid, uidNombre}]
+var empleados=[];      // [{id, nombre, cargo, activo, pagoDiario}]
+var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid, largoPlazo, semanaKey}]
+var asistenciaEmp={};  // {empId_YYYY-MM-DD: true} días trabajados
+var _empSemanaOffset=0;  // navegación de semana en nómina
 var clientesCredito=[];// [{id, nombre, telefono, activo}]
-var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true,stockBajo:false};  // secciones plegables
+var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true,stockBajo:false,socProds:false};  // secciones plegables
 var ventasRappi=[];   // [{id,ts,items,total,uid}]
 var _rappiPedido=[];  // pedido en construcción
-var _rappiCat='Todos';
+var _rappiCat='';  // categoría abierta en acordeón Rappi
 var cierresRappi=[];  // histórico de cierres de Rappi
 var saneamientoChecks={};  // {fecha_areaId: {check,uid,hora}}
 var saneamientoSemanal={};  // {semana_actId: {fecha,insumo,responsable,obs}}
@@ -375,7 +379,7 @@ var SAN_SEMANAL=[
 var _mesesOpen={};  // meses expandidos en historial
 var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos:[{ts,valor,fp}]}]
 var _socioActivo='CARLOS';  // currently selected socio
-var _socCatFiltro='Todos';  // category filter in socios tab
+var _socCatFiltro='';  // categoría abierta en el acordeón de socios (vacío = todas cerradas)
 var ventaSinStock=false;  // admin toggle: allow selling without stock
 var descuentoHabilitado=true;  // admin toggle: permitir el 10% de descuento
 var descuentos={};        // {mesaId: {pct:10, auth:'Nombre'}}
@@ -412,6 +416,20 @@ var dragState=null;
 /* ═══════════════ UTILS ═══════════════ */
 function zonaKey(z){ return z==='antejardín'?'antejardIn':z; }
 var fmt=function(n){return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n||0);};
+// ── Formateo de miles en campos de dinero ──
+function moneyFmt(s){var d=String(s==null?'':s).replace(/[^0-9]/g,'');if(!d)return'';return parseInt(d,10).toLocaleString('es-CO');}
+function moneyVal(idOrEl){var el=(typeof idOrEl==='string')?document.getElementById(idOrEl):idOrEl;if(!el)return 0;return parseInt(String(el.value).replace(/[^0-9]/g,''),10)||0;}
+document.addEventListener('input',function(e){
+  var t=e.target;
+  if(t&&t.classList&&t.classList.contains('money')){
+    var digitsBefore=String(t.value).slice(0,t.selectionStart||0).replace(/[^0-9]/g,'').length;
+    t.value=moneyFmt(t.value);
+    // Reposicionar el cursor tras el dígito correspondiente
+    var idx=0,seen=0;
+    while(idx<t.value.length&&seen<digitsBefore){if(/[0-9]/.test(t.value[idx]))seen++;idx++;}
+    try{t.setSelectionRange(idx,idx);}catch(err){}
+  }
+},true);
 var fmtDate=function(ts){return new Date(ts).toLocaleDateString('es-CO');};
 var fmtTime=function(ts){return new Date(ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});};
 var fmtDT=function(ts){return fmtDate(ts)+' '+fmtTime(ts);};
@@ -460,6 +478,8 @@ function iniciarSync(){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
     if(tabActual==='mesas'||tabActual==='admin')render();
   });
+  fbOn('proveedores',function(v){proveedores=v?(Array.isArray(v)?v:Object.values(v)):[];if(tabActual==='inventario')render();});
+  fbOn('ingresosInv',function(v){ingresosInv=v?(Array.isArray(v)?v:Object.values(v)):[];if(tabActual==='inventario')render();});
   fbOn('formas',function(v){
     formasData={antejardIn:[],piso1:[],piso2:[]};
     if(v){
@@ -491,6 +511,7 @@ function iniciarSync(){
     consumoSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='socios')render();
   });
+  fbOn('asistenciaEmp',function(v){asistenciaEmp=v||{};if(tabActual==='empleados')render();});
   fbOn('empleados',function(v){
     empleados=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='empleados')render();
@@ -1430,39 +1451,49 @@ function ajustarStockItem(item,delta){
     var signoM=delta<0?-1:1;
     (item.cubMixDetalle||[]).forEach(function(dd){
       var pp=menu.find(function(m){return Number(m.id)===Number(dd.prodId);});
-      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a+(dd.cantidad*Math.abs(delta)*signoM));}
+      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=a+(dd.cantidad*Math.abs(delta)*signoM);}
     });
     var moM={};menu.forEach(function(m){moM[m.id]=m;});fbSet('menu',moM);
     return;
   }
   if(item.isCombo){
-    var c=combos.find(function(x){return x.id===item.pid;});
-    if(!c)return;
-    (c.ingredientes||item.comboIngredientes||[]).forEach(function(ing){
+    // Usar los ingredientes YA RESUELTOS guardados en el item (con las elecciones del cliente),
+    // no buscar el combo por item.pid (que es 'combo_<id>_<ts>' y nunca coincide).
+    var ingsCombo=item.comboIngredientes||[];
+    if(!ingsCombo.length){
+      // Respaldo: intentar por comboId
+      var cId=item.comboId||item.pid;
+      var cc=combos.find(function(x){return String(x.id)===String(cId);});
+      if(cc)ingsCombo=cc.ingredientes||[];
+    }
+    ingsCombo.forEach(function(ing){
       var cant=(ing.cantidad||1)*Math.abs(delta);
       var signo=delta<0?-1:1;
       if(ing.prodId!=null){
         var pp=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
-        if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a+(cant*signo));}
+        if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=a+(cant*signo);}
       }
       if(ing.ingId!=null){
         var ii=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
-        if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=Math.max(0,ai+(cant*signo));guardarIngredientes();}
+        if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=ai+(cant*signo);guardarIngredientes();}
       }
     });
+    var moC={};menu.forEach(function(m){moC[m.id]=m;});fbSet('menu',moC);
+    return;
+  } else if(false){
   } else {
     var p=menu.find(function(m){return Number(m.id)===Number(item.pid);});
     if(!p)return;
     var c2=item.cubeta?Math.abs(delta)*5:Math.abs(delta);
     var s=delta<0?-1:1;
     var a2=parseInt(p.stock);if(isNaN(a2))a2=0;
-    p.stock=Math.max(0,a2+(c2*s));
+    p.stock=a2+(c2*s);
     // Receta
     if(p.receta&&p.receta.length){
       p.receta.forEach(function(ri){
         var ing2=menu.find(function(m){return Number(m.id)===Number(ri.pid);});
-        if(ing2){var b=parseInt(ing2.stock);if(isNaN(b))b=0;ing2.stock=Math.max(0,b+(ri.cantidad*Math.abs(delta)*s));}
-        else{var iI=ingredientes.find(function(i){return Number(i.id)===Number(ri.pid);});if(iI){var bi=parseInt(iI.stock);if(isNaN(bi))bi=0;iI.stock=Math.max(0,bi+(ri.cantidad*Math.abs(delta)*s));guardarIngredientes();}}
+        if(ing2){var b=parseInt(ing2.stock);if(isNaN(b))b=0;ing2.stock=b+(ri.cantidad*Math.abs(delta)*s);}
+        else{var iI=ingredientes.find(function(i){return Number(i.id)===Number(ri.pid);});if(iI){var bi=parseInt(iI.stock);if(isNaN(bi))bi=0;iI.stock=bi+(ri.cantidad*Math.abs(delta)*s);guardarIngredientes();}}
       });
     }
   }
@@ -1596,7 +1627,7 @@ function confirmarCubetazoMixto(cantidades,tam,precioFijo,nombreCub){
   // Descontar stock de cada cerveza
   detalle.forEach(function(dd){
     var pp=menu.find(function(m){return Number(m.id)===Number(dd.prodId);});
-    if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a-dd.cantidad);}
+    if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=a-dd.cantidad;}
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   var resumen=detalle.map(function(dd){return dd.cantidad+'× '+dd.nombre;}).join(', ');
@@ -1698,7 +1729,7 @@ function abrirAbonoMesa(){
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Quién abona? (opcional)</div>'
     +'<input class="inp" id="abono-nombre" placeholder="Ej: Juan, Mesa, etc."/></div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto del abono *</div>'
-    +'<input class="inp" id="abono-monto" type="number" value="'+falta+'" inputmode="numeric"/></div>'
+    +'<input class="inp money" id="abono-monto" type="text" value="'+moneyFmt(falta)+'" inputmode="numeric"/></div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
     +'<select class="inp" id="abono-fp">'+fpOpts+'</select></div>'
     +'<button class="btn btn-green btn-full" onclick="guardarAbonoMesa()">💵 Registrar abono</button>');
@@ -1706,7 +1737,7 @@ function abrirAbonoMesa(){
 
 function guardarAbonoMesa(){
   if(!mesaActiva)return;
-  var monto=parseInt((document.getElementById('abono-monto')||{}).value)||0;
+  var monto=moneyVal('abono-monto')||0;
   var fp=(document.getElementById('abono-fp')||{}).value||'efectivo';
   var nombre=((document.getElementById('abono-nombre')||{}).value||'').trim()||'Abono';
   if(monto<=0){alert('Escribe el monto.');return;}
@@ -1767,7 +1798,7 @@ function abrirCobro(){
         +'<span style="color:'+f.color+';font-weight:700;font-size:13px;flex:1">'+f.label+'</span>'
         +'<div style="display:flex;align-items:center;gap:5px">'
         +'<button data-act="minus" data-fpid="'+fid+'" style="background:var(--dim);color:var(--muted);border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:700">−</button>'
-        +'<input type="number" id="fp-inp-'+fid+'" value="'+(val||'')+'" placeholder="0"'
+        +'<input type="text" inputmode="numeric" id="fp-inp-'+fid+'" class="money" value="'+moneyFmt(val||'')+'" placeholder="0"'
         +' data-fpid="'+fid+'" data-act="input"'
         +' style="width:90px;background:var(--bg);border:1px solid '+(val>0?f.color:'var(--border)')+';border-radius:7px;padding:5px 8px;color:var(--text);font-size:13px;font-weight:700;text-align:right;outline:none"/>'
         +'<button data-act="plus" data-fpid="'+fid+'" style="background:var(--dim);color:var(--muted);border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;font-size:13px;font-weight:700">+</button>'
@@ -1827,7 +1858,7 @@ function abrirCobro(){
 }
 
 function setPago(fpId, rawVal){
-  var val=parseInt(rawVal)||0;
+  var val=parseInt(String(rawVal).replace(/[^0-9]/g,''))||0;
   if(val<0)val=0;
   window._pagosParciales[fpId]=val;
   var el=document.getElementById('fp-inp-'+fpId);
@@ -1841,7 +1872,7 @@ function ajustarPago(fpId, delta){
   var nuevo=Math.max(0,cur+delta);
   window._pagosParciales[fpId]=nuevo;
   var el=document.getElementById('fp-inp-'+fpId);
-  if(el){el.value=nuevo||'';var f=FPAGO.find(function(x){return x.id===fpId;});if(f)el.style.borderColor=nuevo>0?f.color:'var(--border)';}
+  if(el){el.value=nuevo?moneyFmt(nuevo):'';var f=FPAGO.find(function(x){return x.id===fpId;});if(f)el.style.borderColor=nuevo>0?f.color:'var(--border)';}
   actualizarBarraCobro();
 }
 
@@ -1850,7 +1881,7 @@ function llenarConPendiente(fpId){
   var pendiente=Math.max(0,window._totalCobro-pagado);
   window._pagosParciales[fpId]=pendiente;
   var el=document.getElementById('fp-inp-'+fpId);
-  if(el){el.value=pendiente||'';var f=FPAGO.find(function(x){return x.id===fpId;});if(f)el.style.borderColor=pendiente>0?f.color:'var(--border)';}
+  if(el){el.value=pendiente?moneyFmt(pendiente):'';var f=FPAGO.find(function(x){return x.id===fpId;});if(f)el.style.borderColor=pendiente>0?f.color:'var(--border)';}
   actualizarBarraCobro();
 }
 
@@ -2068,10 +2099,103 @@ function reimprimirUltimoTicket(){
   imprimirRecibo(t.mesa,t.ped,t.total,t.pagos);
 }
 
+/* ═══════════ PROVEEDORES E INGRESO DE INVENTARIO ═══════════ */
+function abrirProveedores(){
+  var rows=proveedores.length?proveedores.map(function(pv){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:13px">🏭 '+esc(pv.nombre)+'</span>'
+      +'<button onclick="borrarProveedor(\''+pv.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer">✕</button>'
+    +'</div>';
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:14px;font-size:13px">Sin proveedores. Agrega el primero.</div>';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:12px">🏭 Proveedores</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+      +'<input class="inp" id="prov-nombre" placeholder="Nombre del proveedor" style="flex:1"/>'
+      +'<button class="btn btn-green" onclick="agregarProveedor()">+ Agregar</button>'
+    +'</div>'
+    +'<div style="max-height:50vh;overflow-y:auto">'+rows+'</div>');
+}
+function agregarProveedor(){
+  var n=(document.getElementById('prov-nombre')||{}).value;n=(n||'').trim();
+  if(!n){alert('Escribe el nombre del proveedor.');return;}
+  proveedores.push({id:'prov_'+Date.now(),nombre:n});
+  var ob={};proveedores.forEach(function(p){ob[p.id]=p;});fbSet('proveedores',ob);
+  abrirProveedores();
+}
+function borrarProveedor(id){
+  if(!confirm('¿Eliminar este proveedor?'))return;
+  proveedores=proveedores.filter(function(p){return p.id!==id;});
+  var ob={};proveedores.forEach(function(p){ob[p.id]=p;});fbSet('proveedores',ob);
+  abrirProveedores();
+}
+
+function abrirIngresoInventario(){
+  if(!proveedores.length){
+    alert('Primero crea al menos un proveedor. Pídele al administrador que agregue proveedores en 🏭 Proveedores.');
+    return;
+  }
+  var hoy=new Date().toISOString().slice(0,10);
+  // Lista de productos (carta + ingredientes)
+  var prodOpts='<option value="">— Producto —</option>'
+    +'<optgroup label="Carta">'+menu.map(function(m){return'<option value="p:'+m.id+'">'+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'
+    +'<optgroup label="Ingredientes">'+ingredientes.map(function(i){return'<option value="i:'+i.id+'">'+esc(i.nombre)+'</option>';}).join('')+'</optgroup>';
+  var provOpts=proveedores.map(function(pv){return'<option value="'+pv.id+'">'+esc(pv.nombre)+'</option>';}).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:12px">➕ Ingresar inventario</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Producto *</div>'
+      +'<select class="inp" id="ing-prod">'+prodOpts+'</select></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad que entra *</div>'
+      +'<input class="inp" id="ing-cant" type="number" inputmode="numeric" min="1" placeholder="0"/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Proveedor *</div>'
+      +'<select class="inp" id="ing-prov">'+provOpts+'</select></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">N° de factura</div>'
+      +'<input class="inp" id="ing-factura" placeholder="Ej: 00123"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Fecha</div>'
+      +'<input class="inp" id="ing-fecha" type="date" value="'+hoy+'"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarIngresoInventario()">✓ Registrar ingreso</button>');
+}
+
+function guardarIngresoInventario(){
+  var prodVal=(document.getElementById('ing-prod')||{}).value||'';
+  var cant=parseInt((document.getElementById('ing-cant')||{}).value)||0;
+  var provId=(document.getElementById('ing-prov')||{}).value||'';
+  var factura=((document.getElementById('ing-factura')||{}).value||'').trim();
+  var fecha=(document.getElementById('ing-fecha')||{}).value||new Date().toISOString().slice(0,10);
+  if(!prodVal){alert('Selecciona el producto.');return;}
+  if(cant<=0){alert('La cantidad debe ser mayor a 0.');return;}
+  if(!provId){alert('Selecciona el proveedor.');return;}
+  var prov=proveedores.find(function(p){return p.id===provId;});
+  var tipo=prodVal.charAt(0); var pid=prodVal.slice(2);
+  var prodNombre='';
+  if(tipo==='p'){
+    var p=menu.find(function(m){return String(m.id)===String(pid);});
+    if(p){var a=parseInt(p.stock)||0;p.stock=a+cant;prodNombre=p.nombre;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);}
+  } else {
+    var ing=ingredientes.find(function(m){return String(m.id)===String(pid);});
+    if(ing){var b=parseInt(ing.stock)||0;ing.stock=b+cant;prodNombre=ing.nombre;var io={};ingredientes.forEach(function(m){io[m.id]=m;});fbSet('ingredientes',io);}
+  }
+  // Registrar el ingreso
+  var registro={id:'ing_'+Date.now(),ts:Date.now(),fecha:fecha,prodTipo:tipo,prodId:pid,prodNombre:prodNombre,cantidad:cant,proveedor:prov?prov.nombre:'',factura:factura,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  fbPush('ingresosInv',registro);
+  closeModal1();
+  showToast('➕ Ingreso registrado<br><span style="font-size:12px;opacity:.85">'+cant+'× '+esc(prodNombre)+' · '+esc(prov?prov.nombre:'')+'</span>','#22c55e');
+  render();
+}
+
+function verIngresosInv(){
+  var rows=ingresosInv.slice().reverse().map(function(r){
+    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin-bottom:7px">'
+      +'<div style="display:flex;justify-content:space-between"><span style="font-weight:700;font-size:13px">'+esc(r.prodNombre)+' <b style="color:#22c55e">+'+r.cantidad+'</b></span><span style="color:var(--muted);font-size:11px">'+esc(r.fecha||'')+'</span></div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:3px">🏭 '+esc(r.proveedor||'-')+(r.factura?' · 🧾 '+esc(r.factura):'')+' · '+esc(r.uidNombre||'')+'</div>'
+    +'</div>';
+  }).join('')||'<div style="color:var(--muted);text-align:center;padding:16px">Sin ingresos registrados</div>';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:12px">📋 Ingresos de inventario</div>'
+    +'<div style="max-height:60vh;overflow-y:auto">'+rows+'</div>');
+}
+
 /* ═══════════════ INVENTARIO ═══════════════ */
 function renderInventario(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
-  var esCajero=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='cajero');
+  // Edición directa del inventario (precios, ±, borrar) SOLO admin. Los demás solo usan "➕ Ingresar inventario".
+  var esCajero=esAdmin;
   var invTab=_invTab||'carta';
 
   // ── Alerts ────────────────────────────────────────────────────────────────
@@ -2100,8 +2224,11 @@ function renderInventario(){
   alertHtml=negHtml+alertHtml;
 
   // ── Tab pills ──────────────────────────────────────────────────────────────
-  var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
-    +'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>'
+  var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
+    +'<button onclick="abrirIngresoInventario()" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer">➕ Ingresar inventario</button>'
+    +(esAdmin?'<button onclick="abrirProveedores()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🏭 Proveedores</button>':'')
+    +(esAdmin?'<button onclick="verIngresosInv()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Ingresos</button>':'')
+    +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
       var sel=invTab===t;
@@ -2160,7 +2287,7 @@ function renderInventario(){
           +(canEdit
             ?'<button data-act="inv-minus" data-pid="'+p.id+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">−</button>'
             :'')
-          +'<button data-act="inv-edit-stock" data-pid="'+p.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';background:none;border:none;cursor:'+(canEdit?'pointer':'default')+';padding:2px 4px;border-radius:4px">'+(canEdit?'<u>':'')+p.stock+(canEdit?'</u>':'')+'</button>'
+          +'<button data-act="inv-edit-stock" data-pid="'+p.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';font-weight:'+(p.stock<0?'900':'800')+';background:'+(p.stock<0?'#ef444415':'none')+';border:none;cursor:'+(canEdit?'pointer':'default')+';padding:2px 6px;border-radius:4px">'+(canEdit?'<u>':'')+p.stock+(canEdit?'</u>':'')+'</button>'
           +(canEdit
             ?'<button data-act="inv-plus" data-pid="'+p.id+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">+</button>'
             :'')
@@ -2239,7 +2366,7 @@ function renderCarta(){
           +'<input class="inp" id="f-cat" list="cats-dl" value="'+esc(p.cat||'')+'" placeholder="Ej: Cervezas" style="flex:1"/>'
           +'<datalist id="cats-dl">'+catOpts+'</datalist></div></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio detal (COP) *</div>'
-          +'<input class="inp" id="f-precio" type="number" value="'+(p.precio||'')+'" placeholder="0"/></div>'
+          +'<input class="inp money" id="f-precio" type="text" value="'+moneyFmt(p.precio||'')+'" placeholder="0" inputmode="numeric"/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Stock inicial</div>'
           +'<div style="display:flex;gap:5px">'
           +'<input class="inp" id="f-stock" type="number" value="'+(p.stock||'')+'" placeholder="0" style="flex:1"/>'
@@ -2255,9 +2382,9 @@ function renderCarta(){
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-comida" '+(p.esComida?'checked':'')+'/> '
         +'👨‍🍳 Va a pantalla de cocina</label>'
-      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Personal $22.000 · Mediana $32.000)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: Personal)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" placeholder="Precio" value="'+(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
+      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Personal $22.000 · Mediana $32.000)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: Personal)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
         +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:3px">🪣 Precio CUBETAZO ×5 (COP)</div>'
-        +'<input class="inp" id="f-cubeta" type="number" value="'+(p.cubeta||'')+'" placeholder="Ej: 20000"/>'
+        +'<input class="inp money" id="f-cubeta" type="text" value="'+moneyFmt(p.cubeta||'')+'" placeholder="Ej: 20.000" inputmode="numeric"/>'
       +'</div>'
       +'<div style="margin-bottom:14px">'
         +'<div style="color:var(--muted);font-size:11px;margin-bottom:7px">Icono del producto</div>'
@@ -2382,7 +2509,7 @@ function abrirItemPersonalizado(){
     +'</div>'
     +'<div style="margin-bottom:16px">'
       +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px">Valor (COP) *</div>'
-      +'<input class="inp" id="ci-valor" type="number" placeholder="0" min="0"/>'
+      +'<input class="inp money" id="ci-valor" type="text" placeholder="0" inputmode="numeric"/>'
       +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
       +[5000,10000,15000,20000,25000,30000,50000].map(function(v){
         '<button data-qv="'+v+'" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">'+fmt(v)+'</button>';
@@ -2399,7 +2526,7 @@ function abrirItemPersonalizado(){
 
 function confirmarItemPersonalizado(){
   var nombre=((document.getElementById('ci-nombre')||{}).value||'').trim();
-  var valor=parseInt((document.getElementById('ci-valor')||{}).value)||0;
+  var valor=moneyVal('ci-valor')||0;
   if(!nombre){alert('Escribe el nombre o descripción.');return;}
   if(valor<=0){alert('Escribe un valor mayor a cero.');return;}
   var id=mesaActiva.id;
@@ -2456,7 +2583,7 @@ function abrirEditStockModal(id, esIng){
     +'<div style="color:var(--muted);font-size:12px;margin-top:2px">Stock actual: <strong>'+item.stock+' '+item.und+'</strong></div></div>'
     +'<div style="margin-bottom:14px">'
       +'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">Nuevo stock (corrección manual)</div>'
-      +'<input class="inp" id="edit-stock-val" type="number" min="0" value="'+item.stock+'" autofocus/>'
+      +'<input class="inp" id="edit-stock-val" type="number" value="'+item.stock+'" autofocus/>'
     +'</div>'
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
@@ -2467,7 +2594,7 @@ function abrirEditStockModal(id, esIng){
 
 function confirmarEditStock(id, esIng){
   var val=parseInt((document.getElementById('edit-stock-val')||{}).value);
-  if(isNaN(val)||val<0){alert('Ingresa un valor válido.');return;}
+  if(isNaN(val)){alert('Ingresa un valor válido.');return;}
   if(esIng){
     var ing=ingredientes.find(function(x){return x.id===id;});
     if(ing){ing.stock=val;guardarIngredientes();}
@@ -2685,7 +2812,7 @@ function agregarVariante(){
   row.style.cssText='display:flex;gap:6px;margin-bottom:6px';
   row.id='vrow-'+vi;
   row.innerHTML='<input class="inp inp-sm" placeholder="Nombre (ej: Mediana)" style="flex:2" data-vnom="'+vi+'"/>'
-    +'<input class="inp inp-sm" type="number" placeholder="Precio" style="flex:1" data-vpre="'+vi+'"/>'
+    +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" style="flex:1" data-vpre="'+vi+'"/>'
     +'<button onclick="this.parentElement.remove()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>';
   list.appendChild(row);
   row.querySelector('[data-vnom]').focus();
@@ -2876,11 +3003,11 @@ function confirmarComboEnPedido(cb, selecciones){
     var cant=ing.cantidad||1;
     if(ing.prodId!=null){
       var pp=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
-      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a-cant);}
+      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=a-cant;}
     }
     if(ing.ingId!=null){
       var ii=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
-      if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=Math.max(0,ai-cant);guardarIngredientes();}
+      if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=ai-cant;guardarIngredientes();}
     }
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
@@ -2928,7 +3055,7 @@ function agregarIngReceta(){
 
 function guardarProd(){
   var nombre=(document.getElementById('f-nombre')||{}).value;nombre=nombre?nombre.trim():'';
-  var precio=parseInt((document.getElementById('f-precio')||{}).value)||0;
+  var precio=moneyVal('f-precio')||0;
   var cat=((document.getElementById('f-cat')||{}).value||'').trim();
   var stock=parseInt((document.getElementById('f-stock')||{}).value)||0;
   var und=(document.getElementById('f-und')||{}).value||'und';
@@ -2941,10 +3068,10 @@ function guardarProd(){
     var vi=el.getAttribute('data-vnom');
     var nom=el.value.trim();
     var preEl=document.querySelector('[data-vpre="'+vi+'"]');
-    var pre=preEl?parseInt(preEl.value)||0:0;
+    var pre=preEl?parseInt(String(preEl.value).replace(/[^0-9]/g,''))||0:0;
     if(nom&&pre>0) variantes.push({nombre:nom,precio:pre});
   });
-  var cubeta=cerv?(parseInt((document.getElementById('f-cubeta')||{}).value)||null):null;
+  var cubeta=cerv?(moneyVal('f-cubeta')||null):null;
   var emoji=(document.getElementById('f-emoji')||{}).value||'🍺';
   if(!nombre){alert('Escribe el nombre.');return;}
   if(!precio){alert('Escribe el precio.');return;}
@@ -3033,7 +3160,7 @@ function renderCombos(){
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre del combo *</div>'
           +'<input class="inp" id="cb-nombre" value="'+esc(_comboTemp.nombre!=null?_comboTemp.nombre:(c.nombre||''))+'" placeholder="Ej: Combo Rumba, Happy Hour..."/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio de venta (COP) *</div>'
-          +'<input class="inp" id="cb-precio" type="number" value="'+(_comboTemp.precio!=null&&_comboTemp.precio!==''?_comboTemp.precio:(c.precio||''))+'" placeholder="0" oninput="actualizarInfoCombo()"/></div>'
+          +'<input class="inp money" id="cb-precio" type="text" value="'+moneyFmt(_comboTemp.precio!=null&&_comboTemp.precio!==''?_comboTemp.precio:(c.precio||''))+'" placeholder="0" inputmode="numeric" oninput="actualizarInfoCombo()"/></div>'
       +'</div>'
       // Info de ahorro
       +(costoAprox>0?'<div style="display:flex;gap:10px;margin-bottom:12px">'
@@ -3240,7 +3367,7 @@ function cambiarCantIngCombo(idx,val){
 }
 
 function actualizarInfoCombo(){
-  var precio=parseInt((document.getElementById('cb-precio')||{}).value)||0;
+  var precio=moneyVal('cb-precio')||0;
   var costoEl=document.getElementById('cb-costo');
   var ahorroEl=document.getElementById('cb-ahorro');
   if(costoEl){
@@ -3255,7 +3382,7 @@ function actualizarInfoCombo(){
 
 function guardarCombo(){
   var nombre=((document.getElementById('cb-nombre')||{}).value||'').trim();
-  var precio=parseInt((document.getElementById('cb-precio')||{}).value)||0;
+  var precio=moneyVal('cb-precio')||0;
   var emoji=(document.getElementById('cb-emoji')||{}).value||'🎁';
   if(!nombre){alert('Escribe el nombre del combo.');return;}
   if(!precio||precio<=0){alert('Escribe el precio de venta.');return;}
@@ -3282,15 +3409,19 @@ function renderGastos(){
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto *</div>'
         +'<input class="inp" id="g-concepto" placeholder="Ej: 2 cajas cerveza, gas, taxi..."/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Categoría</div>'
-        +'<select class="inp" id="g-cat">'
+        +'<select class="inp" id="g-cat" onchange="toggleGastoEmpleado()">'
         +CATG_GASTOS.map(function(c){return'<option>'+c+'</option>';}).join('')
+        +'</select></div>'
+      +'<div id="g-emp-wrap" style="grid-column:1/-1;display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">👷 Empleado (opcional, lo enlaza a su nómina)</div>'
+        +'<select class="inp" id="g-emp"><option value="">— Sin empleado específico —</option>'
+        +empleados.filter(function(e){return e.activo!==false;}).map(function(e){return'<option value="'+e.id+'">'+esc(e.nombre)+(e.cargo?' · '+esc(e.cargo):'')+'</option>';}).join('')
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago *</div>'
         +'<select class="inp" id="g-fp">'
         +FPAGO.slice().sort(function(a,b){return (a.id==='efectivo'?-1:b.id==='efectivo'?1:0);}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
-        +'<input class="inp" id="g-valor" type="number" placeholder="0"/></div>'
+        +'<input class="inp money" id="g-valor" type="text" placeholder="0" inputmode="numeric"/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Notas (opcional)</div>'
         +'<input class="inp" id="g-notas" placeholder="Notas adicionales..."/></div>'
     +'</div>'
@@ -3408,15 +3539,31 @@ function exportarGastosExcel(){
 }
 function guardarGasto(){
   var concepto=(document.getElementById('g-concepto')||{}).value;concepto=concepto?concepto.trim():'';
-  var valor=parseInt((document.getElementById('g-valor')||{}).value)||0;
+  var valor=moneyVal('g-valor')||0;
   var categoria=(document.getElementById('g-cat')||{}).value||'Otro';
   var notas=(document.getElementById('g-notas')||{}).value||'';
   var fp=(document.getElementById('g-fp')||{}).value||'efectivo';
   if(!concepto){alert('Escribe el concepto.');return;}
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
+  var empId=(document.getElementById('g-emp')||{}).value||'';
   var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:categoria,valor:valor,notas:notas,fp:fp,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  if(categoria==='Personal'&&empId){
+    var emp=empleados.find(function(e){return e.id===empId;});
+    g.empId=empId;
+    // Registrar como préstamo (esta semana) en la nómina del empleado
+    var semKey=_fechaKey(_sanLunes(0));
+    var mov={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:'prestamo',valor:valor,fp:fp,nota:concepto,largoPlazo:false,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,fromGasto:true};
+    movEmpleados.push(mov);
+    var rm=ref('movEmpleados');if(rm)rm.push(mov);else fbSet('movEmpleados',movEmpleados);
+    showToast('💸 Gasto enlazado a '+(emp?esc(emp.nombre):'empleado')+'<br><span style="font-size:12px;opacity:.85">Se descuenta de su nómina esta semana</span>','#ef4444');
+  }
   fbPush('gastos',g);
   render();
+}
+function toggleGastoEmpleado(){
+  var cat=(document.getElementById('g-cat')||{}).value||'';
+  var wrap=document.getElementById('g-emp-wrap');
+  if(wrap)wrap.style.display=(cat==='Personal')?'block':'none';
 }
 function borrarGasto(id){
   if(!confirm('¿Eliminar este gasto?'))return;
@@ -3473,7 +3620,7 @@ function renderCaja(){
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px;margin-top:8px">Caja inicial en efectivo</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Caja inicial en efectivo</div>'
-        +FPAGO.map(function(f){return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:16px">'+f.emoji+'</span><span style="color:'+f.color+';font-weight:700;font-size:12px;min-width:80px">'+f.label+'</span><input class="inp inp-sm" type="number" placeholder="0" value="'+(cajaHoy['ini_'+f.id]||0)+'" data-fp-ini="'+f.id+'" style="flex:1"/></div>';}).join('')+'<div style="color:var(--muted);font-size:12px;margin-top:2px">Total: '+fmt(FPAGO.reduce(function(a,f){return a+(cajaHoy['ini_'+f.id]||0);},0))+'</div></div>'
+        +FPAGO.map(function(f){return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:16px">'+f.emoji+'</span><span style="color:'+f.color+';font-weight:700;font-size:12px;min-width:80px">'+f.label+'</span><input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="0" value="'+moneyFmt(cajaHoy['ini_'+f.id]||0)+'" data-fp-ini="'+f.id+'" style="flex:1"/></div>';}).join('')+'<div style="color:var(--muted);font-size:12px;margin-top:2px">Total: '+fmt(FPAGO.reduce(function(a,f){return a+(cajaHoy['ini_'+f.id]||0);},0))+'</div></div>'
       +'<div style="display:flex;align-items:flex-end">'
         +'<button class="btn btn-gold btn-full" onclick="guardarCajaInicial()">Guardar caja inicial</button></div>'
     +'</div></div>':'';
@@ -3516,7 +3663,7 @@ function guardarCajaInicial(){
   var total=0;
   document.querySelectorAll('[data-fp-ini]').forEach(function(el){
     var fp=el.getAttribute('data-fp-ini');
-    var v=parseInt(el.value)||0;
+    var v=parseInt(String(el.value).replace(/[^0-9]/g,''))||0;
     cajaHoy['ini_'+fp]=v;
     total+=v;
   });
@@ -4209,12 +4356,12 @@ function abrirTrasladoTarjeta(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🔄 Trasladar Tarjeta → Bre-B</div>'
     +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">Disponible en tarjeta: <b style="color:#F59E0B">'+fmt(disponible)+'</b></div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto a trasladar a Bre-B</div>'
-    +'<input class="inp" id="trasl-valor" type="number" value="'+disponible+'" inputmode="numeric"/></div>'
+    +'<input class="inp money" id="trasl-valor" type="text" value="'+moneyFmt(disponible)+'" inputmode="numeric"/></div>'
     +'<button class="btn btn-green btn-full" onclick="confirmarTraslado()">🔄 Confirmar traslado</button>');
 }
 
 function confirmarTraslado(){
-  var valor=parseInt((document.getElementById('trasl-valor')||{}).value)||0;
+  var valor=moneyVal('trasl-valor')||0;
   var disponible=cajaHoy.ini_tarjeta||0;
   if(valor<=0){alert('Escribe el monto.');return;}
   if(valor>disponible){alert('No puedes trasladar más de lo disponible en tarjeta ('+fmt(disponible)+').');return;}
@@ -4242,24 +4389,30 @@ function renderRappi(){
       +'<span style="font-size:18px">'+(p?p.emoji:'📦')+'</span>'
       +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(p?p.nombre:it.nombre||'?')+'</div>'
         +'<div style="color:var(--muted);font-size:11px">x'+it.qty+'</div></div>'
-      +'<input type="number" value="'+(it.valor||0)+'" onchange="setValorRappi('+idx+',this.value)" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px;font-size:13px;text-align:right" inputmode="numeric"/>'
+      +'<input type="text" inputmode="numeric" class="money" value="'+moneyFmt(it.valor||0)+'" onchange="setValorRappi('+idx+',this.value)" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px;font-size:13px;text-align:right" inputmode="numeric"/>'
       +'<button onclick="quitarRappiItem('+idx+')" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px">✕</button>'
     +'</div>';
   }).join('');
 
-  // Selector de productos
-  var cats=['Todos'].concat(menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort());
-  var pills=cats.map(function(c){
-    var sel=_rappiCat===c;
-    return'<button onclick="_rappiCat=\''+c.replace(/'/g,"\\'")+'\';render()" style="background:'+(sel?'var(--accent)':'var(--card)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">'+esc(c)+'</button>';
-  }).join('');
-  var fil=menu.filter(function(m){return _rappiCat==='Todos'||m.cat===_rappiCat;});
-  var prodBtns=fil.map(function(p){
-    return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left">'
-      +'<div style="font-size:18px">'+p.emoji+'</div>'
-      +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</div>'
-      +'<div style="font-size:10px;color:var(--muted)">Stock: '+(parseInt(p.stock)||0)+' · '+fmt(p.precio)+'</div>'
-    +'</button>';
+  // Selector de productos por ACORDEÓN de categorías
+  var catsR=menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort();
+  var acordeonRappi=catsR.map(function(cat){
+    var prods=menu.filter(function(m){return m.cat===cat;});
+    if(!prods.length)return'';
+    var abierta=(_rappiCat===cat);
+    var head='<button onclick="_rappiCat=(_rappiCat===\''+cat.replace(/'/g,"\\'")+'\'?\'\':\''+cat.replace(/'/g,"\\'")+'\');render()" style="width:100%;text-align:left;background:var(--card);border:1px solid '+(abierta?'#FF6B00':'var(--border)')+';border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;color:'+(abierta?'#FF6B00':'var(--text)')+';cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
+      +'<span>'+esc(cat)+'</span><span style="font-size:11px;color:var(--muted)">'+prods.length+' '+(abierta?'▲':'▼')+'</span></button>';
+    var body='';
+    if(abierta){
+      body='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+prods.map(function(p){
+        return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left">'
+          +'<div style="font-size:18px">'+p.emoji+'</div>'
+          +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</div>'
+          +'<div style="font-size:10px;color:var(--muted)">Stock: '+(parseInt(p.stock)||0)+' · '+fmt(p.precio)+'</div>'
+        +'</button>';
+      }).join('')+'</div>';
+    }
+    return'<div style="margin-bottom:6px">'+head+body+'</div>';
   }).join('');
 
   return'<div>'
@@ -4283,8 +4436,8 @@ function renderRappi(){
         +'<button onclick="registrarVentaRappi()" style="width:100%;margin-top:10px;background:#FF6B00;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer">🛵 Registrar venta Rappi</button>':'')
     +'</div>'
     // Selector productos
-    +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;overflow-x:auto">'+pills+'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">'+prodBtns+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;font-weight:700;margin-bottom:8px">➕ AGREGAR PRODUCTO (toca una categoría)</div>'
+    +'<div style="margin-bottom:14px">'+acordeonRappi+'</div>'
     // Cierre de Rappi (manual, cuando Rappi deposita en la cuenta)
     +(esAdmin
       ?'<div style="background:#FF6B0018;border:1px solid #FF6B0033;border-radius:10px;padding:12px;margin-bottom:12px">'
@@ -4319,7 +4472,7 @@ function quitarRappiItem(idx){
 }
 
 function setValorRappi(idx,val){
-  if(_rappiPedido[idx])_rappiPedido[idx].valor=parseInt(val)||0;
+  if(_rappiPedido[idx])_rappiPedido[idx].valor=parseInt(String(val).replace(/[^0-9]/g,''))||0;
   // no render para no perder foco; el total se actualiza al registrar
 }
 
@@ -4330,7 +4483,7 @@ function registrarVentaRappi(){
   // Descontar inventario
   _rappiPedido.forEach(function(it){
     var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
-    if(p){var a=parseInt(p.stock);if(isNaN(a))a=0;p.stock=Math.max(0,a-it.qty);}
+    if(p){var a=parseInt(p.stock);if(isNaN(a))a=0;p.stock=a-it.qty;}
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   // Registrar venta Rappi (separada)
@@ -4475,6 +4628,44 @@ function _sanLunes(offset){
 function _fechaKey(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
 function _semanaKey(lunes){return _fechaKey(lunes);}
 
+function diligenciarSaneamientoTodo(){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador.');return;}
+  var lunes=_sanLunes(_sanSemanaOffset);
+  var fechas=[];for(var i=0;i<7;i++){var d=new Date(lunes);d.setDate(d.getDate()+i);fechas.push(d);}
+  var semKey=_semanaKey(lunes);
+  var rango=lunes.getDate()+'/'+(lunes.getMonth()+1)+' al '+fechas[6].getDate()+'/'+(fechas[6].getMonth()+1);
+  if(!confirm('¿Marcar como COMPLETO todo el saneamiento de la semana ('+rango+')?\n\nSe marcarán todas las áreas diarias (sin fechas futuras) y todas las tareas semanales. Quedará registrado a tu nombre.'))return;
+  var hoy=new Date();
+  function horaDe(d){
+    // Si el día ya pasó, usar una hora típica de cierre; si es hoy, la hora actual
+    var base=new Date(d);
+    if(_fechaKey(d)===_fechaKey(hoy)){base=hoy;}
+    else{base.setHours(23,0,0,0);}
+    return ('0'+base.getHours()).slice(-2)+':'+('0'+base.getMinutes()).slice(-2);
+  }
+  // Diario: todas las áreas en los días que NO son futuros
+  SAN_AREAS.forEach(function(a){
+    fechas.forEach(function(d){
+      if(d>hoy)return;  // no marcar días futuros
+      var key=_fechaKey(d)+'_'+a.id;
+      if(!(saneamientoChecks[key]&&saneamientoChecks[key].check)){
+        saneamientoChecks[key]={check:true,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,hora:horaDe(d),ts:Date.now()};
+      }
+    });
+  });
+  // Semanal: todas las tareas
+  SAN_SEMANAL.forEach(function(s){
+    var key=semKey+'_'+s.id;
+    if(!(saneamientoSemanal[key]&&saneamientoSemanal[key].check)){
+      saneamientoSemanal[key]={check:true,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,hora:horaDe(hoy),ts:Date.now()};
+    }
+  });
+  fbSet('saneamientoChecks',saneamientoChecks);
+  fbSet('saneamientoSemanal',saneamientoSemanal);
+  showToast('✅ Saneamiento de la semana diligenciado completo','#22c55e');
+  render();
+}
+
 function renderSaneamiento(){
   var DIAS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
   var lunes=_sanLunes(_sanSemanaOffset);
@@ -4532,6 +4723,7 @@ function renderSaneamiento(){
         +'<button onclick="imprimirSaneamiento()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">🖨️ PDF</button>'
       +'</div>'
     +'</div>'
+    +((usuarioActivo&&usuarioActivo.rol==='admin')?'<button onclick="diligenciarSaneamientoTodo()" style="width:100%;background:#a855f7;color:#fff;border:none;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:12px">✅ Diligenciar TODA la semana (admin)</button>':'')
     // Navegación de semana
     +'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border-radius:10px;padding:8px 12px;margin-bottom:12px">'
       +'<button onclick="_sanSemanaOffset--;render()" style="background:var(--card2);border:none;color:var(--text);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:16px">‹</button>'
@@ -4663,7 +4855,7 @@ function abrirPagoCredito(deudaId){
       +'<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;padding-top:6px;margin-top:4px;border-top:1px solid var(--accent)33"><span>Total</span><span style="color:var(--accent)">'+fmt(d.total)+'</span></div>'
     +'</div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor del pago *</div>'
-    +'<input class="inp" id="pago-valor" type="number" value="'+pend+'" inputmode="numeric"/></div>'
+    +'<input class="inp money" id="pago-valor" type="text" value="'+moneyFmt(pend)+'" inputmode="numeric"/></div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
     +'<select class="inp" id="pago-fp">'+fpOpts+'</select></div>'
     +'<button class="btn btn-green btn-full" onclick="confirmarPagoCredito(\''+deudaId+'\')">💵 Confirmar pago</button>');
@@ -4672,7 +4864,7 @@ function abrirPagoCredito(deudaId){
 function confirmarPagoCredito(deudaId){
   var d=deudasCredito.find(function(x){return x.id===deudaId;});
   if(!d)return;
-  var valor=parseInt((document.getElementById('pago-valor')||{}).value)||0;
+  var valor=moneyVal('pago-valor')||0;
   var fp=(document.getElementById('pago-fp')||{}).value||'efectivo';
   var pend=d.total-(d.pagado||0);
   if(valor<=0){alert('Escribe el valor.');return;}
@@ -4713,65 +4905,91 @@ function confirmarPagoCredito(deudaId){
 
 function renderEmpleados(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+  var DIAS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  var lunes=_sanLunes(_empSemanaOffset);
+  var fechas=[];for(var i=0;i<7;i++){var d=new Date(lunes);d.setDate(d.getDate()+i);fechas.push(d);}
+  var semKey=_fechaKey(lunes);
+  var rango=lunes.getDate()+'/'+(lunes.getMonth()+1)+' al '+fechas[6].getDate()+'/'+(fechas[6].getMonth()+1);
+  var hoy=new Date();
 
-  // Compute saldo de prestamos por empleado
-  function saldoPrestamo(empId){
+  // Saldo de préstamos a LARGO PLAZO (pendientes, no de esta semana)
+  function saldoLargoPlazo(empId){
     return movEmpleados.filter(function(m){return m.empId===empId;}).reduce(function(s,m){
-      if(m.tipo==='prestamo')return s+m.valor;
+      if(m.tipo==='prestamo'&&m.largoPlazo)return s+m.valor;
       if(m.tipo==='abono')return s-m.valor;
       return s;
     },0);
   }
+  // Préstamos de ESTA semana (se descuentan del pago semanal)
+  function prestamosSemana(empId){
+    return movEmpleados.filter(function(m){
+      return m.empId===empId&&m.tipo==='prestamo'&&!m.largoPlazo&&m.semanaKey===semKey;
+    });
+  }
 
   var empCards=empleados.filter(function(e){return e.activo!==false;}).map(function(e){
-    var saldo=saldoPrestamo(e.id);
-    var totalPagado=movEmpleados.filter(function(m){return m.empId===e.id&&m.tipo==='salario';}).reduce(function(s,m){return s+m.valor;},0);
+    var diario=parseInt(e.pagoDiario)||0;
+    // Días trabajados esta semana
+    var diasTrab=0;
+    var diasBtns=fechas.map(function(d,idx){
+      var k=e.id+'_'+_fechaKey(d);
+      var trab=!!asistenciaEmp[k];
+      if(trab)diasTrab++;
+      var futuro=d>hoy;
+      return'<button data-act="emp-dia" data-key="'+k+'" '+(futuro?'disabled':'')+' style="flex:1;min-width:38px;background:'+(trab?'#22c55e':'var(--card)')+';color:'+(trab?'#000':'var(--muted)')+';border:1px solid '+(trab?'#22c55e':'var(--border)')+';border-radius:8px;padding:7px 2px;font-size:11px;font-weight:700;cursor:'+(futuro?'not-allowed':'pointer')+';opacity:'+(futuro?'.3':'1')+'">'+DIAS[idx]+'<br><span style="font-size:13px">'+(trab?'✓':d.getDate())+'</span></button>';
+    }).join('');
+    var ganado=diasTrab*diario;
+    var prests=prestamosSemana(e.id);
+    var totalPrestSem=prests.reduce(function(s,m){return s+m.valor;},0);
+    var saldoPagar=ganado-totalPrestSem;
+    var largoP=saldoLargoPlazo(e.id);
+
+    var prestRows=prests.map(function(m){
+      return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:2px 0"><span>💸 '+(m.nota?esc(m.nota):'Préstamo')+' · '+fmtTime(m.ts)+'</span><span style="color:#ef4444;font-weight:700">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
+    }).join('');
+
     return'<div class="card" style="margin-bottom:10px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-        +'<div>'
-          +'<div style="font-weight:800;font-size:15px">👷 '+esc(e.nombre)+'</div>'
-          +'<div style="color:var(--muted);font-size:12px">'+esc(e.cargo||'Sin cargo')+'</div>'
-        +'</div>'
-        +'<div style="text-align:right">'
-          +(saldo>0?'<div style="color:#ef4444;font-weight:700;font-size:13px">Debe: '+fmt(saldo)+'</div>':'<div style="color:#22c55e;font-size:12px">Sin deudas</div>')
-        +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+        +'<div><div style="font-weight:800;font-size:15px">👷 '+esc(e.nombre)+'</div>'
+        +'<div style="color:var(--muted);font-size:12px">'+esc(e.cargo||'Sin cargo')+'</div></div>'
+        +'<button data-act="emp-edit" data-emp="'+e.id+'" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer">⚙️ Pago: '+fmt(diario)+'/día</button>'
       +'</div>'
+      // Días trabajados
+      +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:5px">DÍAS TRABAJADOS</div>'
+      +'<div style="display:flex;gap:4px;margin-bottom:10px">'+diasBtns+'</div>'
+      // Cálculo semanal
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>'+diasTrab+' día'+(diasTrab!==1?'s':'')+' × '+fmt(diario)+'</span><span style="font-weight:700">'+fmt(ganado)+'</span></div>'
+        +(prestRows?'<div style="border-top:1px dashed var(--border);margin:5px 0;padding-top:5px">'+prestRows+'</div>':'')
+        +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:5px;padding-top:6px"><span style="font-weight:800;font-size:13px">SALDO A PAGAR</span><span style="color:'+(saldoPagar>=0?'#22c55e':'#ef4444')+';font-weight:900;font-size:16px">'+fmt(saldoPagar)+'</span></div>'
+      +'</div>'
+      // Largo plazo
+      +(largoP>0?'<div style="background:#f5a62312;border:1px solid #f5a62333;border-radius:9px;padding:8px 11px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center"><span style="color:#f5a623;font-size:12px;font-weight:700">📌 Préstamo largo plazo pendiente</span><span style="color:#f5a623;font-weight:900">'+fmt(largoP)+'</span></div>':'')
+      // Botones
       +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
-        +'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="prestamo" style="flex:1;min-width:80px;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">💸 Préstamo</button>'
-        +(saldo>0?'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="abono" style="flex:1;min-width:80px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">✅ Abono</button>':'')
-        +'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="salario" style="flex:1;min-width:80px;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">💰 Salario</button>'
-        +'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="otro" style="flex:1;min-width:80px;background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">+ Otro</button>'
+        +'<button data-act="emp-prestamo" data-emp="'+e.id+'" style="flex:1;min-width:90px;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">💸 Préstamo</button>'
+        +(largoP>0?'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="abono" style="flex:1;min-width:90px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">✅ Abono largo plazo</button>':'')
+        +(saldoPagar>0?'<button data-act="emp-pagar" data-emp="'+e.id+'" data-monto="'+saldoPagar+'" data-sem="'+semKey+'" style="flex:1;min-width:90px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer">💰 Pagar saldo</button>':'')
       +'</div>'
-      // Historial movimientos
-      +(function(){
-        var movs=movEmpleados.filter(function(m){return m.empId===e.id;}).sort(function(a,b){return b.ts-a.ts;}).slice(0,5);
-        if(!movs.length)return'';
-        return'<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">'
-          +movs.map(function(m){
-            var icon=m.tipo==='prestamo'?'💸':(m.tipo==='abono'?'✅':(m.tipo==='salario'?'💰':'📌'));
-            var col=m.tipo==='abono'?'#22c55e':(m.tipo==='prestamo'?'#ef4444':'var(--muted)');
-            var fp=FPAGO.find(function(x){return x.id===m.fp;});
-            return'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px">'
-              +'<span style="color:var(--muted)">'+icon+' '+m.tipo.charAt(0).toUpperCase()+m.tipo.slice(1)+(m.nota?' · '+esc(m.nota):'')+' <span style="opacity:.6">'+fmtTime(m.ts)+'</span></span>'
-              +'<span style="color:'+col+';font-weight:700">'+fmt(m.valor)+(fp?' '+fp.emoji:'')+'</span>'
-              +(esAdmin?'<button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;margin-left:6px">✕</button>':'')
-              +'</div>';
-          }).join('')
-        +'</div>';
-      })()
     +'</div>';
   }).join('');
 
-  // Totales del turno (movimientos que son gasto)
+  // Egresos a empleados este turno
   var movTurno=movEmpleados.filter(function(m){return m.ts>=turnoInicio&&(m.tipo==='prestamo'||m.tipo==='salario'||m.tipo==='otro');});
   var totalEgresos=movTurno.reduce(function(s,m){return s+m.valor;},0);
 
   return'<div>'
     +'<div class="flex-between mb12">'
-      +'<div style="font-weight:800;font-size:16px">👷 Empleados</div>'
+      +'<div style="font-weight:800;font-size:16px">👷 Nómina</div>'
       +'<button class="btn btn-green" onclick="abrirNuevoEmpleado()">+ Empleado</button>'
     +'</div>'
-    +(totalEgresos>0?'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between"><span style="color:#ef4444;font-weight:700;font-size:13px">💸 Egresos a empleados (turno)</span><span style="color:#ef4444;font-weight:900">'+fmt(totalEgresos)+'</span></div>':'')
+    // Navegación de semana
+    +'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border-radius:10px;padding:8px 12px;margin-bottom:12px">'
+      +'<button onclick="_empSemanaOffset--;render()" style="background:var(--card2);border:none;color:var(--text);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:16px">‹</button>'
+      +'<div style="text-align:center;font-size:12px;font-weight:700">Semana '+rango+(_empSemanaOffset===0?' (actual)':'')+'</div>'
+      +'<button onclick="if(_empSemanaOffset<0){_empSemanaOffset++;render()}" style="background:var(--card2);border:none;color:var(--text);border-radius:7px;padding:6px 12px;cursor:'+(_empSemanaOffset<0?'pointer':'not-allowed')+';font-size:16px;opacity:'+(_empSemanaOffset<0?'1':'.3')+'">›</button>'
+    +'</div>'
+    +(totalEgresos>0?'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between"><span style="color:#ef4444;font-weight:700;font-size:13px">💸 Pagado a empleados (turno)</span><span style="color:#ef4444;font-weight:900">'+fmt(totalEgresos)+'</span></div>':'')
     +(empCards||'<div style="text-align:center;color:var(--muted);padding:40px 20px">Sin empleados. Toca "+ Empleado" para crear el primero.</div>')
   +'</div>';
 }
@@ -4780,19 +4998,114 @@ function abrirNuevoEmpleado(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:14px">👷 Nuevo empleado</div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre *</div>'
     +'<input class="inp" id="emp-nombre" placeholder="Ej: Juan Pérez"/></div>'
-    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cargo</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cargo</div>'
     +'<input class="inp" id="emp-cargo" placeholder="Ej: Mesero, Cocinero, Bartender"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
+    +'<input class="inp money" id="emp-pago" type="text" inputmode="numeric" placeholder="Ej: 50.000"/></div>'
     +'<button class="btn btn-green btn-full" onclick="guardarEmpleado()">Guardar</button>');
 }
+function abrirEditarEmpleado(empId){
+  var e=empleados.find(function(x){return x.id===empId;});
+  if(!e)return;
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:14px">⚙️ Editar empleado</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre *</div>'
+    +'<input class="inp" id="emp-nombre" value="'+esc(e.nombre)+'"/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cargo</div>'
+    +'<input class="inp" id="emp-cargo" value="'+esc(e.cargo||'')+'"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
+    +'<input class="inp money" id="emp-pago" type="text" inputmode="numeric" value="'+moneyFmt(e.pagoDiario||'')+'"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarEmpleado(\''+empId+'\')">Guardar cambios</button>'
+    +'<button class="btn btn-full" onclick="eliminarEmpleado(\''+empId+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;margin-top:8px">🗑️ Eliminar empleado</button>');
+}
+function eliminarEmpleado(empId){
+  if(!confirm('¿Eliminar este empleado? Sus movimientos quedan en el historial.'))return;
+  var e=empleados.find(function(x){return x.id===empId;});
+  if(e)e.activo=false;
+  var ob={};empleados.forEach(function(x){ob[x.id]=x;});fbSet('empleados',ob);
+  closeModal1();render();
+}
 
-function guardarEmpleado(){
+function guardarEmpleado(empId){
   var nombre=((document.getElementById('emp-nombre')||{}).value||'').trim();
   var cargo=((document.getElementById('emp-cargo')||{}).value||'').trim();
+  var pago=moneyVal('emp-pago')||0;
   if(!nombre){alert('Escribe el nombre.');return;}
-  var emp={id:'emp'+Date.now(),nombre:nombre,cargo:cargo,activo:true,ts:Date.now()};
-  empleados.push(emp);
-  var r=ref('empleados');if(r)r.push(emp);else fbSet('empleados',empleados);
+  if(empId){
+    var e=empleados.find(function(x){return x.id===empId;});
+    if(e){e.nombre=nombre;e.cargo=cargo;e.pagoDiario=pago;}
+    var ob={};empleados.forEach(function(x){ob[x.id]=x;});fbSet('empleados',ob);
+  } else {
+    var emp={id:'emp'+Date.now(),nombre:nombre,cargo:cargo,pagoDiario:pago,activo:true,ts:Date.now()};
+    empleados.push(emp);
+    var ob2={};empleados.forEach(function(x){ob2[x.id]=x;});fbSet('empleados',ob2);
+  }
   closeModal1();render();
+}
+
+function abrirPrestamoEmpleado(empId){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var fpOpts=FPAGO.slice().sort(function(a,b){return a.id==='efectivo'?-1:b.id==='efectivo'?1:0;}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💸 Préstamo a</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
+    +'<input class="inp money" id="mov-valor" type="text" placeholder="0" inputmode="numeric"/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de (forma de pago)</div>'
+    +'<select class="inp" id="mov-fp">'+fpOpts+'</select></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto (opcional)</div>'
+    +'<input class="inp" id="mov-nota" placeholder="Ej: adelanto, emergencia..."/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:6px">¿Cómo se descuenta?</div>'
+      +'<label style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer"><input type="radio" name="prestTipo" value="semana" checked/> <span style="font-size:13px">Esta semana (se descuenta del pago semanal)</span></label>'
+      +'<label style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer"><input type="radio" name="prestTipo" value="largo"/> <span style="font-size:13px">Largo plazo (queda pendiente, se abona aparte)</span></label>'
+    +'</div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarPrestamoEmpleado(\''+empId+'\')">Registrar préstamo</button>');
+}
+function guardarPrestamoEmpleado(empId){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var valor=moneyVal('mov-valor')||0;
+  var fp=(document.getElementById('mov-fp')||{}).value||'efectivo';
+  var nota=((document.getElementById('mov-nota')||{}).value||'').trim();
+  var tipoSel=(document.querySelector('input[name="prestTipo"]:checked')||{}).value||'semana';
+  if(valor<=0){alert('Escribe el valor.');return;}
+  var largoPlazo=(tipoSel==='largo');
+  var semKey=_fechaKey(_sanLunes(_empSemanaOffset));
+  var mov={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:'prestamo',valor:valor,fp:fp,nota:nota,largoPlazo:largoPlazo,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  movEmpleados.push(mov);
+  var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
+  // SALE DE CAJA: registrar como gasto
+  var g={id:'g'+Date.now(),ts:Date.now(),concepto:'Préstamo a '+emp.nombre,categoria:'Personal',valor:valor,notas:(largoPlazo?'Largo plazo':'Semana')+(nota?' · '+nota:''),fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  gastos.push(g);var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
+  closeModal1();
+  showToast('💸 Préstamo registrado<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(valor)+' · '+(largoPlazo?'largo plazo':'esta semana')+'</span>','#ef4444');
+  render();
+}
+function pagarSaldoEmpleado(empId,monto,semKey){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  monto=parseInt(monto)||0;
+  if(monto<=0){alert('No hay saldo por pagar.');return;}
+  var fpOpts=FPAGO.slice().sort(function(a,b){return a.id==='efectivo'?-1:b.id==='efectivo'?1:0;}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💰 Pagar saldo semanal</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;text-align:center"><div style="color:var(--muted);font-size:11px">Saldo a pagar</div><div style="color:#22c55e;font-weight:900;font-size:24px">'+fmt(monto)+'</div></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de (forma de pago)</div>'
+    +'<select class="inp" id="pago-fp">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPagoSaldo(\''+empId+'\','+monto+',\''+semKey+'\')">✓ Confirmar pago</button>');
+}
+function confirmarPagoSaldo(empId,monto,semKey){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var fp=(document.getElementById('pago-fp')||{}).value||'efectivo';
+  var mov={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:'salario',valor:monto,fp:fp,nota:'Pago semana '+semKey,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  movEmpleados.push(mov);
+  var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
+  // SALE DE CAJA
+  var g={id:'g'+Date.now(),ts:Date.now(),concepto:'Pago nómina '+emp.nombre,categoria:'Personal',valor:monto,notas:'Semana '+semKey,fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  gastos.push(g);var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
+  closeModal1();
+  showToast('💰 Pago registrado<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(monto)+'</span>','#22c55e');
+  render();
 }
 
 function abrirMovEmpleado(empId,tipo){
@@ -4803,7 +5116,7 @@ function abrirMovEmpleado(empId,tipo){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">'+(titulos[tipo]||tipo)+'</div>'
     +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
-    +'<input class="inp" id="mov-valor" type="number" placeholder="0" inputmode="numeric"/></div>'
+    +'<input class="inp money" id="mov-valor" type="text" placeholder="0" inputmode="numeric"/></div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
     +'<select class="inp" id="mov-fp">'+fpOpts+'</select></div>'
     +(tipo==='otro'?'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto</div><input class="inp" id="mov-nota" placeholder="Ej: Bono, descuento..."/></div>':'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nota (opcional)</div><input class="inp" id="mov-nota" placeholder=""/></div>')
@@ -4813,7 +5126,7 @@ function abrirMovEmpleado(empId,tipo){
 function guardarMovEmpleado(empId,tipo){
   var emp=empleados.find(function(e){return e.id===empId;});
   if(!emp)return;
-  var valor=parseInt((document.getElementById('mov-valor')||{}).value)||0;
+  var valor=moneyVal('mov-valor')||0;
   var fp=(document.getElementById('mov-fp')||{}).value||'efectivo';
   var nota=((document.getElementById('mov-nota')||{}).value||'').trim();
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
@@ -4850,15 +5163,9 @@ function renderSocios(){
   var socioActivo=_socioActivo||'CARLOS';
 
   // Carta por categorias
-  var cats=['Todos','🎁 Combos'].concat(menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort());
-  var catFiltro=_socCatFiltro||'Todos';
-  var catPills=cats.map(function(c){
-    var sel=c===catFiltro;
-    return'<button data-act="soc-cat" data-cat="'+esc(c)+'" style="background:'+(sel?'var(--accent)':'var(--card)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">'+c+'</button>';
-  }).join('');
-
-  var prodsFil=catFiltro==='Todos'?menu:menu.filter(function(m){return m.cat===catFiltro;});
-    var prodCards=prodsFil.map(function(p){
+  // Categorías reales (sin 'Todos'); cada una es un acordeón
+  var catsReales=menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort();
+  function _cardProdSoc(p){
     var ps=Math.round(p.precio*0.9);
     var psCub=p.esCerveza&&p.cubeta?Math.round((p.cubeta||p.precio*5)*0.9):0;
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px">'
@@ -4872,21 +5179,61 @@ function renderSocios(){
         ?'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="true" style="width:100%;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:4px;font-size:11px;font-weight:700;cursor:pointer">🪣 Cubetazo ×5 — '+fmt(psCub)+'</button>'
         :'')
       +'</div>';
-  }).join('');
-  // Combos with 10% discount
-  var comboCards=(catFiltro==='Todos'||catFiltro==='🎁 Combos'?combos:[]).map(function(cb){
-    var psCb=Math.round(cb.precio*0.9);
-    return'<div data-act="soc-add-combo" data-cbid="'+cb.id+'" style="background:var(--bg);border:1px solid var(--gold)33;border-radius:10px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px">'
-      +'<span style="font-size:20px">'+cb.emoji+'</span>'
-      +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(cb.nombre)+'</div>'
-      +'<div style="color:#22c55e;font-size:11px;font-weight:700">'+fmt(psCb)+'</div>'
-      +'<div style="color:var(--gold);font-size:10px">🎁 Combo</div></div>'
-      +'<div style="background:var(--gold)18;color:var(--gold);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900">+</div>'
-      +'</div>';
-  }).join('');;
+  }
+  // Acordeón: Combos + cada categoría
+  var acordeon='';
+  // Combos
+  if(combos.length){
+    var combosOpen=(_socCatFiltro==='🎁 Combos');
+    acordeon+='<div style="margin-bottom:6px"><button data-act="soc-cat" data-cat="🎁 Combos" style="width:100%;text-align:left;background:var(--card);border:1px solid '+(combosOpen?'var(--gold)':'var(--border)')+';border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;color:'+(combosOpen?'var(--gold)':'var(--text)')+';cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
+      +'<span>🎁 Combos</span><span style="font-size:11px;color:var(--muted)">'+combos.length+' '+(combosOpen?'▲':'▼')+'</span></button>';
+    if(combosOpen){
+      acordeon+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+combos.map(function(cb){
+        var psCb=Math.round(cb.precio*0.9);
+        return'<div data-act="soc-add-combo" data-cbid="'+cb.id+'" style="background:var(--bg);border:1px solid var(--gold)33;border-radius:10px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px">'
+          +'<span style="font-size:20px">'+cb.emoji+'</span>'
+          +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(cb.nombre)+'</div>'
+          +'<div style="color:#22c55e;font-size:11px;font-weight:700">'+fmt(psCb)+'</div></div>'
+          +'<div style="background:var(--gold)18;color:var(--gold);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900">+</div>'
+        +'</div>';
+      }).join('')+'</div>';
+    }
+    acordeon+='</div>';
+  }
+  // Cada categoría
+  catsReales.forEach(function(cat){
+    var prods=menu.filter(function(m){return m.cat===cat;});
+    if(!prods.length)return;
+    var abierta=(_socCatFiltro===cat);
+    acordeon+='<div style="margin-bottom:6px"><button data-act="soc-cat" data-cat="'+esc(cat)+'" style="width:100%;text-align:left;background:var(--card);border:1px solid '+(abierta?'var(--accent)':'var(--border)')+';border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;color:'+(abierta?'var(--accent)':'var(--text)')+';cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
+      +'<span>'+esc(cat)+'</span><span style="font-size:11px;color:var(--muted)">'+prods.length+' '+(abierta?'▲':'▼')+'</span></button>';
+    if(abierta){
+      acordeon+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+prods.map(_cardProdSoc).join('')+'</div>';
+    }
+    acordeon+='</div>';
+  });
 
-  // History
-  var histRows=consumoSocios.slice().reverse().map(function(c){
+  // History — SOLO del socio seleccionado
+  var consumosSocio=consumoSocios.filter(function(c){return c.socio===socioActivo;});
+  // Resumen AGRUPADO por producto del socio activo
+  var agrup={};
+  consumosSocio.forEach(function(c){
+    (c.items?(Array.isArray(c.items)?c.items:Object.values(c.items)):[]).forEach(function(it){
+      var k=(it.nombre||'?');
+      if(!agrup[k])agrup[k]={nombre:k,emoji:it.emoji||'',qty:0,total:0};
+      agrup[k].qty+=(it.qty||0);
+      agrup[k].total+=(it.precioSocio||0)*(it.qty||0);
+    });
+  });
+  var agrupArr=Object.values(agrup).sort(function(a,b){return b.qty-a.qty;});
+  var colorSoc=socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
+  var resumenAgrupado=agrupArr.length?'<div style="background:var(--bg);border:1px solid '+colorSoc+'44;border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+    +'<div style="color:'+colorSoc+';font-weight:700;font-size:12px;margin-bottom:8px">📦 Resumen de '+socioActivo+' (agrupado)</div>'
+    +agrupArr.map(function(a){return'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px"><span>'+(a.emoji||'')+' '+esc(a.nombre)+' <b style="color:'+colorSoc+'">×'+a.qty+'</b></span><span style="color:var(--gold);font-weight:700">'+fmt(a.total)+'</span></div>';}).join('')
+    +'</div>':'';
+
+  // Detalle cronológico SOLO del socio activo
+  var histRows=consumosSocio.slice().reverse().map(function(c){
     var itemsHtml=c.items?(Array.isArray(c.items)?c.items:Object.values(c.items)).map(function(it){
       return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:1px 0">'
         +'<span>'+(it.emoji||'')+' '+esc(it.nombre||'?')+' ×'+it.qty+'</span>'
@@ -4896,7 +5243,7 @@ function renderSocios(){
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
         +'<div><div style="font-weight:700;font-size:13px;color:'+colorSocio+'">'+esc(c.socio||'Socio')+'</div>'
-        +'<div style="color:var(--muted);font-size:11px">'+fmtDT(c.ts)+'</div></div>'
+        +'<div style="color:var(--muted);font-size:11px">'+fmtDT(c.ts)+(c.uidNombre?' · ✍️ '+esc(c.uidNombre):'')+'</div></div>'
         +'<div style="display:flex;align-items:center;gap:8px">'
           +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(c.total)+'</span>'
           +(esAdmin?'<button data-act="delsocio" data-sid="'+c.id+'" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>':'')
@@ -4904,7 +5251,7 @@ function renderSocios(){
       +'</div>'
       +(itemsHtml?'<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'+itemsHtml+'</div>':'')
       +'</div>';
-  }).join('')||'<div style="color:var(--muted);text-align:center;padding:20px">Sin consumos registrados</div>';
+  }).join('')||'<div style="color:var(--muted);text-align:center;padding:20px">'+socioActivo+' no tiene consumos registrados</div>';
 
   return'<div>'
     // KPIs socios
@@ -4927,26 +5274,25 @@ function renderSocios(){
       +'<button data-act="sel-socio" data-socio="CARLOS" style="flex:1;background:'+(socioActivo==='CARLOS'?'#38bdf8':'var(--card)')+';color:'+(socioActivo==='CARLOS'?'#000':'var(--muted)')+';border:2px solid '+(socioActivo==='CARLOS'?'#38bdf8':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 CARLOS</button>'
       +'<button data-act="sel-socio" data-socio="JAVIER" style="flex:1;background:'+(socioActivo==='JAVIER'?'#a855f7':'var(--card)')+';color:'+(socioActivo==='JAVIER'?'#fff':'var(--muted)')+';border:2px solid '+(socioActivo==='JAVIER'?'#a855f7':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 JAVIER</button>'
     +'</div>'
-    // Category pills
-    +'<div style="display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:10px;padding-bottom:4px">'+catPills+'</div>'
-    // Sticky resumen del socio activo
-    +'<div style="position:sticky;top:0;z-index:5;background:'+(socioActivo==='CARLOS'?'#38bdf8':'#a855f7')+';border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 4px 12px rgba(0,0,0,.3)">'
-      +'<span style="color:'+(socioActivo==='CARLOS'?'#000':'#fff')+';font-weight:800;font-size:13px">👤 '+socioActivo+'</span>'
-      +'<span style="color:'+(socioActivo==='CARLOS'?'#000':'#fff')+';font-weight:900;font-size:16px">'+fmt(socioActivo==='CARLOS'?totalCarlos:totalJavier)+'</span>'
-    +'</div>'
-    // Product grid
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+prodCards+'</div>'
-    +(comboCards?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'+comboCards+'</div>':'')
-    // Liquidar por socio individual
+    // Botón para mostrar/ocultar la lista de productos (minimizada por defecto)
+    +'<button data-act="toggle-sec" data-sec="socProds" style="width:100%;text-align:left;background:'+(socioActivo==='CARLOS'?'#38bdf818':'#a855f718')+';border:1px solid '+(socioActivo==='CARLOS'?'#38bdf844':'#a855f744')+';border-radius:10px;padding:11px 14px;margin-bottom:10px;font-weight:800;font-size:13px;color:'+(socioActivo==='CARLOS'?'#38bdf8':'#a855f7')+';cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
+      +'<span>➕ Anotar consumo a '+socioActivo+'</span><span style="font-size:12px">'+(_secOpen.socProds?'▲ ocultar':'▼ abrir')+'</span>'
+    +'</button>'
+    +(_secOpen.socProds?'<div style="margin-bottom:14px">'+acordeon+'</div>':'')
+    // History del socio activo
+    +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">📋 CONSUMOS DE '+socioActivo+'</div>'
+    +resumenAgrupado
+    +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin:10px 0 8px">DETALLE POR PEDIDO</div>'
+    +histRows
+    // ── LIQUIDAR / CERRAR (al final para no confundir con el selector) ──
     +(esAdmin&&(totalCarlos>0||totalJavier>0)
-      ?'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+      ?'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin:18px 0 10px;border-top:2px solid var(--border)">'
         +'<div style="color:var(--muted);font-size:11px;font-weight:700;margin-bottom:8px">💵 Liquidar cuenta de socio (vuelve a 0)</div>'
         +'<div style="display:flex;gap:8px">'
         +(totalCarlos>0?'<button onclick="liquidarSocio(\'CARLOS\')" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Carlos · '+fmt(totalCarlos)+'</button>':'')
         +(totalJavier>0?'<button onclick="liquidarSocio(\'JAVIER\')" style="flex:1;background:#a855f718;color:#a855f7;border:1px solid #a855f744;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Javier · '+fmt(totalJavier)+'</button>':'')
         +'</div></div>'
       :'')
-    // Cierre mensual (todos)
     +(esAdmin&&totalAcum>0
       ?'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:10px;padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">'
         +'<div><div style="color:#ef4444;font-weight:700;font-size:13px">🔒 Cerrar todo (Carlos + Javier)</div>'
@@ -4954,9 +5300,6 @@ function renderSocios(){
         +'<button onclick="cerrarConsumoSocios()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer">Cerrar todo</button>'
       +'</div>'
       :'')
-    // History
-    +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">HISTORIAL</div>'
-    +histRows
     +'</div>';
 }
 
@@ -5018,20 +5361,20 @@ function agregarConsumoSocio(pid,esCubeta,cantidad){
   var precioSocio=Math.round(precioBase*0.9);
   var nombre=(esCubeta?'🪣 Cubetazo ':'')+''+p.nombre;
   var item={pid:pid,qty:qty,cubeta:!!esCubeta,nombre:nombre,emoji:p.emoji,precioBase:precioBase,precioSocio:precioSocio};
-  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio*qty};
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio*qty,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   consumoSocios.push(consumo);
   var r=ref('consumoSocios');
   if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
   // Descontar stock del producto
   var cantStock=esCubeta?qty*5:qty;
   var antesS=parseInt(p.stock); if(isNaN(antesS))antesS=0;
-  p.stock=Math.max(0,antesS-cantStock);
+  p.stock=antesS-cantStock;
   // Descontar receta si tiene
   if(p.receta&&p.receta.length){
     p.receta.forEach(function(ri){
       var ingP=menu.find(function(m){return Number(m.id)===Number(ri.pid);});
-      if(ingP){var a=parseInt(ingP.stock);if(isNaN(a))a=0;ingP.stock=Math.max(0,a-(ri.cantidad*qty));}
-      else{var ingI=ingredientes.find(function(i){return Number(i.id)===Number(ri.pid);});if(ingI){var ai=parseInt(ingI.stock);if(isNaN(ai))ai=0;ingI.stock=Math.max(0,ai-(ri.cantidad*qty));guardarIngredientes();}}
+      if(ingP){var a=parseInt(ingP.stock);if(isNaN(a))a=0;ingP.stock=a-(ri.cantidad*qty);}
+      else{var ingI=ingredientes.find(function(i){return Number(i.id)===Number(ri.pid);});if(ingI){var ai=parseInt(ingI.stock);if(isNaN(ai))ai=0;ingI.stock=ai-(ri.cantidad*qty);guardarIngredientes();}}
     });
   }
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
@@ -5046,7 +5389,7 @@ function agregarConsumoSocioCombo(cbId){
   if(!cb)return;
   var precioSocio=Math.round(cb.precio*0.9);
   var item={pid:'combo_'+cbId,qty:1,nombre:'🎁 '+cb.nombre,emoji:cb.emoji,precioBase:cb.precio,precioSocio:precioSocio};
-  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio};
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   consumoSocios.push(consumo);
   var r=ref('consumoSocios');
   if(r)r.push(consumo); else fbSet('consumoSocios',consumoSocios);
@@ -5055,11 +5398,11 @@ function agregarConsumoSocioCombo(cbId){
     var cant=ing.cantidad||1;
     if(ing.prodId!=null){
       var pp=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
-      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=Math.max(0,a-cant);}
+      if(pp){var a=parseInt(pp.stock);if(isNaN(a))a=0;pp.stock=a-cant;}
     }
     if(ing.ingId!=null){
       var ii=ingredientes.find(function(i){return Number(i.id)===Number(ing.ingId);});
-      if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=Math.max(0,ai-cant);guardarIngredientes();}
+      if(ii){var ai=parseInt(ii.stock);if(isNaN(ai))ai=0;ii.stock=ai-cant;guardarIngredientes();}
     }
   });
   var moc={};menu.forEach(function(m){moc[m.id]=m;});fbSet('menu',moc);
@@ -5570,7 +5913,7 @@ document.addEventListener('click',function(e){
     var p=menu.find(function(m){return m.id===pid;});
     if(!p)return;
     if(act==='inv-plus'){p.stock++;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();}
-    else if(act==='inv-minus'){if(p.stock>0||ventaSinStock)p.stock=Math.max(0,p.stock-1);var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();}
+    else if(act==='inv-minus'){p.stock=(parseInt(p.stock)||0)-1;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();}
     else if(act==='inv-merc'){abrirMercanciaModal(pid,false);}
     else if(act==='inv-edit-stock'){abrirEditStockModal(pid,false);}
     return;
@@ -5592,7 +5935,7 @@ document.addEventListener('click',function(e){
     var ing=ingredientes.find(function(x){return x.id===iid;});
     if(!ing)return;
     if(act2==='ing-plus'){ing.stock++;guardarIngredientes();}
-    else if(act2==='ing-minus'){if(ing.stock>0)ing.stock--;guardarIngredientes();}
+    else if(act2==='ing-minus'){ing.stock=(parseInt(ing.stock)||0)-1;guardarIngredientes();}
     else if(act2==='ing-edit'){abrirEditIngrediente(iid);}
     render();return;
   }
@@ -5613,7 +5956,7 @@ document.addEventListener('click',function(e){
   var ss=e.target.closest('[data-act="sel-socio"]');
   if(ss){_socioActivo=ss.getAttribute('data-socio');render();return;}
   var sc=e.target.closest('[data-act="soc-cat"]');
-  if(sc){_socCatFiltro=sc.getAttribute('data-cat');render();return;}
+  if(sc){var cc=sc.getAttribute('data-cat');_socCatFiltro=(_socCatFiltro===cc)?'':cc;render();return;}
   var crc=e.target.closest('[data-act="confirm-rename-cat"]');
   if(crc){confirmarRenombrarCategoria(crc.getAttribute('data-cat'));return;}
   var cce=e.target.closest('[data-act="confirm-cat-emoji"]');
@@ -5717,6 +6060,18 @@ document.addEventListener('click',function(e){
   if(em){
     abrirMovEmpleado(em.getAttribute('data-emp'),em.getAttribute('data-tipo'));return;
   }
+  var edia=e.target.closest('[data-act="emp-dia"]');
+  if(edia){
+    var k=edia.getAttribute('data-key');
+    if(asistenciaEmp[k]){delete asistenciaEmp[k];}else{asistenciaEmp[k]=true;}
+    fbSet('asistenciaEmp',asistenciaEmp);render();return;
+  }
+  var eed=e.target.closest('[data-act="emp-edit"]');
+  if(eed){abrirEditarEmpleado(eed.getAttribute('data-emp'));return;}
+  var epr=e.target.closest('[data-act="emp-prestamo"]');
+  if(epr){abrirPrestamoEmpleado(epr.getAttribute('data-emp'));return;}
+  var epg=e.target.closest('[data-act="emp-pagar"]');
+  if(epg){pagarSaldoEmpleado(epg.getAttribute('data-emp'),epg.getAttribute('data-monto'),epg.getAttribute('data-sem'));return;}
   var edm=e.target.closest('[data-act="emp-delmov"]');
   if(edm){
     borrarMovEmpleado(edm.getAttribute('data-id'));return;
