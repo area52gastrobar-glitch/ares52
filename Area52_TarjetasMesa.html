@@ -5,150 +5,120 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Área 52 – Generador de Tarjetas</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Bebas+Neue&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Orbitron:wght@700;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#1a0d00;--panel:#221508;--border:#5a3010;--accent:#8b1a1a;--accent2:#c0392b;--text:#e8d5a0;--muted:#9a7a50;--green:#1a4010}
+:root{--bg:#0a0612;--panel:#140c22;--border:#2e1e4a;--accent:#7b2ff7;--accent2:#a855f7;--text:#e8d5ff;--muted:#9a7ac0;--green:#1a4010}
 body{background:var(--bg);color:var(--text);font-family:'Special Elite',serif;min-height:100vh}
 .app{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
-.sidebar{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 16px;gap:14px;overflow-y:auto;position:sticky;top:0;height:100vh}
-.sidebar h1{font-family:'Bebas Neue',cursive;font-size:24px;color:#f0d080;letter-spacing:2px;text-align:center;border-bottom:1px solid var(--border);padding-bottom:10px}
-h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
-.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;background:#1a0e04}
-.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent2);background:#2a1208}
-.drop-zone p{font-size:12px;color:var(--muted);margin-top:6px}
-.drop-zone .icon{font-size:28px}
-.drop-zone.loaded{border-color:#2ecc71;background:#0a2010}
-.drop-zone.loaded p{color:#2ecc71}
-#file-input{display:none}
+.sidebar{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 16px;gap:16px;overflow-y:auto;position:sticky;top:0;height:100vh}
+.sidebar h1{font-family:'Orbitron',sans-serif;font-size:22px;color:#c9a0ff;letter-spacing:2px;text-align:center;border-bottom:1px solid var(--border);padding-bottom:10px;line-height:1.3}
+h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.field input,.field select{background:#1a1030;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Special Elite',serif;font-size:13px;padding:8px;outline:none;width:100%}
+.field input:focus{border-color:var(--accent2)}
 .zone-list{display:flex;flex-direction:column;gap:6px}
-.zone-item{background:#2a1808;border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center}
-.zone-item input[type=text]{background:transparent;border:none;border-bottom:1px solid #5a3a18;color:var(--text);font-family:'Special Elite',serif;font-size:13px;outline:none;padding:2px 4px;width:100%}
+.zone-item{background:#1a1030;border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:grid;grid-template-columns:1fr 54px 54px auto;gap:6px;align-items:center}
+.zone-item input{background:transparent;border:none;border-bottom:1px solid #3a2a5a;color:var(--text);font-family:'Special Elite',serif;font-size:13px;outline:none;padding:2px 4px;width:100%}
+.zone-item input[type=number]{text-align:center}
 .zone-item input:focus{border-color:var(--accent2)}
-.zone-badge{padding:2px 10px;border-radius:20px;font-size:10px;letter-spacing:1px;font-family:sans-serif;font-weight:700;white-space:nowrap}
-.btn-del{background:none;border:none;color:#6a3020;cursor:pointer;font-size:14px;padding:0 2px;line-height:1}
-.btn-del:hover{color:#c03020}
+.btn-del{background:none;border:none;color:#7a3a6a;cursor:pointer;font-size:14px;padding:0 2px;line-height:1}
+.btn-del:hover{color:#c03080}
 .btn-add-zone{background:transparent;border:2px dashed var(--border);border-radius:8px;color:var(--muted);font-family:'Special Elite',serif;font-size:12px;padding:7px;cursor:pointer;transition:all .15s;width:100%;margin-top:4px}
 .btn-add-zone:hover{border-color:var(--accent);color:var(--text)}
-.field{display:flex;flex-direction:column;gap:3px}
-.field label{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
-.field input[type=number]{background:#1a0e04;border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Bebas Neue',cursive;font-size:18px;padding:5px 8px;outline:none;text-align:center;width:100%}
-.field input:focus{border-color:var(--accent2)}
-.preview-scroll{display:flex;flex-direction:column;gap:4px;max-height:140px;overflow-y:auto}
-.preview-chip{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#1a0e04;border:1px solid #2a1808;border-radius:5px;font-size:11px}
-.preview-chip .num{font-family:'Bebas Neue',cursive;font-size:17px;color:#f0d080;min-width:30px}
+.preview-scroll{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto}
+.preview-chip{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#1a1030;border:1px solid #241838;border-radius:5px;font-size:11px}
+.preview-chip .num{font-family:'Orbitron',sans-serif;font-size:16px;color:#c9a0ff;min-width:34px}
 .zone-tag{font-size:10px;padding:2px 8px;border-radius:10px;font-family:sans-serif;font-weight:700}
-.btn{padding:10px 16px;border-radius:8px;border:none;font-family:'Special Elite',serif;font-size:13px;cursor:pointer;transition:all .15s;width:100%}
+.btn{padding:11px 16px;border-radius:8px;border:none;font-family:'Special Elite',serif;font-size:13px;cursor:pointer;transition:all .15s;width:100%}
 .btn-gen{background:var(--accent);color:#fff;font-size:14px}
 .btn-gen:hover{background:var(--accent2)}
 .btn-gen:disabled{opacity:.4;cursor:default}
 .btn-dl{background:var(--green);color:#fff}
 .btn-dl:hover{background:#2a6018}
 .btn-dl:disabled{opacity:.35;cursor:default}
-.progress{height:5px;background:#2a1808;border-radius:3px;overflow:hidden;display:none;margin-bottom:2px}
+.btn-ghost{background:#1a1030;border:1px solid var(--border);color:var(--muted)}
+.progress{height:5px;background:#241838;border-radius:3px;overflow:hidden;display:none}
 .progress-bar{height:100%;background:var(--accent2);width:0%;transition:width .1s}
 .main{padding:24px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
-.main-header{font-family:'Bebas Neue',cursive;font-size:16px;color:var(--muted);letter-spacing:3px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
-.thumb-wrap{display:flex;flex-direction:column;gap:5px;align-items:center}
+.main-header{font-family:'Orbitron',sans-serif;font-size:15px;color:var(--muted);letter-spacing:3px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.thumb-wrap{display:flex;flex-direction:column;gap:6px;align-items:center}
+.thumb-wrap img{width:100%;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
 .btn-dl-single{background:#1a4010;color:#fff;border:none;border-radius:5px;font-size:11px;padding:4px 10px;cursor:pointer;font-family:sans-serif}
 .btn-dl-single:hover{background:#2a6018}
-.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:60px;opacity:.35}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:60px;opacity:.4}
 .empty .icon{font-size:48px}
-.empty p{font-size:13px;letter-spacing:1px;text-align:center}
-@media print{.sidebar{display:none}.main{padding:4px}.grid{grid-template-columns:repeat(3,1fr);gap:6px}.btn-dl-single,.main-header{display:none}}
+.empty p{font-size:13px;letter-spacing:1px;text-align:center;line-height:1.7}
+.hint{font-size:11px;color:var(--muted);line-height:1.5}
+@media print{.sidebar{display:none}.main{padding:4px}.grid{grid-template-columns:repeat(3,1fr);gap:8px}.btn-dl-single,.main-header{display:none}.thumb-wrap img{box-shadow:none}}
 </style>
 </head>
 <body>
 <div class="app">
 <div class="sidebar">
-  <h1>👽 Área 52<br><span style="font-size:17px;color:var(--muted)">Generador de Tarjetas</span></h1>
-  <div>
-    <h2>Imagen base</h2>
-    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
-      <div class="icon">🖼️</div>
-      <p id="drop-label">Haz clic o arrastra aquí<br>la imagen original (PNG)</p>
-    </div>
-    <input type="file" id="file-input" accept="image/png,image/jpeg">
+  <h1>👽 ÁREA 52<br><span style="font-size:13px;color:var(--muted);letter-spacing:1px">Generador de Tarjetas</span></h1>
+
+  <div class="field">
+    <label>El QR lleva a:</label>
+    <input id="qr-url" value="https://area52gastrobar-glitch.github.io/ares52/Area52-Links.html" />
+    <div class="hint">Se le agrega <b>&amp;mesa=N°</b> a cada tarjeta automáticamente.</div>
   </div>
+
   <div>
     <h2>Mesas</h2>
     <button class="btn-add-zone" style="background:#22c55e22;border-color:#22c55e;color:#22c55e;margin-bottom:8px" onclick="cargarMesasPOS()">🔄 Cargar mesas del POS</button>
-    <div id="pos-estado" style="font-size:11px;color:var(--muted);margin-bottom:10px"></div>
-    <h2 style="margin-top:6px">Zonas (manual)</h2>
+    <div id="pos-estado" style="font-size:11px;color:var(--muted);margin-bottom:6px"></div>
+  </div>
+
+  <div>
+    <h2>Zonas (manual)</h2>
     <div class="zone-list" id="zone-list"></div>
     <button class="btn-add-zone" onclick="addZone()">+ Agregar zona</button>
   </div>
-  <div>
-    <h2>Rango de mesas por zona</h2>
-    <div id="zone-ranges"></div>
-  </div>
+
   <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:4px">
     <h2>Mesas a generar (<span id="total-count">0</span>)</h2>
     <div class="preview-scroll" id="preview-list"></div>
   </div>
+
   <div style="display:flex;flex-direction:column;gap:6px">
     <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
-    <button class="btn btn-gen" id="btn-gen" onclick="generateAll()" disabled>⚡ Generar todas</button>
+    <button class="btn btn-gen" id="btn-gen" onclick="generateAll()">⚡ Generar todas</button>
     <button class="btn btn-dl" id="btn-dl-all" onclick="downloadAll()" disabled>📦 Descargar ZIP</button>
-    <button class="btn" style="background:#2a1808;border:1px solid var(--border);color:var(--muted)" onclick="window.print()">🖨️ Imprimir vista</button>
+    <button class="btn btn-ghost" onclick="window.print()">🖨️ Imprimir vista</button>
   </div>
 </div>
+
 <div class="main">
   <div class="main-header">TARJETAS GENERADAS</div>
   <div class="grid" id="grid">
-    <div class="empty"><div class="icon">🛸</div><p>1. Carga la imagen original<br>2. Configura las zonas<br>3. Genera las tarjetas</p></div>
+    <div class="empty"><div class="icon">🛸</div><p>1. Carga las mesas del POS (o agrega zonas)<br>2. Toca «Generar todas»</p></div>
   </div>
 </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-const QR_B64 = "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";
-
-// ── Coordenadas verificadas píxel a píxel en imagen 1024x1024 ──
-// Número "23": cols 724-800, filas 162-226 → borramos con color papel
-const NUM_X=720, NUM_Y=155, NUM_W=85, NUM_H=80;
-const PAPER = 'rgb(244,241,221)';  // color promedio del fondo papel
-
-// QR original: módulos negros sobre el PAPEL (sin recuadro blanco).
-// Area de módulos del QR original: cols 300-723, filas 302-758
-// Borramos SOLO esa área con color papel, sin tapar los textos laterales.
-const QR_ERASE_L=298, QR_ERASE_T=300, QR_ERASE_R=726, QR_ERASE_B=760;
-const QR_SIZE=440;  // lado del nuevo QR (fondo papel)
-// Centrar el nuevo QR en el centro del área del QR original
-const QR_CX=Math.floor((300+723)/2), QR_CY=Math.floor((302+758)/2);
-const QR_X=QR_CX-Math.floor(QR_SIZE/2), QR_Y=QR_CY-Math.floor(QR_SIZE/2);
-
-// Número nuevo: dentro del mismo espacio que el "23" original
-// Alineado al inicio de donde estaba el "2" (col ~724)
-const NEW_NUM_X = 724;
-const NEW_NUM_Y = 162;
-
-const ZONE_COLORS=[
-  {bg:'#c0392b',text:'#fff'},{bg:'#2471a3',text:'#fff'},
-  {bg:'#1e8449',text:'#fff'},{bg:'#d4ac0d',text:'#000'},
-  {bg:'#7d3c98',text:'#fff'},{bg:'#ca6f1e',text:'#fff'},
-];
-let zones=[
+var ZONE_COLORS=['#a855f7','#38bdf8','#22c55e','#f5a623','#ef4444','#ec4899'];
+var zones=[
   {id:1,name:'Antejardín',from:1,to:6},
   {id:2,name:'Piso 1',from:7,to:16},
-  {id:3,name:'Piso 2',from:17,to:26},
+  {id:3,name:'Piso 2',from:17,to:26}
 ];
-let nextId=4, origImg=null, qrImg=null, generatedBlobs=[];
+var nextId=4, generatedCards=[];
+var mesasPOS=null;
 
-// ── Conexión con el POS (Firebase) ──────────────────────────────────────────
 var ZONA_LABELS={'antejardín':'Antejardín','antejardIn':'Antejardín','piso1':'Piso 1','piso2':'Piso 2'};
 var ZONA_ORDER=['antejardín','antejardIn','piso1','piso2'];
-var mesasPOS=null;  // si se cargan del POS, se usan estas
-var _fbTarjetas=null;
+var _fb=null;
 function initFB(){
-  if(_fbTarjetas)return _fbTarjetas;
+  if(_fb)return _fb;
   var cfg={apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",authDomain:"area52bar-a36aa.firebaseapp.com",databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",projectId:"area52bar-a36aa",storageBucket:"area52bar-a36aa.firebasestorage.app",messagingSenderId:"79314921682",appId:"1:79314921682:web:abfa44eefbd0df7441250b"};
-  firebase.initializeApp(cfg);
-  _fbTarjetas=firebase.database();
-  return _fbTarjetas;
+  firebase.initializeApp(cfg);_fb=firebase.database();return _fb;
 }
 function cargarMesasPOS(){
   var est=document.getElementById('pos-estado');
@@ -160,7 +130,6 @@ function cargarMesasPOS(){
       if(!v){est.innerHTML='<span style="color:#ef4444">No se encontraron mesas en el POS.</span>';return;}
       var arr=Array.isArray(v)?v:Object.values(v);
       arr=arr.filter(function(m){return m&&m.num!=null;});
-      // Ordenar por zona y número
       arr.sort(function(a,b){
         var za=ZONA_ORDER.indexOf(a.zona),zb=ZONA_ORDER.indexOf(b.zona);
         if(za<0)za=99;if(zb<0)zb=99;
@@ -172,203 +141,193 @@ function cargarMesasPOS(){
         return {num:m.num,nombre:m.nombre,zone:zlabel,zoneIdx:Math.max(0,ZONA_ORDER.indexOf(m.zona))};
       });
       est.innerHTML='<span style="color:#22c55e">✓ '+mesasPOS.length+' mesas cargadas del POS</span>';
-      // Ocultar config manual de zonas (ya no se necesita)
       document.getElementById('zone-list').style.opacity='0.4';
       updatePreview();
     }).catch(function(err){
       est.innerHTML='<span style="color:#ef4444">Error: '+err.message+'</span>';
     });
-  }catch(e){est.innerHTML='<span style="color:#ef4444">Error de conexión.</span>';}
+  }catch(e){est.innerHTML='<span style="color:#ef4444">Error: '+e.message+'</span>';}
 }
-
-
-// Cargar QR
-qrImg=new Image();
-qrImg.src='data:image/png;base64,'+QR_B64;
-
-// Drop zone
-const dropZone=document.getElementById('drop-zone');
-const fileInput=document.getElementById('file-input');
-dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over')});
-dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');loadFile(e.dataTransfer.files[0])});
-fileInput.addEventListener('change',e=>loadFile(e.target.files[0]));
-
-function loadFile(file){
-  if(!file||!file.type.startsWith('image/'))return;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    origImg=new Image();
-    origImg.onload=()=>{
-      dropZone.classList.add('loaded');
-      document.getElementById('drop-label').textContent='✅ '+file.name;
-      document.getElementById('btn-gen').disabled=false;
-    };
-    origImg.src=ev.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-// Zonas
-function zoneColor(i){return ZONE_COLORS[i%ZONE_COLORS.length]}
 
 function renderZones(){
-  document.getElementById('zone-list').innerHTML=zones.map((z,i)=>{
-    const c=zoneColor(i);
-    return `<div class="zone-item">
-      <input type="text" value="${z.name}" oninput="zones[${i}].name=this.value;updatePreview()">
-      <span class="zone-badge" style="background:${c.bg};color:${c.text}">${i+1}</span>
-      <button class="btn-del" onclick="delZone(${z.id})">✕</button>
-    </div>`;
+  var list=document.getElementById('zone-list');
+  list.innerHTML=zones.map(function(z,i){
+    return '<div class="zone-item">'
+      +'<input type="text" value="'+z.name.replace(/"/g,'&quot;')+'" oninput="setZone('+z.id+',\'name\',this.value)"/>'
+      +'<input type="number" value="'+z.from+'" min="1" oninput="setZone('+z.id+',\'from\',this.value)"/>'
+      +'<input type="number" value="'+z.to+'" min="1" oninput="setZone('+z.id+',\'to\',this.value)"/>'
+      +'<button class="btn-del" onclick="delZone('+z.id+')">✕</button>'
+    +'</div>';
   }).join('');
-
-  document.getElementById('zone-ranges').innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+
-    zones.map((z,i)=>{
-      const c=zoneColor(i);
-      return `<div style="background:#2a1808;border:1px solid #3a2008;border-radius:8px;padding:10px 12px">
-        <div style="margin-bottom:8px"><span class="zone-badge" style="background:${c.bg};color:${c.text};font-size:11px">${z.name}</span></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="field"><label>Inicio</label><input type="number" min="1" value="${z.from}" oninput="zones[${i}].from=+this.value;updatePreview()"></div>
-          <div class="field"><label>Fin</label><input type="number" min="1" value="${z.to}" oninput="zones[${i}].to=+this.value;updatePreview()"></div>
-        </div>
-      </div>`;
-    }).join('')+'</div>';
-
-  updatePreview();
 }
-
-function addZone(){
-  const last=zones[zones.length-1];
-  zones.push({id:nextId++,name:'Nueva Zona',from:last?last.to+1:1,to:last?last.to+5:5});
-  renderZones();
-}
-
-function delZone(id){
-  if(zones.length<=1)return;
-  zones=zones.filter(z=>z.id!==id);
-  renderZones();
-}
+function setZone(id,k,v){var z=zones.find(function(x){return x.id===id;});if(!z)return;z[k]=(k==='name')?v:(parseInt(v)||0);if(mesasPOS){mesasPOS=null;document.getElementById('zone-list').style.opacity='1';document.getElementById('pos-estado').textContent='';}updatePreview();}
+function addZone(){zones.push({id:nextId++,name:'Nueva zona',from:1,to:5});mesasPOS=null;document.getElementById('zone-list').style.opacity='1';renderZones();updatePreview();}
+function delZone(id){zones=zones.filter(function(z){return z.id!==id;});renderZones();updatePreview();}
 
 function getMesas(){
-  if(mesasPOS&&mesasPOS.length)return mesasPOS;  // usar las mesas reales del POS
-  const all=[];
-  zones.forEach((z,zi)=>{for(let n=z.from;n<=z.to;n++)all.push({num:n,zone:z.name,zoneIdx:zi})});
-  return all;
+  if(mesasPOS&&mesasPOS.length)return mesasPOS;
+  var out=[];
+  zones.forEach(function(z,zi){
+    for(var n=z.from;n<=z.to;n++) out.push({num:n,zone:z.name,zoneIdx:zi});
+  });
+  return out;
 }
-
 function updatePreview(){
-  const mesas=getMesas();
+  var mesas=getMesas();
   document.getElementById('total-count').textContent=mesas.length;
-  const el=document.getElementById('preview-list');
-  if(!mesas.length){el.innerHTML='<div style="color:var(--muted);font-size:12px">Sin mesas</div>';return;}
-  el.innerHTML=mesas.map(m=>{
-    const c=zoneColor(m.zoneIdx);
-    return `<div class="preview-chip"><span class="num">${m.num}</span><span class="zone-tag" style="background:${c.bg};color:${c.text}">${m.zone}</span></div>`;
+  var pl=document.getElementById('preview-list');
+  pl.innerHTML=mesas.map(function(m){
+    var col=ZONE_COLORS[(m.zoneIdx||0)%ZONE_COLORS.length];
+    return '<div class="preview-chip"><span class="num">'+m.num+'</span>'
+      +'<span class="zone-tag" style="background:'+col+'33;color:'+col+'">'+(m.zone||'')+'</span></div>';
   }).join('');
 }
 
-// Fuente
-const fontFace=new FontFace('BebasNeue','url(https://fonts.gstatic.com/s/bebasneue/v14/JTUSjIg69CK48gW7PXoo9WdhyyTh89ZNpQ.woff2)');
-fontFace.load().then(f=>document.fonts.add(f)).catch(()=>{});
-
-function drawCard(ctx, mesaNum, zoneName, zoneIdx){
-  // 1. Dibujar imagen original completa
-  ctx.drawImage(origImg, 0, 0, 1024, 1024);
-
-  // 2. Borrar el número "23" original con el color exacto del papel
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(NUM_X, NUM_Y, NUM_W, NUM_H);
-
-  // 3. Escribir el nuevo número en la misma posición y estilo
-  ctx.fillStyle = '#1a0f05';
-  ctx.font = "118px 'BebasNeue','Bebas Neue',Impact,sans-serif";
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(String(mesaNum), NEW_NUM_X, NEW_NUM_Y);
-
-  // 4. Borrar SOLO el área de módulos del QR original con color papel
-  //    (el QR original no tiene recuadro blanco, va sobre el papel)
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(QR_ERASE_L, QR_ERASE_T, QR_ERASE_R-QR_ERASE_L, QR_ERASE_B-QR_ERASE_T);
-
-  // 5. Dibujar el nuevo QR (ya trae fondo papel) centrado en ese espacio
-  ctx.drawImage(qrImg, QR_X, QR_Y, QR_SIZE, QR_SIZE);
-
-  // 6. Badge de zona en esquina inferior izquierda
-  if(zoneName){
-    const c=ZONE_COLORS[zoneIdx%ZONE_COLORS.length];
-    ctx.font='bold 30px sans-serif';
-    const tw=ctx.measureText(zoneName).width;
-    const bw=tw+44, bh=46, bx=28, by=938, br=12;
-    ctx.fillStyle=c.bg;
-    ctx.beginPath();ctx.roundRect(bx,by,bw,bh,br);ctx.fill();
-    ctx.fillStyle=c.text;
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(zoneName,bx+bw/2,by+bh/2);
+var CARD_W=720, CARD_H=1080;
+function hexToRgb(h){h=h.replace('#','');return {r:parseInt(h.substr(0,2),16),g:parseInt(h.substr(2,2),16),b:parseInt(h.substr(4,2),16)};}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function drawStars(ctx){
+  for(var i=0;i<90;i++){
+    var x=Math.random()*CARD_W, y=Math.random()*CARD_H, r=Math.random()*1.6+0.3;
+    ctx.globalAlpha=Math.random()*0.7+0.2;
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+function drawQR(ctx, text, x, y, size){
+  var qr=qrcode(0,'M');
+  qr.addData(text);
+  qr.make();
+  var count=qr.getModuleCount();
+  var cell=size/count;
+  var pad=Math.round(cell*2);
+  roundRect(ctx, x-pad, y-pad, size+pad*2, size+pad*2, 18);
+  ctx.fillStyle='#ffffff';ctx.fill();
+  ctx.fillStyle='#0a0612';
+  for(var r=0;r<count;r++){
+    for(var c=0;c<count;c++){
+      if(qr.isDark(r,c)){
+        ctx.fillRect(Math.round(x+c*cell), Math.round(y+r*cell), Math.ceil(cell), Math.ceil(cell));
+      }
+    }
   }
 }
 
-async function generateAll(){
-  if(!origImg){alert('Primero carga la imagen original.');return;}
-  const mesas=getMesas();
-  if(!mesas.length){alert('Configura al menos una zona.');return;}
-  generatedBlobs=[];
-  document.getElementById('btn-dl-all').disabled=true;
-  document.getElementById('grid').innerHTML='';
-  const prog=document.getElementById('progress');
-  const bar=document.getElementById('progress-bar');
-  prog.style.display='block'; bar.style.width='0%';
+function makeCardCanvas(mesa){
+  var canvas=document.createElement('canvas');
+  canvas.width=CARD_W;canvas.height=CARD_H;
+  var ctx=canvas.getContext('2d');
+  var col=ZONE_COLORS[(mesa.zoneIdx||0)%ZONE_COLORS.length];
+  var crgb=hexToRgb(col);
 
-  for(let i=0;i<mesas.length;i++){
-    const m=mesas[i];
-    bar.style.width=((i+1)/mesas.length*100)+'%';
-    const off=new OffscreenCanvas(1024,1024);
-    const oc=off.getContext('2d');
-    drawCard(oc,m.num,m.zone,m.zoneIdx);
-    const blob=await off.convertToBlob({type:'image/png'});
-    const fname=`Area52_${m.zone.replace(/\s+/g,'_')}_Mesa${m.num}.png`;
-    generatedBlobs.push({blob,name:fname});
-    const bmp=await createImageBitmap(blob);
-    const wrap=document.createElement('div');
-    wrap.className='thumb-wrap';
-    const c=ZONE_COLORS[m.zoneIdx%ZONE_COLORS.length];
-    const idx=generatedBlobs.length-1;
-    wrap.innerHTML=`<div style="position:relative;width:100%">
-      <canvas width="256" height="256" style="width:100%;border-radius:4px;box-shadow:0 4px 20px rgba(0,0,0,.6)"></canvas>
-      <span style="position:absolute;bottom:6px;left:6px;background:${c.bg};color:${c.text};font-size:10px;padding:2px 8px;border-radius:10px;font-family:sans-serif;font-weight:600">${m.zone}</span>
-    </div>
-    <div style="font-size:11px;color:${c.bg};letter-spacing:1px;text-align:center">Mesa ${m.num}</div>
-    <button class="btn-dl-single" onclick="dlSingle(${idx})">⬇ Descargar</button>`;
-    wrap.querySelector('canvas').getContext('2d').drawImage(bmp,0,0,256,256);
-    document.getElementById('grid').appendChild(wrap);
-    await new Promise(r=>setTimeout(r,0));
+  var g=ctx.createLinearGradient(0,0,CARD_W,CARD_H);
+  g.addColorStop(0,'#0a0612');g.addColorStop(0.5,'#160a2e');g.addColorStop(1,'#0a0612');
+  ctx.fillStyle=g;ctx.fillRect(0,0,CARD_W,CARD_H);
+  drawStars(ctx);
+
+  var rg=ctx.createRadialGradient(CARD_W/2,0,40,CARD_W/2,0,CARD_W);
+  rg.addColorStop(0,'rgba('+crgb.r+','+crgb.g+','+crgb.b+',0.35)');
+  rg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=rg;ctx.fillRect(0,0,CARD_W,CARD_H);
+
+  ctx.strokeStyle=col;ctx.lineWidth=6;
+  roundRect(ctx,18,18,CARD_W-36,CARD_H-36,28);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.10)';ctx.lineWidth=2;
+  roundRect(ctx,32,32,CARD_W-64,CARD_H-64,22);ctx.stroke();
+
+  ctx.textAlign='center';
+
+  ctx.fillStyle='#c9a0ff';
+  ctx.font="900 60px 'Orbitron', sans-serif";
+  ctx.fillText('👽 ÁREA 52', CARD_W/2, 128);
+  ctx.fillStyle='#9a7ac0';
+  ctx.font="700 24px 'Orbitron', sans-serif";
+  ctx.fillText('G A S T R O   B A R', CARD_W/2, 168);
+
+  if(mesa.zone){
+    ctx.font="700 26px sans-serif";
+    var zw=ctx.measureText(mesa.zone.toUpperCase()).width+56;
+    roundRect(ctx,(CARD_W-zw)/2,205,zw,48,24);
+    ctx.fillStyle=col;ctx.fill();
+    ctx.fillStyle='#ffffff';
+    ctx.fillText(mesa.zone.toUpperCase(), CARD_W/2, 238);
   }
 
-  prog.style.display='none';
-  document.getElementById('btn-dl-all').disabled=false;
+  ctx.fillStyle='#9a7ac0';
+  ctx.font="700 40px 'Orbitron', sans-serif";
+  ctx.fillText('MESA', CARD_W/2, 322);
+  ctx.fillStyle='#ffffff';
+  ctx.font="900 220px 'Orbitron', sans-serif";
+  ctx.shadowColor=col;ctx.shadowBlur=40;
+  ctx.fillText(String(mesa.num), CARD_W/2, 525);
+  ctx.shadowBlur=0;
+
+  var qrSize=400;
+  var qrX=(CARD_W-qrSize)/2, qrY=600;
+  var url=document.getElementById('qr-url').value.trim();
+  var sep=url.indexOf('?')>=0?'&':'?';
+  drawQR(ctx, url+sep+'mesa='+mesa.num, qrX, qrY, qrSize);
+
+  ctx.fillStyle='#e8d5ff';
+  ctx.font="28px 'Special Elite', serif";
+  ctx.fillText('📲 Carta · Rocola · y más', CARD_W/2, qrY+qrSize+80);
+  ctx.fillStyle='#9a7ac0';
+  ctx.font="20px 'Special Elite', serif";
+  ctx.fillText('@area52.gastrobar', CARD_W/2, qrY+qrSize+118);
+
+  return canvas;
 }
 
-function dlSingle(idx){
-  const {blob,name}=generatedBlobs[idx];
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.download=name;a.href=url;a.click();
-  URL.revokeObjectURL(url);
+function generateAll(){
+  var mesas=getMesas();
+  if(!mesas.length){alert('No hay mesas para generar. Carga del POS o agrega zonas.');return;}
+  var grid=document.getElementById('grid');
+  grid.innerHTML='';
+  generatedCards=[];
+  var prog=document.getElementById('progress');prog.style.display='block';
+  var bar=document.getElementById('progress-bar');
+  var i=0;
+  function step(){
+    if(i>=mesas.length){
+      prog.style.display='none';
+      document.getElementById('btn-dl-all').disabled=false;
+      return;
+    }
+    var m=mesas[i];
+    var canvas=makeCardCanvas(m);
+    var dataURL=canvas.toDataURL('image/png');
+    generatedCards.push({num:m.num,zone:m.zone,dataURL:dataURL});
+    var wrap=document.createElement('div');wrap.className='thumb-wrap';
+    var img=document.createElement('img');img.src=dataURL;
+    var btn=document.createElement('button');btn.className='btn-dl-single';btn.textContent='⬇ Mesa '+m.num;
+    btn.onclick=(function(d,n){return function(){var a=document.createElement('a');a.href=d;a.download='Mesa-'+n+'.png';a.click();};})(dataURL,m.num);
+    wrap.appendChild(img);wrap.appendChild(btn);grid.appendChild(wrap);
+    i++;bar.style.width=Math.round(i/mesas.length*100)+'%';
+    setTimeout(step,10);
+  }
+  step();
 }
 
-async function downloadAll(){
-  if(!generatedBlobs.length)return;
-  const zip=new JSZip();
-  generatedBlobs.forEach(item=>{
-    const zfolder=item.name.replace('Area52_','').split('_Mesa')[0].replace(/_/g,' ');
-    zip.folder(zfolder).file(item.name,item.blob);
+function downloadAll(){
+  if(!generatedCards.length){alert('Genera las tarjetas primero.');return;}
+  var zip=new JSZip();
+  generatedCards.forEach(function(c){
+    var b64=c.dataURL.split(',')[1];
+    zip.file('Mesa-'+c.num+'.png', b64, {base64:true});
   });
-  const content=await zip.generateAsync({type:'blob'});
-  const url=URL.createObjectURL(content);
-  const a=document.createElement('a');a.download='Area52_Tarjetas.zip';a.href=url;a.click();
-  URL.revokeObjectURL(url);
+  zip.generateAsync({type:'blob'}).then(function(blob){
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='Tarjetas-Area52.zip';a.click();
+  });
 }
 
 renderZones();
+updatePreview();
 </script>
 </body>
 </html>
