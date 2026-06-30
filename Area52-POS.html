@@ -378,7 +378,7 @@ var SAN_SEMANAL=[
 ];
 var _mesesOpen={};  // meses expandidos en historial
 var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos:[{ts,valor,fp}]}]
-var _socioActivo='CARLOS';  // currently selected socio
+var _socioActivo='JAVIER';  // currently selected socio
 var _socCatFiltro='';  // categoría abierta en el acordeón de socios (vacío = todas cerradas)
 var ventaSinStock=false;  // admin toggle: allow selling without stock
 var descuentoHabilitado=true;  // admin toggle: permitir el 10% de descuento
@@ -4929,16 +4929,25 @@ function renderEmpleados(){
 
   var empCards=empleados.filter(function(e){return e.activo!==false;}).map(function(e){
     var diario=parseInt(e.pagoDiario)||0;
+    var esVariable=!!e.pagoVariable;
     // Días trabajados esta semana
     var diasTrab=0;
+    var ganado=0;
     var diasBtns=fechas.map(function(d,idx){
       var k=e.id+'_'+_fechaKey(d);
-      var trab=!!asistenciaEmp[k];
-      if(trab)diasTrab++;
+      var rec=asistenciaEmp[k];
+      var trab=!!rec;
+      var valorDia=0;
+      if(trab){
+        diasTrab++;
+        // Si es variable y se guardó un número, usar ese; si no, el pago diario
+        valorDia=(typeof rec==='number')?rec:diario;
+        ganado+=valorDia;
+      }
       var futuro=d>hoy;
-      return'<button data-act="emp-dia" data-key="'+k+'" '+(futuro?'disabled':'')+' style="flex:1;min-width:38px;background:'+(trab?'#22c55e':'var(--card)')+';color:'+(trab?'#000':'var(--muted)')+';border:1px solid '+(trab?'#22c55e':'var(--border)')+';border-radius:8px;padding:7px 2px;font-size:11px;font-weight:700;cursor:'+(futuro?'not-allowed':'pointer')+';opacity:'+(futuro?'.3':'1')+'">'+DIAS[idx]+'<br><span style="font-size:13px">'+(trab?'✓':d.getDate())+'</span></button>';
+      var etiqueta=trab?(esVariable&&typeof rec==='number'?fmt(rec).replace('$','').replace(/\s/g,''):'✓'):d.getDate();
+      return'<button data-act="emp-dia" data-key="'+k+'" data-emp="'+e.id+'" '+(futuro?'disabled':'')+' style="flex:1;min-width:38px;background:'+(trab?'#22c55e':'var(--card)')+';color:'+(trab?'#000':'var(--muted)')+';border:1px solid '+(trab?'#22c55e':'var(--border)')+';border-radius:8px;padding:7px 2px;font-size:11px;font-weight:700;cursor:'+(futuro?'not-allowed':'pointer')+';opacity:'+(futuro?'.3':'1')+'">'+DIAS[idx]+'<br><span style="font-size:'+(esVariable&&trab?'9px':'13px')+'">'+etiqueta+'</span></button>';
     }).join('');
-    var ganado=diasTrab*diario;
     var prests=prestamosSemana(e.id);
     var totalPrestSem=prests.reduce(function(s,m){return s+m.valor;},0);
     var saldoPagar=ganado-totalPrestSem;
@@ -4959,7 +4968,7 @@ function renderEmpleados(){
       +'<div style="display:flex;gap:4px;margin-bottom:10px">'+diasBtns+'</div>'
       // Cálculo semanal
       +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
-        +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>'+diasTrab+' día'+(diasTrab!==1?'s':'')+' × '+fmt(diario)+'</span><span style="font-weight:700">'+fmt(ganado)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>'+diasTrab+' día'+(diasTrab!==1?'s':'')+(esVariable?' (valor variable)':' × '+fmt(diario))+'</span><span style="font-weight:700">'+fmt(ganado)+'</span></div>'
         +(prestRows?'<div style="border-top:1px dashed var(--border);margin:5px 0;padding-top:5px">'+prestRows+'</div>':'')
         +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:5px;padding-top:6px"><span style="font-weight:800;font-size:13px">SALDO A PAGAR</span><span style="color:'+(saldoPagar>=0?'#22c55e':'#ef4444')+';font-weight:900;font-size:16px">'+fmt(saldoPagar)+'</span></div>'
       +'</div>'
@@ -5000,8 +5009,9 @@ function abrirNuevoEmpleado(){
     +'<input class="inp" id="emp-nombre" placeholder="Ej: Juan Pérez"/></div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cargo</div>'
     +'<input class="inp" id="emp-cargo" placeholder="Ej: Mesero, Cocinero, Bartender"/></div>'
-    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
     +'<input class="inp money" id="emp-pago" type="text" inputmode="numeric" placeholder="Ej: 50.000"/></div>'
+    +'<label style="display:flex;align-items:center;gap:8px;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;cursor:pointer"><input type="checkbox" id="emp-variable"/> <span style="font-size:13px">Pago variable por día (elijo el valor al marcar cada día)</span></label>'
     +'<button class="btn btn-green btn-full" onclick="guardarEmpleado()">Guardar</button>');
 }
 function abrirEditarEmpleado(empId){
@@ -5029,16 +5039,34 @@ function guardarEmpleado(empId){
   var nombre=((document.getElementById('emp-nombre')||{}).value||'').trim();
   var cargo=((document.getElementById('emp-cargo')||{}).value||'').trim();
   var pago=moneyVal('emp-pago')||0;
+  var variable=!!((document.getElementById('emp-variable')||{}).checked);
   if(!nombre){alert('Escribe el nombre.');return;}
   if(empId){
     var e=empleados.find(function(x){return x.id===empId;});
-    if(e){e.nombre=nombre;e.cargo=cargo;e.pagoDiario=pago;}
+    if(e){e.nombre=nombre;e.cargo=cargo;e.pagoDiario=pago;e.pagoVariable=variable;}
     var ob={};empleados.forEach(function(x){ob[x.id]=x;});fbSet('empleados',ob);
   } else {
-    var emp={id:'emp'+Date.now(),nombre:nombre,cargo:cargo,pagoDiario:pago,activo:true,ts:Date.now()};
+    var emp={id:'emp'+Date.now(),nombre:nombre,cargo:cargo,pagoDiario:pago,pagoVariable:variable,activo:true,ts:Date.now()};
     empleados.push(emp);
     var ob2={};empleados.forEach(function(x){ob2[x.id]=x;});fbSet('empleados',ob2);
   }
+  closeModal1();render();
+}
+
+function abrirPagoDiaVariable(key,emp){
+  var sugerido=parseInt(emp.pagoDiario)||0;
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📅 Pago de este día</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Cuánto se le paga por este día? (COP)</div>'
+    +'<input class="inp money" id="dia-valor" type="text" inputmode="numeric" value="'+(sugerido?moneyFmt(sugerido):'')+'" placeholder="0" autofocus/></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPagoDiaVariable(\''+key+'\')">✓ Marcar día</button>');
+  setTimeout(function(){var el=document.getElementById('dia-valor');if(el){el.focus();el.select();}},100);
+}
+function confirmarPagoDiaVariable(key){
+  var v=moneyVal('dia-valor')||0;
+  if(v<=0){alert('Escribe el valor de este día.');return;}
+  asistenciaEmp[key]=v;  // guarda el número (valor de ese día)
+  fbSet('asistenciaEmp',asistenciaEmp);
   closeModal1();render();
 }
 
@@ -5160,7 +5188,7 @@ function renderSocios(){
   var totalCarlos=consumoSocios.filter(function(c){return c.socio==='CARLOS';}).reduce(function(a,c){return a+c.total;},0);
   var totalJavier=consumoSocios.filter(function(c){return c.socio==='JAVIER';}).reduce(function(a,c){return a+c.total;},0);
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
-  var socioActivo=_socioActivo||'CARLOS';
+  var socioActivo=_socioActivo||'JAVIER';
 
   // Carta por categorias
   // Categorías reales (sin 'Todos'); cada una es un acordeón
@@ -5260,25 +5288,29 @@ function renderSocios(){
         +'<div style="color:var(--muted);font-size:10px;font-weight:700">TOTAL</div>'
         +'<div style="color:var(--gold);font-weight:900;font-size:16px">'+fmt(totalAcum)+'</div>'
       +'</div>'
-      +'<div style="background:var(--card);border:2px solid #38bdf844;border-radius:12px;padding:10px;text-align:center">'
-        +'<div style="color:#38bdf8;font-size:10px;font-weight:700">CARLOS</div>'
-        +'<div style="color:#38bdf8;font-weight:900;font-size:16px">'+fmt(totalCarlos)+'</div>'
-      +'</div>'
       +'<div style="background:var(--card);border:2px solid #a855f744;border-radius:12px;padding:10px;text-align:center">'
         +'<div style="color:#a855f7;font-size:10px;font-weight:700">JAVIER</div>'
         +'<div style="color:#a855f7;font-weight:900;font-size:16px">'+fmt(totalJavier)+'</div>'
       +'</div>'
+      +'<div style="background:var(--card);border:2px solid #38bdf844;border-radius:12px;padding:10px;text-align:center">'
+        +'<div style="color:#38bdf8;font-size:10px;font-weight:700">CARLOS</div>'
+        +'<div style="color:#38bdf8;font-weight:900;font-size:16px">'+fmt(totalCarlos)+'</div>'
+      +'</div>'
     +'</div>'
     // Socio selector
     +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-      +'<button data-act="sel-socio" data-socio="CARLOS" style="flex:1;background:'+(socioActivo==='CARLOS'?'#38bdf8':'var(--card)')+';color:'+(socioActivo==='CARLOS'?'#000':'var(--muted)')+';border:2px solid '+(socioActivo==='CARLOS'?'#38bdf8':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 CARLOS</button>'
       +'<button data-act="sel-socio" data-socio="JAVIER" style="flex:1;background:'+(socioActivo==='JAVIER'?'#a855f7':'var(--card)')+';color:'+(socioActivo==='JAVIER'?'#fff':'var(--muted)')+';border:2px solid '+(socioActivo==='JAVIER'?'#a855f7':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 JAVIER</button>'
+      +'<button data-act="sel-socio" data-socio="CARLOS" style="flex:1;background:'+(socioActivo==='CARLOS'?'#38bdf8':'var(--card)')+';color:'+(socioActivo==='CARLOS'?'#000':'var(--muted)')+';border:2px solid '+(socioActivo==='CARLOS'?'#38bdf8':'var(--border)')+';border-radius:10px;padding:10px;font-weight:800;font-size:14px;cursor:pointer">👤 CARLOS</button>'
     +'</div>'
     // Botón para mostrar/ocultar la lista de productos (minimizada por defecto)
     +'<button data-act="toggle-sec" data-sec="socProds" style="width:100%;text-align:left;background:'+(socioActivo==='CARLOS'?'#38bdf818':'#a855f718')+';border:1px solid '+(socioActivo==='CARLOS'?'#38bdf844':'#a855f744')+';border-radius:10px;padding:11px 14px;margin-bottom:10px;font-weight:800;font-size:13px;color:'+(socioActivo==='CARLOS'?'#38bdf8':'#a855f7')+';cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
       +'<span>➕ Anotar consumo a '+socioActivo+'</span><span style="font-size:12px">'+(_secOpen.socProds?'▲ ocultar':'▼ abrir')+'</span>'
     +'</button>'
-    +(_secOpen.socProds?'<div style="margin-bottom:14px">'+acordeon+'</div>':'')
+    +(_secOpen.socProds?'<div style="margin-bottom:14px">'
+      // Banner fijo: a quién se le está anotando (para que el cajero no se confunda)
+      +'<div style="position:sticky;top:0;z-index:6;background:'+(socioActivo==='CARLOS'?'#38bdf8':'#a855f7')+';color:'+(socioActivo==='CARLOS'?'#000':'#fff')+';border-radius:10px;padding:10px 14px;margin-bottom:10px;text-align:center;font-weight:900;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.35);letter-spacing:.5px">✍️ ANOTANDO A: '+socioActivo+'</div>'
+      +acordeon
+    +'</div>':'')
     // History del socio activo
     +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">📋 CONSUMOS DE '+socioActivo+'</div>'
     +resumenAgrupado
@@ -5289,8 +5321,8 @@ function renderSocios(){
       ?'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin:18px 0 10px;border-top:2px solid var(--border)">'
         +'<div style="color:var(--muted);font-size:11px;font-weight:700;margin-bottom:8px">💵 Liquidar cuenta de socio (vuelve a 0)</div>'
         +'<div style="display:flex;gap:8px">'
-        +(totalCarlos>0?'<button onclick="liquidarSocio(\'CARLOS\')" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Carlos · '+fmt(totalCarlos)+'</button>':'')
         +(totalJavier>0?'<button onclick="liquidarSocio(\'JAVIER\')" style="flex:1;background:#a855f718;color:#a855f7;border:1px solid #a855f744;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Javier · '+fmt(totalJavier)+'</button>':'')
+        +(totalCarlos>0?'<button onclick="liquidarSocio(\'CARLOS\')" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:8px;padding:9px;font-weight:700;font-size:12px;cursor:pointer">Carlos · '+fmt(totalCarlos)+'</button>':'')
         +'</div></div>'
       :'')
     +(esAdmin&&totalAcum>0
@@ -5333,7 +5365,9 @@ function abrirCantidadSocio(pid,esCubeta){
       +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 0;'
       +'font-size:20px;font-weight:900;color:var(--accent);cursor:pointer">'+q+'</button>';
   }).join('');
-  modal2('<div style="text-align:center;margin-bottom:14px">'
+  var socC=(_socioActivo==='CARLOS')?'#38bdf8':'#a855f7';
+  modal2('<div style="background:'+socC+';color:'+(_socioActivo==='CARLOS'?'#000':'#fff')+';border-radius:10px;padding:8px;text-align:center;font-weight:900;font-size:14px;margin-bottom:12px;letter-spacing:.5px">✍️ Para: '+_socioActivo+'</div>'
+    +'<div style="text-align:center;margin-bottom:14px">'
     +'<div style="font-size:30px">'+(esCubeta?'🪣':p.emoji)+'</div>'
     +'<div style="font-weight:800;font-size:16px;margin-top:4px">'+(esCubeta?'Cubetazo ':'')+esc(p.nombre)+'</div>'
     +'<div style="color:#22c55e;font-weight:700;font-size:14px;margin-top:2px">'+fmt(precioSocio)+' c/u</div>'
@@ -6063,8 +6097,20 @@ document.addEventListener('click',function(e){
   var edia=e.target.closest('[data-act="emp-dia"]');
   if(edia){
     var k=edia.getAttribute('data-key');
-    if(asistenciaEmp[k]){delete asistenciaEmp[k];}else{asistenciaEmp[k]=true;}
-    fbSet('asistenciaEmp',asistenciaEmp);render();return;
+    var empDia=empleados.find(function(x){return x.id===edia.getAttribute('data-emp');});
+    if(asistenciaEmp[k]){
+      // Ya estaba marcado -> desmarcar
+      delete asistenciaEmp[k];
+      fbSet('asistenciaEmp',asistenciaEmp);render();
+    } else if(empDia&&empDia.pagoVariable){
+      // Pago variable -> preguntar cuánto se paga ese día
+      abrirPagoDiaVariable(k,empDia);
+    } else {
+      // Pago fijo
+      asistenciaEmp[k]=true;
+      fbSet('asistenciaEmp',asistenciaEmp);render();
+    }
+    return;
   }
   var eed=e.target.closest('[data-act="emp-edit"]');
   if(eed){abrirEditarEmpleado(eed.getAttribute('data-emp'));return;}
