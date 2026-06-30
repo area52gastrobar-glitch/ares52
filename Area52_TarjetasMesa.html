@@ -57,9 +57,9 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
   .sidebar,.btn-dl-single,.main-header{display:none!important}
   .main{padding:0;display:block}
   .grid{display:block}
-  .thumb-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100vh;page-break-after:always;break-after:page;margin:0;padding:0}
+  .thumb-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100vh;page-break-after:always;break-after:page;margin:0;padding:0;overflow:hidden}
   .thumb-wrap:last-child{page-break-after:auto;break-after:auto}
-  .thumb-wrap img{box-shadow:none;width:auto;height:94vh;max-width:94vw;border-radius:0}
+  .thumb-wrap img{box-shadow:none;width:auto;height:auto;max-width:92vw;max-height:96vh;object-fit:contain;border-radius:0}
 }
 </style>
 </head>
@@ -251,44 +251,61 @@ function makeCardCanvas(mesa){
   roundRect(ctx,32,32,CARD_W-64,CARD_H-64,22);ctx.stroke();
 
   ctx.textAlign='center';
+  var MAXW=CARD_W-120;  // ancho máximo de texto (con márgenes)
 
-  ctx.fillStyle='#c9a0ff';
-  ctx.font="900 60px 'Orbitron', sans-serif";
-  ctx.fillText('👽 ÁREA 52', CARD_W/2, 128);
-  ctx.fillStyle='#9a7ac0';
-  ctx.font="700 24px 'Orbitron', sans-serif";
-  ctx.fillText('G A S T R O   B A R', CARD_W/2, 168);
-
-  if(mesa.zone){
-    ctx.font="700 26px sans-serif";
-    var zw=ctx.measureText(mesa.zone.toUpperCase()).width+56;
-    roundRect(ctx,(CARD_W-zw)/2,205,zw,48,24);
-    ctx.fillStyle=col;ctx.fill();
-    ctx.fillStyle='#ffffff';
-    ctx.fillText(mesa.zone.toUpperCase(), CARD_W/2, 238);
+  // Ajusta el tamaño de fuente para que el texto no exceda maxw
+  function fitFont(text, weight, px, family, maxw){
+    var s=px;
+    ctx.font=weight+' '+s+"px '"+family+"', sans-serif";
+    while(ctx.measureText(text).width>maxw && s>10){
+      s-=2; ctx.font=weight+' '+s+"px '"+family+"', sans-serif";
+    }
+    return s;
   }
 
+  // Header (se reduce solo si no cabe)
+  ctx.fillStyle='#c9a0ff';
+  fitFont('👽 ÁREA 52','900',54,'Orbitron',MAXW);
+  ctx.fillText('👽 ÁREA 52', CARD_W/2, 118);
   ctx.fillStyle='#9a7ac0';
-  ctx.font="700 40px 'Orbitron', sans-serif";
-  ctx.fillText('MESA', CARD_W/2, 322);
+  ctx.font="700 22px 'Orbitron', sans-serif";
+  ctx.fillText('G A S T R O   B A R', CARD_W/2, 156);
+
+  // Badge de zona
+  if(mesa.zone){
+    var zt=mesa.zone.toUpperCase();
+    ctx.font="700 24px sans-serif";
+    var zw=ctx.measureText(zt).width+52;
+    roundRect(ctx,(CARD_W-zw)/2,182,zw,46,23);
+    ctx.fillStyle=col;ctx.fill();
+    ctx.fillStyle='#ffffff';
+    ctx.fillText(zt, CARD_W/2, 214);
+  }
+
+  // MESA + número grande
+  ctx.fillStyle='#9a7ac0';
+  ctx.font="700 38px 'Orbitron', sans-serif";
+  ctx.fillText('MESA', CARD_W/2, 290);
   ctx.fillStyle='#ffffff';
-  ctx.font="900 220px 'Orbitron', sans-serif";
-  ctx.shadowColor=col;ctx.shadowBlur=40;
-  ctx.fillText(String(mesa.num), CARD_W/2, 525);
+  fitFont(String(mesa.num),'900',200,'Orbitron',MAXW);
+  ctx.shadowColor=col;ctx.shadowBlur=36;
+  ctx.fillText(String(mesa.num), CARD_W/2, 470);
   ctx.shadowBlur=0;
 
-  var qrSize=400;
-  var qrX=(CARD_W-qrSize)/2, qrY=600;
+  // QR grande (centrado, dentro de los límites)
+  var qrSize=360;
+  var qrX=(CARD_W-qrSize)/2, qrY=540;
   var url=document.getElementById('qr-url').value.trim();
   var sep=url.indexOf('?')>=0?'&':'?';
   drawQR(ctx, url+sep+'mesa='+mesa.num, qrX, qrY, qrSize);
 
+  // Pie (dentro de la tarjeta)
   ctx.fillStyle='#e8d5ff';
-  ctx.font="28px 'Special Elite', serif";
-  ctx.fillText('📲 Carta · Rocola · y más', CARD_W/2, qrY+qrSize+80);
+  ctx.font="26px 'Special Elite', serif";
+  ctx.fillText('📲 Carta · Rocola · y más', CARD_W/2, qrY+qrSize+62);
   ctx.fillStyle='#9a7ac0';
-  ctx.font="20px 'Special Elite', serif";
-  ctx.fillText('@area52.gastrobar', CARD_W/2, qrY+qrSize+118);
+  ctx.font="19px 'Special Elite', serif";
+  ctx.fillText('@area52.gastrobar', CARD_W/2, qrY+qrSize+96);
 
   return canvas;
 }
