@@ -95,7 +95,7 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
     <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
     <button class="btn btn-gen" id="btn-gen" onclick="generateAll()">⚡ Generar todas</button>
     <button class="btn btn-dl" id="btn-dl-all" onclick="downloadAll()" disabled>📦 Descargar ZIP</button>
-    <button class="btn btn-ghost" onclick="window.print()">🖨️ Imprimir (1 por hoja)</button>
+    <button class="btn btn-ghost" onclick="printCards()">🖨️ Imprimir (1 por hoja)</button>
     <div class="hint" style="margin-top:2px">Para 4/6/8 por hoja usa la opción <b>«Páginas por hoja»</b> del diálogo de impresión.</div>
   </div>
 </div>
@@ -355,6 +355,33 @@ function _doGenerate(mesas){
     setTimeout(step,10);
   }
   step();
+}
+
+function printCards(){
+  if(!generatedCards.length){alert('Genera las tarjetas primero (toca «Generar todas»).');return;}
+  var w=window.open('','_blank');
+  if(!w){alert('Permite las ventanas emergentes para imprimir.');return;}
+  var imgs=generatedCards.map(function(c){
+    return '<div class="pg"><img src="'+c.dataURL+'"/></div>';
+  }).join('');
+  var doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tarjetas Área 52</title>'
+    +'<style>'
+    +'@page{size:A4 portrait;margin:0}'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'html,body{background:#0a0612}'
+    +'.pg{width:210mm;height:297mm;page-break-after:always;break-after:page;overflow:hidden}'
+    +'.pg:last-child{page-break-after:auto;break-after:auto}'
+    +'.pg img{width:210mm;height:297mm;display:block;object-fit:cover}'
+    +'</style></head><body>'+imgs+'</body></html>';
+  w.document.open();w.document.write(doc);w.document.close();
+  // Esperar a que carguen las imágenes antes de imprimir
+  var tryPrint=function(){
+    var imgsEl=w.document.images;
+    var todas=true;
+    for(var i=0;i<imgsEl.length;i++){if(!imgsEl[i].complete){todas=false;break;}}
+    if(todas){w.focus();w.print();}else{setTimeout(tryPrint,200);}
+  };
+  setTimeout(tryPrint,400);
 }
 
 function downloadAll(){
