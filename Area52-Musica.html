@@ -69,10 +69,20 @@ h1{text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;backgroun
     <div id="resultados"></div>
   </div>
 
-  <div class="qtitle"><span>🎧 En la fila</span><span id="contador" style="color:#888;font-weight:400;font-size:12px"></span></div>
+  <div class="qtitle"><span>🎧 En la fila</span><span style="display:flex;align-items:center;gap:10px"><button onclick="verHistorial()" style="background:#c4973a22;color:#c4973a;border:1px solid #c4973a44;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">🕐 Ya sonó</button><span id="contador" style="color:#888;font-weight:400;font-size:12px"></span></span></div>
   <div id="lista"><div class="empty spin">Cargando...</div></div>
 
   <div class="staff-link"><button onclick="toggleStaff()">· staff ·</button></div>
+</div>
+<div id="histPanel" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;padding:20px;overflow-y:auto" onclick="if(event.target===this)cerrarHistorial()">
+  <div style="max-width:520px;margin:0 auto;background:#140c22;border:1px solid #2e1e4a;border-radius:16px;padding:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:18px;font-weight:800;color:#e8d5ff">🕐 Lo que ya sonó</div>
+      <button onclick="cerrarHistorial()" style="background:#ef444418;color:#ef4444;border:none;border-radius:8px;padding:6px 12px;font-size:14px;cursor:pointer">✕</button>
+    </div>
+    <div style="color:#9a7ac0;font-size:12px;margin-bottom:12px">Últimas 24 horas · las de menos de 2h no se pueden volver a pedir</div>
+    <div id="histLista"></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -83,7 +93,7 @@ var firebaseConfig={apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",authDomain:
 firebase.initializeApp(firebaseConfig);
 var db=firebase.database();
 var STAFF_PIN="5252";
-var staffMode=false, pedidos=[], YT_KEY='';
+var staffMode=false, pedidos=[], historial=[], YT_KEY='';
 var YT_KEYS=[], _keyIdx=0;
 function setActiveKey(){YT_KEY=YT_KEYS[_keyIdx]||'';}
 function rotarKey(){if(_keyIdx<YT_KEYS.length-1){_keyIdx++;setActiveKey();return true;}return false;}
@@ -190,7 +200,8 @@ function pedir(videoId,tituloEnc,canalEnc){
   if(Date.now()-ultimo<20000){toast('⏳ Espera un momento antes de pedir otra','#f5a623');return;}
   // No repetir la misma canción si ya se pidió o sonó en las últimas 2 horas
   var DOS_HORAS=2*60*60*1000;
-  var reciente=pedidos.find(function(p){return p.videoId===videoId && (Date.now()-(p.ts||0))<DOS_HORAS;});
+  var reciente=pedidos.find(function(p){return p.videoId===videoId && (Date.now()-(p.ts||0))<DOS_HORAS;})
+             ||historial.find(function(p){return p.videoId===videoId && (Date.now()-(p.ts||0))<DOS_HORAS;});
   if(reciente){
     var minsRest=Math.ceil((DOS_HORAS-(Date.now()-reciente.ts))/60000);
     var txt=minsRest>60?(Math.floor(minsRest/60)+'h '+(minsRest%60)+'min'):(minsRest+' min');
@@ -208,6 +219,8 @@ function pedir(videoId,tituloEnc,canalEnc){
     document.getElementById('resultados').innerHTML='';
     toast('🎶 ¡Pedida! Pronto sonará');
   }).catch(function(){toast('❌ Error, intenta de nuevo','#ef4444');});
+  // Guardar en el historial permanente (para el bloqueo de 2h aunque limpien la fila)
+  db.ref('historialRocola').push({videoId:videoId,cancion:titulo,artista:canal,nombre:nombre,genero:genero,ts:Date.now()});
 }
 
 function toggleStaff(){
@@ -241,12 +254,41 @@ function render(){
   }
   cont.innerHTML=html;
 }
+function verHistorial(){
+  var cont=document.getElementById('histLista');
+  if(!historial.length){
+    cont.innerHTML='<div style="text-align:center;color:#9a7ac0;padding:30px">Aún no ha sonado ninguna canción.</div>';
+  } else {
+    cont.innerHTML=historial.map(function(h){
+      var mins=Math.floor((Date.now()-(h.ts||0))/60000);
+      var hace=mins<60?(mins+' min'):(Math.floor(mins/60)+'h '+(mins%60)+'min');
+      var bloqueada=(Date.now()-(h.ts||0))<2*60*60*1000;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #241838">'
+        +'<div style="min-width:0"><div style="font-size:13px;color:#e8d5ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(bloqueada?'🔒 ':'')+esc(h.cancion)+'</div>'
+        +'<div style="font-size:11px;color:#9a7ac0">'+(h.artista?esc(h.artista)+' · ':'')+'hace '+hace+(h.nombre?' · 🙋 '+esc(h.nombre):'')+'</div></div>'
+      +'</div>';
+    }).join('');
+  }
+  document.getElementById('histPanel').style.display='block';
+}
+function cerrarHistorial(){document.getElementById('histPanel').style.display='none';}
+
 function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
 db.ref('musica').on('value',function(snap){
   var v=snap.val()||{};
   pedidos=Object.keys(v).map(function(k){var o=v[k];o.key=k;return o;}).sort(function(a,b){return a.ts-b.ts;});
   render();
+});
+
+// Historial permanente (no se borra al limpiar la fila)
+db.ref('historialRocola').on('value',function(snap){
+  var v=snap.val()||{};
+  historial=Object.keys(v).map(function(k){var o=v[k];o.key=k;return o;}).sort(function(a,b){return b.ts-a.ts;});
+  // Limpieza automática: borrar registros de más de 24 horas para no crecer sin límite
+  var lim=Date.now()-24*60*60*1000;
+  historial.filter(function(h){return (h.ts||0)<lim;}).forEach(function(h){db.ref('historialRocola/'+h.key).remove();});
+  historial=historial.filter(function(h){return (h.ts||0)>=lim;});
 });
 </script>
 </body>

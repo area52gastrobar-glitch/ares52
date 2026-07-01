@@ -345,7 +345,7 @@ function reproducirCola(){
 }
 
 function reproducirMasSonadas(){
-  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId&&!_videosBloqueados[h.videoId];});
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId&&(h.veces||0)>0&&!_videosBloqueados[h.videoId];});
   if(!lista.length){
     document.getElementById('nowTitle').textContent='Cola vacía';
     document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
@@ -639,9 +639,15 @@ function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&
 
 db.ref('historialMusica').on('value',function(snap){
   historialMusica=snap.val()||{};
-  // Reparar entradas con texto repetido (de versiones anteriores)
   Object.keys(historialMusica).forEach(function(vid){
     var h=historialMusica[vid];if(!h)return;
+    // Eliminar entradas "sucias" (registros de pedidos con clave push, no las de más-sonadas)
+    if(!h.videoId||h.videoId!==vid){
+      db.ref('historialMusica/'+vid).remove();
+      delete historialMusica[vid];
+      return;
+    }
+    // Reparar entradas con texto repetido (de versiones anteriores)
     var c=limpiarTexto(h.cancion), a=limpiarTexto(h.artista);
     if(c!==h.cancion||a!==h.artista){
       h.cancion=c;h.artista=a;
