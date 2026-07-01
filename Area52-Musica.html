@@ -188,6 +188,15 @@ function buscar(){
 function pedir(videoId,tituloEnc,canalEnc){
   var ultimo=parseInt(localStorage.getItem('a52_ultPedido')||'0');
   if(Date.now()-ultimo<20000){toast('⏳ Espera un momento antes de pedir otra','#f5a623');return;}
+  // No repetir la misma canción si ya se pidió o sonó en las últimas 2 horas
+  var DOS_HORAS=2*60*60*1000;
+  var reciente=pedidos.find(function(p){return p.videoId===videoId && (Date.now()-(p.ts||0))<DOS_HORAS;});
+  if(reciente){
+    var minsRest=Math.ceil((DOS_HORAS-(Date.now()-reciente.ts))/60000);
+    var txt=minsRest>60?(Math.floor(minsRest/60)+'h '+(minsRest%60)+'min'):(minsRest+' min');
+    toast('🔁 Esa canción ya está en la lista o sonó hace poco.<br>Podrás pedirla de nuevo en '+txt,'#f5a623');
+    return;
+  }
   var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
   var genero=document.getElementById('genero').value||'auto';
   if(genero==='auto')genero=detectarGenero(titulo,canal);  // autodetectar por título/canal
