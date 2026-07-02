@@ -125,6 +125,7 @@ var videoCache={};  // {key: videoId}
 var historialMusica={};  // {videoId:{cancion,artista,genero,veces}}
 var _autoIdx=0;
 var _ultimaAutoVid=null;  // para no repetir la última en modo aleatorio
+var _autoRecientes=[];    // videoIds ya puestos por autoplay (para no repetir hasta agotar el top)
 var _videosBloqueados={};  // videoIds que YouTube bloquea (LatinAutor, etc.) para no repetirlos
 var _ultProgreso={t:Date.now(),pos:-1};
 setInterval(function(){
@@ -351,17 +352,22 @@ function reproducirMasSonadas(){
     document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
     return;
   }
-  // Tomar el top 40 de las más sonadas y elegir una AL AZAR (evitando repetir la última)
+  // Tomar el top de las más sonadas y elegir AL AZAR, sin repetir las ya puestas
   lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
   var top=lista.slice(0,40);
-  var h;
-  if(top.length===1){h=top[0];}
-  else{
-    var intentos=0;
-    do{ h=top[Math.floor(Math.random()*top.length)]; intentos++; }
-    while(_ultimaAutoVid && h.videoId===_ultimaAutoVid && intentos<10);
+  // Quitar del pool las que ya se pusieron recientemente en autoplay
+  var pool=top.filter(function(x){return _autoRecientes.indexOf(x.videoId)===-1;});
+  // Si ya se pusieron todas, reiniciar el ciclo (evitando repetir de una la última)
+  if(!pool.length){
+    _autoRecientes=[];
+    pool=top.filter(function(x){return x.videoId!==_ultimaAutoVid;});
+    if(!pool.length)pool=top;
   }
+  var h=pool[Math.floor(Math.random()*pool.length)];
   _ultimaAutoVid=h.videoId;
+  _autoRecientes.push(h.videoId);
+  // No dejar crecer la memoria más allá del tamaño del top
+  if(_autoRecientes.length>top.length)_autoRecientes.shift();
   // Guardar valores LIMPIOS en actual; decorar solo lo que se muestra
   actual={cancion:limpiarTexto(h.cancion),artista:limpiarTexto(h.artista),genero:h.genero||'Otro',videoId:h.videoId,auto:true};
   document.getElementById('nowTitle').textContent='🔁 '+actual.cancion;
