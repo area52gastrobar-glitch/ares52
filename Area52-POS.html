@@ -476,7 +476,11 @@ function iniciarSync(){
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
   fbOn('configBar',function(v){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
-    if(tabActual==='mesas'||tabActual==='admin')render();
+    if(v&&typeof v.cubeMixPrecio!=='undefined'&&v.cubeMixPrecio)CUBE_MIX_PRECIO=parseInt(v.cubeMixPrecio)||CUBE_MIX_PRECIO;
+    if(v&&typeof v.cubeNacPrecio!=='undefined'&&v.cubeNacPrecio)CUBE_NAC_PRECIO=parseInt(v.cubeNacPrecio)||CUBE_NAC_PRECIO;
+    if(v&&typeof v.promoNacPrecio!=='undefined'&&v.promoNacPrecio)PROMO_NACIONAL_PRECIO=parseInt(v.promoNacPrecio)||PROMO_NACIONAL_PRECIO;
+    if(v&&typeof v.cubeTam!=='undefined'&&v.cubeTam)CUBE_MIX_TAM=parseInt(v.cubeTam)||CUBE_MIX_TAM;
+    if(tabActual==='mesas'||tabActual==='admin'||tabActual==='carta')render();
   });
   fbOn('proveedores',function(v){proveedores=v?(Array.isArray(v)?v:Object.values(v)):[];if(tabActual==='inventario')render();});
   fbOn('ingresosInv',function(v){ingresosInv=v?(Array.isArray(v)?v:Object.values(v)):[];if(tabActual==='inventario')render();});
@@ -2954,6 +2958,22 @@ function toggleVentaSinStock(){
   render();
 }
 
+function guardarPreciosCubetazo(){
+  var mix=moneyVal('cfg-cubemix')||0;
+  var nac=moneyVal('cfg-cubenac')||0;
+  var promo=moneyVal('cfg-promo')||0;
+  var tam=parseInt((document.getElementById('cfg-tam')||{}).value)||CUBE_MIX_TAM;
+  if(mix<=0||nac<=0||promo<=0||tam<=0){alert('Todos los precios y la cantidad deben ser mayores a 0.');return;}
+  CUBE_MIX_PRECIO=mix;CUBE_NAC_PRECIO=nac;PROMO_NACIONAL_PRECIO=promo;CUBE_MIX_TAM=tam;
+  // Guardar en Firebase sin borrar las otras llaves de configBar
+  var r1=ref('configBar/cubeMixPrecio');if(r1)r1.set(mix);
+  var r2=ref('configBar/cubeNacPrecio');if(r2)r2.set(nac);
+  var r3=ref('configBar/promoNacPrecio');if(r3)r3.set(promo);
+  var r4=ref('configBar/cubeTam');if(r4)r4.set(tam);
+  if(!r1)fbSet('configBar',{descuentoHabilitado:descuentoHabilitado,cubeMixPrecio:mix,cubeNacPrecio:nac,promoNacPrecio:promo,cubeTam:tam});
+  showToast('💾 Precios actualizados<br><span style="font-size:12px;opacity:.85">Mixto '+fmt(mix)+' · Nacional '+fmt(nac)+' · Promo '+fmt(promo)+'</span>','#22c55e');
+  render();
+}
 function toggleDescuento10(){
   descuentoHabilitado=!descuentoHabilitado;
   var r=ref('configBar/descuentoHabilitado');
@@ -5702,6 +5722,28 @@ function renderAdmin(){
         +'<div style="position:absolute;top:3px;'+(descuentoHabilitado?'right:3px':'left:3px')+';'
           +'width:22px;height:22px;background:#fff;border-radius:50%;transition:all .2s"></div>'
       +'</button>'
+    +'</div>'
+    // Precios de cubetazos y promo (editables)
+    +'<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:14px">'
+      +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">🪣 Precios de cubetazos y promo</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Cambia estos precios cuando quieras. Aplican de inmediato a todas las mesas.</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:8px">'
+        +'<span style="font-size:13px">🪣 Cubetazo mixto ('+CUBE_MIX_TAM+' cervezas)</span>'
+        +'<input class="inp money" id="cfg-cubemix" type="text" inputmode="numeric" value="'+moneyFmt(CUBE_MIX_PRECIO)+'"/>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:8px">'
+        +'<span style="font-size:13px">🪣 Cubetazo nacional ('+CUBE_MIX_TAM+' cervezas)</span>'
+        +'<input class="inp money" id="cfg-cubenac" type="text" inputmode="numeric" value="'+moneyFmt(CUBE_NAC_PRECIO)+'"/>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:8px">'
+        +'<span style="font-size:13px">⭐ Promo nacional (c/u)</span>'
+        +'<input class="inp money" id="cfg-promo" type="text" inputmode="numeric" value="'+moneyFmt(PROMO_NACIONAL_PRECIO)+'"/>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:12px">'
+        +'<span style="font-size:13px">🍺 Cervezas por cubetazo</span>'
+        +'<input class="inp" id="cfg-tam" type="number" inputmode="numeric" min="1" value="'+CUBE_MIX_TAM+'"/>'
+      +'</div>'
+      +'<button class="btn btn-green btn-full" onclick="guardarPreciosCubetazo()">💾 Guardar precios</button>'
     +'</div>'
     +'</div>';
 
