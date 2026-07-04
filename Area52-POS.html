@@ -956,7 +956,7 @@ function renderPanelPedido(){
       +(it.cubeta?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO ×5</div>':'')
       +(it.varianteNombre?'<div style="color:var(--accent);font-size:10px;font-weight:700">📐 '+esc(it.varianteNombre)+'</div>':'')+'</div>'
       +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button data-act="ped-minus" data-idx="'+idx_+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">−</button>':'<button data-act="ped-minus-bloq" style="background:rgba(255,255,255,.05);color:var(--dim);border:none;border-radius:6px;width:26px;height:26px;cursor:not-allowed;font-size:13px;line-height:1" title="Solo admin o subadmin pueden restar">🔒</button>')
-      +'<span style="color:#fff;font-weight:800;min-width:24px;text-align:center">'+it.qty+'</span>'
+      +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button data-act="ped-editqty" data-idx="'+idx_+'" style="background:rgba(255,255,255,.08);color:#fff;font-weight:800;min-width:34px;text-align:center;border:1px solid var(--border);border-radius:6px;height:26px;cursor:pointer;font-size:14px" title="Tocar para escribir la cantidad">'+it.qty+'</button>':'<span style="color:#fff;font-weight:800;min-width:24px;text-align:center">'+it.qty+'</span>')
       +'<button data-act="ped-plus" data-idx="'+idx_+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">+</button>'
       +'<span style="color:var(--gold);font-size:12px;font-weight:700;min-width:72px;text-align:right">'+fmt(pr*it.qty)+'</span>'
       +'</div>';
@@ -1390,6 +1390,43 @@ function confirmarQtyLibreVar(pid,nom,pre){
   agregarItemQty(pid,false,q,nom,pre);
 }
 
+function editarCantidadPedido(idx){
+  if(!mesaActiva)return;
+  var pped=pedidos[mesaActiva.id]||[];
+  var it=pped[idx];if(!it)return;
+  var nombre=it.nombre||(it.cubeta?'Cubetazo':'Producto');
+  modal2('<div style="text-align:center;margin-bottom:14px">'
+    +'<div style="font-size:26px">'+(it.emoji||'📦')+'</div>'
+    +'<div style="font-weight:800;font-size:15px;margin-top:4px">'+esc(nombre)+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">Cantidad actual: '+it.qty+'</div>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px;text-align:center">Escribe la NUEVA cantidad total</div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<input id="edit-qty-val" type="number" inputmode="numeric" min="0" value="'+it.qty+'" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:14px;font-size:19px;text-align:center;font-weight:800" onkeydown="if(event.key===\'Enter\')confirmarEditarCantidad('+idx+')"/>'
+      +'<button onclick="confirmarEditarCantidad('+idx+')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0 22px;font-size:16px;font-weight:800;cursor:pointer">✓</button>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-top:8px;text-align:center">Pon 0 para quitar el producto</div>');
+  setTimeout(function(){var el=document.getElementById('edit-qty-val');if(el){el.focus();el.select();}},100);
+}
+function confirmarEditarCantidad(idx){
+  if(!mesaActiva)return;
+  var pped=pedidos[mesaActiva.id]||[];
+  var it=pped[idx];if(!it)return;
+  var nueva=parseInt((document.getElementById('edit-qty-val')||{}).value);
+  if(isNaN(nueva)||nueva<0){alert('Cantidad no válida.');return;}
+  var dif=nueva-it.qty;
+  if(dif!==0){
+    // Ajustar inventario según la diferencia (negativo descuenta, positivo devuelve)
+    ajustarStockItem(it,-dif);  // si aumenta la cantidad, descuenta; si baja, devuelve
+    if(nueva===0)pped.splice(idx,1);
+    else it.qty=nueva;
+    var pr=ref('pedidos/'+mesaActiva.id);
+    if(pr)pr.set(pped.length?pped:null);
+  }
+  closeModal2();
+  renderSoloPedido();updateHeader();actualizarColorMesas();
+}
+
 function confirmarQtyLibre(pid,cubeta){
   var q=parseInt((document.getElementById('qty-libre')||{}).value)||0;
   if(q<=0){return;}
@@ -1443,9 +1480,13 @@ function abrirCantidadMesa(pid,cubeta){
     +'<div style="font-size:30px">'+(cubeta?'🪣':p.emoji)+'</div>'
     +'<div style="font-weight:800;font-size:16px;margin-top:4px">'+(cubeta?'Cubetazo ':'')+esc(p.nombre)+'</div>'
     +'<div style="color:var(--accent);font-weight:700;font-size:14px;margin-top:2px">'+fmt(precio)+(cubeta?' (×5)':' c/u')+'</div>'
-    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">¿Cuántas unidades?</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">Toca una cantidad o escríbela abajo</div>'
     +'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+btns+'</div>');
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'+btns+'</div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<input id="qty-libre" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:14px;font-size:17px;text-align:center;font-weight:700" onkeydown="if(event.key===\'Enter\')confirmarQtyLibre('+pid+','+(cubeta?'true':'false')+')"/>'
+      +'<button onclick="confirmarQtyLibre('+pid+','+(cubeta?'true':'false')+')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0 22px;font-size:16px;font-weight:800;cursor:pointer">Agregar</button>'
+    +'</div>');
 }
 
 function ajustarStockItem(item,delta){
@@ -6383,6 +6424,15 @@ document.addEventListener('click',function(e){
     }
     if(act2==='ped-minus-bloq'){
       showToast('🔒 Solo el administrador o subadministrador pueden restar productos de una mesa.','#ef4444',3500);
+      return;
+    }
+    if(act2==='ped-editqty'){
+      var eidx=parseInt(btn2.getAttribute('data-idx'));
+      if(isNaN(eidx)||!mesaActiva)return;
+      if(!(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))){
+        showToast('🔒 No tienes permiso para cambiar cantidades.','#ef4444',3000);return;
+      }
+      editarCantidadPedido(eidx);
       return;
     }
     if(act2==='ped-minus'||act2==='ped-plus'){
