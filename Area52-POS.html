@@ -1395,29 +1395,37 @@ function editarCantidadPedido(idx){
   var pped=pedidos[mesaActiva.id]||[];
   var it=pped[idx];if(!it)return;
   var nombre=it.nombre||(it.cubeta?'Cubetazo':'Producto');
+  var sumBtns=[1,2,3,4,5,6,10,12].map(function(q){
+    return'<button onclick="sumarCantidadPedido('+idx+','+q+')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:10px;padding:14px 0;font-size:18px;font-weight:900;cursor:pointer">+'+q+'</button>';
+  }).join('');
   modal2('<div style="text-align:center;margin-bottom:14px">'
     +'<div style="font-size:26px">'+(it.emoji||'📦')+'</div>'
     +'<div style="font-weight:800;font-size:15px;margin-top:4px">'+esc(nombre)+'</div>'
-    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">Cantidad actual: '+it.qty+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">Tiene: <b style="color:var(--text)">'+it.qty+'</b></div>'
     +'</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px;text-align:center">Escribe la NUEVA cantidad total</div>'
-    +'<div style="display:flex;gap:8px">'
-      +'<input id="edit-qty-val" type="number" inputmode="numeric" min="0" value="'+it.qty+'" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:14px;font-size:19px;text-align:center;font-weight:800" onkeydown="if(event.key===\'Enter\')confirmarEditarCantidad('+idx+')"/>'
-      +'<button onclick="confirmarEditarCantidad('+idx+')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0 22px;font-size:16px;font-weight:800;cursor:pointer">✓</button>'
+    +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:6px;text-align:center">➕ AGREGAR MÁS</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">'+sumBtns+'</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+      +'<input id="edit-qty-add" type="number" inputmode="numeric" min="1" placeholder="Sumar otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:13px;font-size:16px;text-align:center;font-weight:700" onkeydown="if(event.key===\'Enter\')sumarCantidadPedidoLibre('+idx+')"/>'
+      +'<button onclick="sumarCantidadPedidoLibre('+idx+')" style="background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0 20px;font-size:15px;font-weight:800;cursor:pointer">Sumar</button>'
     +'</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-top:8px;text-align:center">Pon 0 para quitar el producto</div>');
-  setTimeout(function(){var el=document.getElementById('edit-qty-val');if(el){el.focus();el.select();}},100);
+    +'<div style="border-top:1px solid var(--border);padding-top:12px">'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px;text-align:center">O fijar el total exacto</div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<input id="edit-qty-val" type="number" inputmode="numeric" min="0" value="'+it.qty+'" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-size:16px;text-align:center;font-weight:700" onkeydown="if(event.key===\'Enter\')confirmarEditarCantidad('+idx+')"/>'
+        +'<button onclick="confirmarEditarCantidad('+idx+')" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:0 18px;font-size:14px;font-weight:700;cursor:pointer">Fijar</button>'
+      +'</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:6px;text-align:center">Pon 0 para quitar el producto</div>'
+    +'</div>');
 }
-function confirmarEditarCantidad(idx){
+function _aplicarNuevaCantidad(idx,nueva){
   if(!mesaActiva)return;
   var pped=pedidos[mesaActiva.id]||[];
   var it=pped[idx];if(!it)return;
-  var nueva=parseInt((document.getElementById('edit-qty-val')||{}).value);
   if(isNaN(nueva)||nueva<0){alert('Cantidad no válida.');return;}
   var dif=nueva-it.qty;
   if(dif!==0){
-    // Ajustar inventario según la diferencia (negativo descuenta, positivo devuelve)
-    ajustarStockItem(it,-dif);  // si aumenta la cantidad, descuenta; si baja, devuelve
+    ajustarStockItem(it,-dif);  // sube -> descuenta; baja -> devuelve
     if(nueva===0)pped.splice(idx,1);
     else it.qty=nueva;
     var pr=ref('pedidos/'+mesaActiva.id);
@@ -1425,6 +1433,20 @@ function confirmarEditarCantidad(idx){
   }
   closeModal2();
   renderSoloPedido();updateHeader();actualizarColorMesas();
+}
+function sumarCantidadPedido(idx,cuanto){
+  var pped=pedidos[mesaActiva.id]||[];var it=pped[idx];if(!it)return;
+  _aplicarNuevaCantidad(idx, it.qty+(parseInt(cuanto)||0));
+}
+function sumarCantidadPedidoLibre(idx){
+  var cuanto=parseInt((document.getElementById('edit-qty-add')||{}).value)||0;
+  if(cuanto<=0){alert('Escribe cuánto agregar.');return;}
+  var pped=pedidos[mesaActiva.id]||[];var it=pped[idx];if(!it)return;
+  _aplicarNuevaCantidad(idx, it.qty+cuanto);
+}
+function confirmarEditarCantidad(idx){
+  var nueva=parseInt((document.getElementById('edit-qty-val')||{}).value);
+  _aplicarNuevaCantidad(idx, nueva);
 }
 
 function confirmarQtyLibre(pid,cubeta){
