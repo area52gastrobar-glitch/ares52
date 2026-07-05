@@ -2140,7 +2140,8 @@ function confirmarCobro(){
   showToast('✅ Cobro registrado · '+fmt(total)+'<br><button onclick="reimprimirUltimoTicket()" style="margin-top:6px;background:#fff;color:#1a1a22;border:none;border-radius:7px;padding:6px 14px;font-weight:800;font-size:12px;cursor:pointer">🖨️ Imprimir recibo</button>','#22c55e',5000);
 }
 
-var MODO_IMPRESION='estacion';  // 'estacion' = manda a la estación USB · 'local' = ventana de impresión
+var MODO_IMPRESION=(localStorage.getItem('a52_modo_impresion')||'estacion');  // por dispositivo: 'estacion' = envía a la estación · 'local' = imprime directo en ESTE equipo
+function setModoImpresion(m){MODO_IMPRESION=m;localStorage.setItem('a52_modo_impresion',m);if(tabActual==='admin')render();showToast(m==='local'?'🖨️ Este equipo imprime DIRECTO':'📡 Este equipo ENVÍA a la estación','#38bdf8');}
 
 function enviarAImpresora(mesa,ped,total,pagosList){
   // Construir items en formato simple para la estación
@@ -5999,6 +6000,16 @@ function renderAdmin(){
     +'</div>'
     +'<div style="margin-top:12px">'
       +'<button class="btn btn-sm btn-blue" onclick="imprimirTicketPrueba()">🖨️ Imprimir ticket de prueba</button>'
+    +'</div>'
+    // Modo de impresión de ESTE dispositivo
+    +'<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">'
+      +'<div style="font-weight:700;font-size:13px;margin-bottom:3px">🖨️ Impresión en este dispositivo</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Se guarda solo en este equipo. En el computador con la impresora usa "Directo"; en celulares deja "Estación".</div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<button onclick="setModoImpresion(\'estacion\')" style="flex:1;background:'+(MODO_IMPRESION==='estacion'?'#38bdf8':'var(--card2)')+';color:'+(MODO_IMPRESION==='estacion'?'#fff':'var(--muted)')+';border:1px solid '+(MODO_IMPRESION==='estacion'?'#38bdf8':'var(--border)')+';border-radius:9px;padding:11px;font-size:12px;font-weight:700;cursor:pointer">📡 Enviar a la estación</button>'
+        +'<button onclick="setModoImpresion(\'local\')" style="flex:1;background:'+(MODO_IMPRESION==='local'?'#22c55e':'var(--card2)')+';color:'+(MODO_IMPRESION==='local'?'#fff':'var(--muted)')+';border:1px solid '+(MODO_IMPRESION==='local'?'#22c55e':'var(--border)')+';border-radius:9px;padding:11px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Imprimir directo (este equipo)</button>'
+      +'</div>'
+      +(MODO_IMPRESION==='local'?'<div style="color:#22c55e;font-size:11px;margin-top:8px">✓ Este equipo imprime directo, sin depender de la estación. Se abrirá el diálogo de impresión (o imprime solo si activaste kiosk-printing en Chrome).</div>':'<div style="color:var(--muted);font-size:11px;margin-top:8px">Los recibos se envían a la estación USB (otro equipo o pestaña debe estar abierta).</div>')
     +'</div>'
     +'</div>';
 
