@@ -363,6 +363,7 @@ var saneamientoChecks={};  // {fecha_areaId: {check,uid,hora}}
 var saneamientoSemanal={};  // {semana_actId: {fecha,insumo,responsable,obs}}
 var _sanSemanaOffset=0;  // 0=semana actual, -1=anterior, etc.
 var abonosMesa={};  // {mesaId:[{monto,fp,nombre,ts,uid}]}
+var pedidoLog={};   // {mesaId:[{ts,texto,delta,uidNombre}]}  historial de pedidos con hora
 var SAN_AREAS=[
   {id:'pisos',nombre:'Pisos y Paredes',cond:'Libres de residuos, grasa y humedad. Barrido y trapeado completo.'},
   {id:'banos',nombre:'Baños (Clientes/Staff)',cond:'Sanitarios, lavamanos y pisos desinfectados. Papeleras vaciadas.'},
@@ -554,6 +555,10 @@ function iniciarSync(){
     abonosMesa=v||{};
     Object.keys(abonosMesa).forEach(function(k){if(!Array.isArray(abonosMesa[k]))abonosMesa[k]=Object.values(abonosMesa[k]||{});});
     if(tabActual==='mesas')render();
+  });
+  fbOn('pedidoLog',function(v){
+    pedidoLog=v||{};
+    Object.keys(pedidoLog).forEach(function(k){if(!Array.isArray(pedidoLog[k]))pedidoLog[k]=Object.values(pedidoLog[k]||{});});
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -974,8 +979,8 @@ function renderPanelPedido(){
       +(it.cubeta?'<div style="color:#22c55e;font-size:10px;font-weight:700">🪣 CUBETAZO ×5</div>':'')
       +(it.varianteNombre?'<div style="color:var(--accent);font-size:10px;font-weight:700">📐 '+esc(it.varianteNombre)+'</div>':'')+'</div>'
       +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button data-act="ped-minus" data-idx="'+idx_+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">−</button>':'<button data-act="ped-minus-bloq" style="background:rgba(255,255,255,.05);color:var(--dim);border:none;border-radius:6px;width:26px;height:26px;cursor:not-allowed;font-size:13px;line-height:1" title="Solo admin o subadmin pueden restar">🔒</button>')
-      +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button data-act="ped-editqty" data-idx="'+idx_+'" style="background:rgba(255,255,255,.08);color:#fff;font-weight:800;min-width:34px;text-align:center;border:1px solid var(--border);border-radius:6px;height:26px;cursor:pointer;font-size:14px" title="Tocar para escribir la cantidad">'+it.qty+'</button>':'<span style="color:#fff;font-weight:800;min-width:24px;text-align:center">'+it.qty+'</span>')
-      +'<button data-act="ped-plus" data-idx="'+idx_+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">+</button>'
+      +'<button data-act="ped-editqty" data-idx="'+idx_+'" style="background:rgba(255,255,255,.08);color:#fff;font-weight:800;min-width:34px;text-align:center;border:1px solid var(--border);border-radius:6px;height:26px;cursor:pointer;font-size:14px" title="Tocar para elegir cuántas agregar">'+it.qty+'</button>'
+      +'<button data-act="ped-plus" data-idx="'+idx_+'" title="Elegir cuántas agregar" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">+</button>'
       +'<span style="color:var(--gold);font-size:12px;font-weight:700;min-width:72px;text-align:right">'+fmt(pr*it.qty)+'</span>'
       +'</div>';
   }).join('');
@@ -1049,7 +1054,10 @@ function renderPanelPedido(){
     +'<button class="btn btn-sm btn-dark" onclick="cerrarPanel()">✕</button></div>'
     // PEDIDO ACTIVO ARRIBA
     +'<div style="background:var(--bg);border-radius:10px;border:2px solid var(--accent)44;padding:10px 12px;margin-bottom:10px;min-height:90px;max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch">'
-    +'<div class="section-title" style="color:var(--accent);margin-bottom:6px">🧾 Pedido activo'+(ped.length?' · '+ped.reduce(function(a,b){return a+b.qty;},0)+' ítems':'')+'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<div class="section-title" style="color:var(--accent);margin:0">🧾 Pedido activo'+(ped.length?' · '+ped.reduce(function(a,b){return a+b.qty;},0)+' ítems':'')+'</div>'
+      +'<button onclick="verHistorialMesa()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:99px;padding:3px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">🕐 Historial</button>'
+    +'</div>'
     +(ped.length?pedItems:'<div style="color:var(--dim);font-size:13px;text-align:center;padding:20px 14px">Sin productos aún<br><span style="font-size:11px">Selecciona productos abajo 👇</span></div>')
     +'</div>'
     // TOTAL + BOTONES DE COBRO (arriba, después del pedido)
@@ -1443,9 +1451,10 @@ function _aplicarNuevaCantidad(idx,nueva){
   if(isNaN(nueva)||nueva<0){alert('Cantidad no válida.');return;}
   var dif=nueva-it.qty;
   if(dif!==0){
+    var nomLog=it.isCustom?it.customNombre:(it.isCombo?it.comboNombre:(it.cubMixNombre||((menu.find(function(m){return m.id===it.pid;})||{}).nombre)||'Producto'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'');
     ajustarStockItem(it,-dif);  // sube -> descuenta; baja -> devuelve
-    if(nueva===0)pped.splice(idx,1);
-    else it.qty=nueva;
+    if(nueva===0){logPedido(mesaActiva.id,'Quitado: '+nomLog,-it.qty);pped.splice(idx,1);}
+    else{logPedido(mesaActiva.id,(dif>0?'+':'')+dif+' '+nomLog+' (queda en '+nueva+')',dif);it.qty=nueva;}
     var pr=ref('pedidos/'+mesaActiva.id);
     if(pr)pr.set(pped.length?pped:null);
   }
@@ -1585,6 +1594,62 @@ function ajustarStockItem(item,delta){
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
 }
 
+// Registra un movimiento del pedido de una mesa con su hora, para el historial
+function logPedido(mesaId,texto,delta){
+  if(mesaId==null)return;
+  if(!Array.isArray(pedidoLog[mesaId]))pedidoLog[mesaId]=[];
+  pedidoLog[mesaId].push({
+    ts:Date.now(),
+    texto:String(texto||''),
+    delta:(typeof delta==='number')?delta:null,
+    uidNombre:(usuarioActivo?usuarioActivo.nombre:'')
+  });
+  // Guardar solo los últimos 120 movimientos por mesa
+  if(pedidoLog[mesaId].length>120)pedidoLog[mesaId]=pedidoLog[mesaId].slice(-120);
+  fbSet('pedidoLog/'+mesaId,pedidoLog[mesaId]);
+}
+function verHistorialMesa(){
+  if(!mesaActiva)return;
+  var log=(pedidoLog[mesaActiva.id]||[]).slice().reverse();
+  var nombreMesa=mesaActiva.nombre||('Mesa '+mesaActiva.num);
+  var rows=log.length?log.map(function(e){
+    var d=e.delta;
+    var color=d==null?'var(--muted)':(d<0?'#ef4444':'#22c55e');
+    var badge=d==null?'':'<span style="color:'+color+';font-weight:800;white-space:nowrap;margin-left:8px">'+(d>0?'+'+d:d)+'</span>';
+    return'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1"><span style="color:var(--text)">'+esc(e.texto)+'</span>'
+        +'<div style="color:var(--muted);font-size:10px;margin-top:2px">🕐 '+fmtTime(e.ts)+(e.uidNombre?' · '+esc(e.uidNombre):'')+'</div></div>'
+      +badge
+    +'</div>';
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin movimientos registrados en esta mesa todavía.</div>';
+  modal2('<div style="font-weight:800;font-size:16px;margin-bottom:2px">🕐 Historial de la mesa</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:12px">'+esc(nombreMesa)+' · '+log.length+' movimiento'+(log.length!==1?'s':'')+'</div>'
+    +'<div style="max-height:55vh;overflow-y:auto">'+rows+'</div>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="margin-top:12px;background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+// Picker de cantidad para SUMAR MÁS (disponible para todos los roles, solo suma)
+function abrirSumarCantidad(idx){
+  if(!mesaActiva)return;
+  var pped=pedidos[mesaActiva.id]||[];
+  var it=pped[idx];if(!it)return;
+  var nombre=it.isCustom?it.customNombre:(it.isCombo?it.comboNombre:(it.cubMixNombre||it.nombre||((menu.find(function(m){return m.id===it.pid;})||{}).nombre)||'Producto'));
+  var emoji=it.emoji||(it.isCombo?it.comboEmoji:'')||((menu.find(function(m){return m.id===it.pid;})||{}).emoji)||'📦';
+  var sumBtns=[1,2,3,4,5,6,10,12].map(function(q){
+    return'<button onclick="sumarCantidadPedido('+idx+','+q+')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:10px;padding:16px 0;font-size:19px;font-weight:900;cursor:pointer">+'+q+'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:14px">'
+    +'<div style="font-size:28px">'+emoji+'</div>'
+    +'<div style="font-weight:800;font-size:15px;margin-top:4px">'+esc(nombre)+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:2px">Tiene: <b style="color:var(--text)">'+it.qty+'</b> · toca cuántas agregar</div>'
+    +'</div>'
+    +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:6px;text-align:center">➕ AGREGAR MÁS</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px">'+sumBtns+'</div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<input id="edit-qty-add" type="number" inputmode="numeric" min="1" placeholder="Otra cantidad..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:13px;font-size:16px;text-align:center;font-weight:700" onkeydown="if(event.key===\'Enter\')sumarCantidadPedidoLibre('+idx+')"/>'
+      +'<button onclick="sumarCantidadPedidoLibre('+idx+')" style="background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0 20px;font-size:15px;font-weight:800;cursor:pointer">Sumar</button>'
+    +'</div>');
+}
+
 function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   if(!mesaActiva)return;
   var p=menu.find(function(m){return m.id===pid;});
@@ -1605,6 +1670,7 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
   var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
+  logPedido(id,cantidad+'× '+nombreP,cantidad);
   showToast('✅ '+cantidad+'× '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+nItems+' ítems · '+fmt(totMesa)+'</span>','#22c55e');
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
@@ -1635,6 +1701,7 @@ function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
   var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
+  logPedido(id,'1× '+nombreP,1);
   showToast('✅ '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+nItems+' ítems · '+fmt(totMesa)+'</span>','#22c55e');
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
@@ -1720,6 +1787,7 @@ function confirmarCubetazoMixto(cantidades,tam,precioFijo,nombreCub){
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   var resumen=detalle.map(function(dd){return dd.cantidad+'× '+dd.nombre;}).join(', ');
+  logPedido(id,'🪣 '+etiqueta+' ('+resumen+')',1);
   showToast('🪣 '+esc(etiqueta)+'<br><span style="font-size:12px;opacity:.85">'+esc(resumen)+' · '+fmt(precioBalde)+'</span>','#22c55e');
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
@@ -2134,6 +2202,8 @@ function confirmarCobro(){
   var r=ref('pedidos/'+mesa.id);if(r)r.set(null);
   // Limpiar abonos de la mesa
   if(abonosMesa[mesa.id]){delete abonosMesa[mesa.id];fbSet('abonosMesa',abonosMesa);}
+  // Limpiar historial de pedido de la mesa (arranca limpio para el próximo cliente)
+  if(pedidoLog[mesa.id]){delete pedidoLog[mesa.id];fbSet('pedidoLog/'+mesa.id,null);}
   mesaActiva=null;closeModal1();render();
   // Aviso con opción de imprimir recibo
   var nombreMesa=mesa.nombre||('Mesa '+mesa.num);
@@ -2201,14 +2271,22 @@ function abrirProveedores(){
     var gs=gastosProv(pv);
     var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
     var ents=ingresosProv(pv);
+    var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+    var saldo=totalFacturado-totalPagado;
+    var saldoColor=saldo>0?'#ef4444':(saldo<0?'#f5a623':'#22c55e');
+    var saldoLabel=saldo>0?'DEBE':(saldo<0?'A FAVOR':'AL DÍA');
     return'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
         +'<span style="font-size:14px;font-weight:700">🏭 '+esc(pv.nombre)+'</span>'
         +'<button onclick="borrarProveedor(\''+pv.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer">✕</button>'
       +'</div>'
+      +'<div style="background:var(--bg);border-radius:7px;padding:8px;text-align:center;margin-bottom:8px;border:1px solid '+saldoColor+'33">'
+        +'<div style="color:var(--muted);font-size:9px">SALDO PENDIENTE · '+saldoLabel+'</div>'
+        +'<div style="color:'+saldoColor+';font-weight:900;font-size:18px">'+fmt(Math.abs(saldo))+'</div></div>'
       +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">PAGADO</div><div style="color:#22c55e;font-weight:800;font-size:13px">'+fmt(totalPagado)+'</div></div>'
-        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">ENTRADAS INV.</div><div style="color:#38bdf8;font-weight:800;font-size:13px">'+ents.length+'</div></div>'
+        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">FACTURADO</div><div style="color:var(--text);font-weight:800;font-size:12px">'+fmt(totalFacturado)+'</div></div>'
+        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">PAGADO</div><div style="color:#22c55e;font-weight:800;font-size:12px">'+fmt(totalPagado)+'</div></div>'
+        +'<div style="flex:1;background:var(--bg);border-radius:7px;padding:6px 8px;text-align:center"><div style="color:var(--muted);font-size:9px">ENTRADAS</div><div style="color:#38bdf8;font-weight:800;font-size:12px">'+ents.length+'</div></div>'
       +'</div>'
       +'<div style="display:flex;gap:6px">'
         +'<button onclick="pagarProveedor(\''+pv.id+'\')" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:7px;padding:8px;font-size:12px;font-weight:700;cursor:pointer">💵 Pagar</button>'
@@ -2226,13 +2304,23 @@ function abrirProveedores(){
 function pagarProveedor(provId){
   var pv=proveedores.find(function(p){return p.id===provId;});
   if(!pv)return;
+  var gs=gastos.filter(function(g){return g.provId===pv.id||(g.provNombre&&g.provNombre===pv.nombre);});
+  var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
+  var ents=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;});
+  var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+  var saldo=totalFacturado-totalPagado;
+  var saldoBanner=saldo>0
+    ?'<div style="background:#ef444412;border:1px solid #ef444433;border-radius:9px;padding:9px 11px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center"><span style="color:#ef4444;font-size:12px;font-weight:700">💳 Le debes</span><span style="color:#ef4444;font-weight:900;font-size:16px">'+fmt(saldo)+'</span></div>'
+    :'<div style="background:#22c55e12;border:1px solid #22c55e33;border-radius:9px;padding:9px 11px;margin-bottom:12px;text-align:center;color:#22c55e;font-size:12px;font-weight:700">✅ Estás al día con este proveedor</div>';
   var fpOpts=FPAGO.slice().sort(function(a,b){return a.id==='efectivo'?-1:b.id==='efectivo'?1:0;}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💵 Pagar a proveedor</div>'
     +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">🏭 '+esc(pv.nombre)+'</div>'
+    +saldoBanner
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto *</div>'
-    +'<input class="inp" id="pp-concepto" placeholder="Ej: Factura #123, mercancía semana..."/></div>'
-    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
-    +'<input class="inp money" id="pp-valor" type="text" inputmode="numeric" placeholder="0"/></div>'
+    +'<input class="inp" id="pp-concepto" placeholder="Ej: Factura #123, mercancía semana..." value="'+(saldo>0?'Abono saldo proveedor':'')+'"/></div>'
+    +'<div style="margin-bottom:6px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
+    +'<input class="inp money" id="pp-valor" type="text" inputmode="numeric" placeholder="0" value="'+(saldo>0?moneyFmt(saldo):'')+'"/></div>'
+    +(saldo>0?'<button onclick="(function(){var el=document.getElementById(\'pp-valor\');if(el)el.value=\''+moneyFmt(saldo)+'\';})()" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:12px">💯 Saldar todo ('+fmt(saldo)+')</button>':'')
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Categoría</div>'
     +'<select class="inp" id="pp-cat"><option value="Mercancía">Mercancía</option><option value="Insumos">Insumos</option></select></div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de (forma de pago)</div>'
@@ -2250,8 +2338,13 @@ function confirmarPagoProveedor(provId){
   if(valor<=0){alert('Escribe el valor.');return;}
   var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:cat,valor:valor,notas:'Pago a proveedor',fp:fp,provId:provId,provNombre:pv.nombre,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   fbPush('gastos',g);
+  // Calcular saldo restante después de este pago
+  var pagadoPrev=gastos.filter(function(x){return x.provId===pv.id||(x.provNombre&&x.provNombre===pv.nombre);}).reduce(function(s,x){return s+(x.valor||0);},0);
+  var facturado=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;}).reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+  var saldoRest=facturado-(pagadoPrev+valor);
+  var restTxt=saldoRest>0?' · queda debiendo '+fmt(saldoRest):(saldoRest<0?' · quedó a favor '+fmt(-saldoRest):' · ✅ saldado');
   closeModal1();
-  showToast('💵 Pago a '+esc(pv.nombre)+'<br><span style="font-size:12px;opacity:.85">'+fmt(valor)+' · sale de caja</span>','#22c55e');
+  showToast('💵 Pago a '+esc(pv.nombre)+'<br><span style="font-size:12px;opacity:.85">'+fmt(valor)+' · sale de caja'+restTxt+'</span>','#22c55e');
   render();
 }
 function verCuentaProveedor(provId){
@@ -2260,19 +2353,30 @@ function verCuentaProveedor(provId){
   var gs=gastos.filter(function(g){return g.provId===pv.id||(g.provNombre&&g.provNombre===pv.nombre);}).slice().sort(function(a,b){return b.ts-a.ts;});
   var ents=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;}).slice().sort(function(a,b){return b.ts-a.ts;});
   var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
+  var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+  var saldo=totalFacturado-totalPagado;
+  var saldoColor=saldo>0?'#ef4444':(saldo<0?'#f5a623':'#22c55e');
   var pagosRows=gs.length?gs.map(function(g){
     return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>💵 '+esc(g.concepto)+'<br><span style="color:var(--muted);font-size:10px">'+fmtFechaCorta(g.ts)+' · '+esc(g.categoria)+'</span></span><span style="color:#22c55e;font-weight:700;white-space:nowrap">'+fmt(g.valor)+'</span></div>';
   }).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">Sin pagos registrados.</div>';
   var entRows=ents.length?ents.map(function(r){
-    return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>📦 '+r.cantidad+'× '+esc(r.prodNombre)+'<br><span style="color:var(--muted);font-size:10px">'+(r.fecha||fmtFecha(r.ts))+(r.factura?' · Fact: '+esc(r.factura):'')+'</span></span></div>';
+    var vf=parseInt(r.valorFactura)||0;
+    return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>📦 '+r.cantidad+'× '+esc(r.prodNombre)+'<br><span style="color:var(--muted);font-size:10px">'+(r.fecha||fmtFecha(r.ts))+(r.factura?' · Fact: '+esc(r.factura):'')+'</span></span>'+(vf>0?'<span style="color:#f5a623;font-weight:700;white-space:nowrap">'+fmt(vf)+'</span>':'')+'</div>';
   }).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">Sin entradas de inventario.</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🏭 '+esc(pv.nombre)+'</div>'
-    +'<div style="background:var(--card2);border-radius:9px;padding:10px;margin-bottom:12px;text-align:center"><div style="color:var(--muted);font-size:10px">TOTAL PAGADO</div><div style="color:#22c55e;font-weight:900;font-size:20px">'+fmt(totalPagado)+'</div></div>'
+    +'<div style="background:var(--card2);border-radius:9px;padding:10px;margin-bottom:8px;text-align:center;border:1px solid '+saldoColor+'44"><div style="color:var(--muted);font-size:10px">SALDO PENDIENTE</div><div style="color:'+saldoColor+';font-weight:900;font-size:22px">'+fmt(Math.abs(saldo))+'</div><div style="color:'+saldoColor+';font-size:10px;font-weight:700">'+(saldo>0?'Le debes':saldo<0?'Te debe / pagaste de más':'Al día ✅')+'</div></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+      +'<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center"><div style="color:var(--muted);font-size:9px">FACTURADO</div><div style="color:var(--text);font-weight:800;font-size:14px">'+fmt(totalFacturado)+'</div></div>'
+      +'<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center"><div style="color:var(--muted);font-size:9px">PAGADO</div><div style="color:#22c55e;font-weight:800;font-size:14px">'+fmt(totalPagado)+'</div></div>'
+    +'</div>'
     +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">💵 PAGOS</div>'
     +'<div style="max-height:25vh;overflow-y:auto;margin-bottom:12px">'+pagosRows+'</div>'
     +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">📦 ENTRADAS DE INVENTARIO</div>'
     +'<div style="max-height:25vh;overflow-y:auto;margin-bottom:14px">'+entRows+'</div>'
-    +'<button class="btn btn-full" onclick="abrirProveedores()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">‹ Volver</button>');
+    +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-full" onclick="abrirProveedores()" style="flex:1;background:var(--card2);border:1px solid var(--border);color:var(--text)">‹ Volver</button>'
+      +'<button class="btn btn-green btn-full" onclick="pagarProveedor(\''+provId+'\')" style="flex:1">💵 Pagar</button>'
+    +'</div>');
 }
 function agregarProveedor(){
   var n=(document.getElementById('prov-nombre')||{}).value;n=(n||'').trim();
@@ -2308,6 +2412,9 @@ function abrirIngresoInventario(){
       +'<select class="inp" id="ing-prov">'+provOpts+'</select></div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">N° de factura</div>'
       +'<input class="inp" id="ing-factura" placeholder="Ej: 00123"/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor de la factura (COP)</div>'
+      +'<input class="inp money" id="ing-valor" type="text" inputmode="numeric" placeholder="0"/>'
+      +'<div style="color:var(--muted);font-size:10px;margin-top:3px">Esto es lo que le quedas debiendo al proveedor. Déjalo en 0 si ya la pagaste o si es solo control de stock.</div></div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Fecha</div>'
       +'<input class="inp" id="ing-fecha" type="date" value="'+hoy+'"/></div>'
     +'<button class="btn btn-green btn-full" onclick="guardarIngresoInventario()">✓ Registrar ingreso</button>');
@@ -2318,6 +2425,7 @@ function guardarIngresoInventario(){
   var cant=parseInt((document.getElementById('ing-cant')||{}).value)||0;
   var provId=(document.getElementById('ing-prov')||{}).value||'';
   var factura=((document.getElementById('ing-factura')||{}).value||'').trim();
+  var valorFactura=moneyVal('ing-valor')||0;
   var fecha=(document.getElementById('ing-fecha')||{}).value||new Date().toISOString().slice(0,10);
   if(!prodVal){alert('Selecciona el producto.');return;}
   if(cant<=0){alert('La cantidad debe ser mayor a 0.');return;}
@@ -2333,10 +2441,10 @@ function guardarIngresoInventario(){
     if(ing){var b=parseInt(ing.stock)||0;ing.stock=b+cant;prodNombre=ing.nombre;var io={};ingredientes.forEach(function(m){io[m.id]=m;});fbSet('ingredientes',io);}
   }
   // Registrar el ingreso
-  var registro={id:'ing_'+Date.now(),ts:Date.now(),fecha:fecha,prodTipo:tipo,prodId:pid,prodNombre:prodNombre,cantidad:cant,proveedor:prov?prov.nombre:'',factura:factura,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var registro={id:'ing_'+Date.now(),ts:Date.now(),fecha:fecha,prodTipo:tipo,prodId:pid,prodNombre:prodNombre,cantidad:cant,proveedor:prov?prov.nombre:'',factura:factura,valorFactura:valorFactura,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   fbPush('ingresosInv',registro);
   closeModal1();
-  showToast('➕ Ingreso registrado<br><span style="font-size:12px;opacity:.85">'+cant+'× '+esc(prodNombre)+' · '+esc(prov?prov.nombre:'')+'</span>','#22c55e');
+  showToast('➕ Ingreso registrado<br><span style="font-size:12px;opacity:.85">'+cant+'× '+esc(prodNombre)+' · '+esc(prov?prov.nombre:'')+(valorFactura>0?' · '+fmt(valorFactura):'')+'</span>','#22c55e');
   render();
 }
 
@@ -2828,6 +2936,7 @@ function confirmarItemPersonalizado(){
     customPrecio:valor
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  logPedido(id,'✏️ '+nombre+' · '+fmt(valor),1);
   closeModal2();
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
@@ -3382,6 +3491,7 @@ function confirmarComboEnPedido(cb, selecciones){
   };
   pedidos[id].push(newItem);
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  logPedido(id,(cb.emoji||'🎁')+' '+cb.nombre+' · '+fmt(cb.precio),1);
   // Descontar stock de los ingredientes
   finalIngs.forEach(function(ing){
     var cant=ing.cantidad||1;
@@ -5038,6 +5148,23 @@ function _sanLunes(offset){
 }
 function _fechaKey(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
 function _semanaKey(lunes){return _fechaKey(lunes);}
+// Lunes (Date) a partir de una semanaKey 'YYYY-MM-DD'
+function _lunesDeSemKey(semKey){var p=String(semKey).split('-');return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));}
+// semanaKey desplazada n semanas
+function _semKeyMas(semKey,n){var d=_lunesDeSemKey(semKey);d.setDate(d.getDate()+7*n);return _fechaKey(d);}
+// Calcula el saldo de la semana de un empleado (ganado, préstamos, pagos, ajustes traídos)
+function calcSaldoSemana(empId,semKey){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  var diario=emp?(parseInt(emp.pagoDiario)||0):0;
+  var lunes=_lunesDeSemKey(semKey);
+  var ganado=0;
+  for(var i=0;i<7;i++){var d=new Date(lunes);d.setDate(d.getDate()+i);var rec=asistenciaEmp[empId+'_'+_fechaKey(d)];if(rec)ganado+=(typeof rec==='number')?rec:diario;}
+  var prest=movEmpleados.filter(function(m){return m.empId===empId&&m.tipo==='prestamo'&&!m.largoPlazo&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
+  var pagado=movEmpleados.filter(function(m){return m.empId===empId&&m.tipo==='salario'&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
+  var ajuste=movEmpleados.filter(function(m){return m.empId===empId&&m.tipo==='ajuste'&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
+  var neto=ganado-prest+ajuste;
+  return {ganado:ganado,prest:prest,pagado:pagado,ajuste:ajuste,neto:neto,saldo:neto-pagado};
+}
 
 function diligenciarSaneamientoTodo(){
   if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador.');return;}
@@ -5385,12 +5512,27 @@ function renderEmpleados(){
       return'<button data-act="emp-dia" data-key="'+k+'" data-emp="'+e.id+'" '+(futuro?'disabled':'')+' style="flex:1;min-width:38px;background:'+(trab?'#22c55e':'var(--card)')+';color:'+(trab?'#000':'var(--muted)')+';border:1px solid '+(trab?'#22c55e':'var(--border)')+';border-radius:8px;padding:7px 2px;font-size:11px;font-weight:700;cursor:'+(futuro?'not-allowed':'pointer')+';opacity:'+(futuro?'.3':'1')+'">'+DIAS[idx]+'<br><span style="font-size:'+(esVariable&&trab?'9px':'13px')+'">'+etiqueta+'</span></button>';
     }).join('');
     var prests=prestamosSemana(e.id);
-    var totalPrestSem=prests.reduce(function(s,m){return s+m.valor;},0);
-    var saldoPagar=ganado-totalPrestSem;
+    var _c=calcSaldoSemana(e.id,semKey);
+    var totalPrestSem=_c.prest;
+    var pagadoSem=_c.pagado;
+    var ajusteSem=_c.ajuste;
+    var saldoPagar=_c.saldo;   // >0 falta por pagar · <0 se pagó de más
+    var estaPagada=(pagadoSem>0&&saldoPagar===0);
     var largoP=saldoLargoPlazo(e.id);
 
     var prestRows=prests.map(function(m){
       return'<div data-act="emp-vermov" data-id="'+m.id+'" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:5px 0;cursor:pointer;border-bottom:1px solid var(--border)"><span>💸 '+(m.nota?esc(m.nota):'Préstamo')+' · '+fmtTime(m.ts)+' <span style="opacity:.5">ⓘ</span></span><span style="color:#ef4444;font-weight:700">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
+    }).join('');
+    // Filas de ajustes traídos de otra semana
+    var ajustes=movEmpleados.filter(function(m){return m.empId===e.id&&m.tipo==='ajuste'&&m.semanaKey===semKey;});
+    var ajusteRows=ajustes.map(function(m){
+      var pos=(m.valor||0)>=0;
+      return'<div data-act="emp-vermov" data-id="'+m.id+'" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#c9b8f0;padding:5px 0;cursor:pointer;border-bottom:1px solid var(--border)"><span>↪️ '+(m.nota?esc(m.nota):(pos?'Saldo semana anterior':'Adelanto semana anterior'))+' <span style="opacity:.5">ⓘ</span></span><span style="color:'+(pos?'#f5a623':'#22c55e')+';font-weight:700;white-space:nowrap">'+(pos?'+':'−')+fmt(Math.abs(m.valor))+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
+    }).join('');
+    // Filas de pagos ya hechos esta semana
+    var pagos=movEmpleados.filter(function(m){return m.empId===e.id&&m.tipo==='salario'&&m.semanaKey===semKey;});
+    var pagoRows=pagos.map(function(m){
+      return'<div data-act="emp-vermov" data-id="'+m.id+'" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#9fe8b0;padding:5px 0;cursor:pointer;border-bottom:1px solid #22c55e22"><span>✅ Pagado · '+fmtTime(m.ts)+' <span style="opacity:.5">ⓘ</span></span><span style="color:#22c55e;font-weight:700;white-space:nowrap">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
     }).join('');
 
     return'<div class="card" style="margin-bottom:10px">'
@@ -5405,8 +5547,20 @@ function renderEmpleados(){
       // Cálculo semanal
       +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
         +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>'+diasTrab+' día'+(diasTrab!==1?'s':'')+(esVariable?' (valor variable)':' × '+fmt(diario))+'</span><span style="font-weight:700">'+fmt(ganado)+'</span></div>'
+        +(ajusteRows?'<div style="border-top:1px dashed var(--border);margin:5px 0;padding-top:5px">'+ajusteRows+'</div>':'')
         +(prestRows?'<div style="border-top:1px dashed var(--border);margin:5px 0;padding-top:5px">'+prestRows+'</div>':'')
-        +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:5px;padding-top:6px"><span style="font-weight:800;font-size:13px">SALDO A PAGAR</span><span style="color:'+(saldoPagar>=0?'#22c55e':'#ef4444')+';font-weight:900;font-size:16px">'+fmt(saldoPagar)+'</span></div>'
+        +(pagoRows?'<div style="border-top:1px dashed var(--border);margin:5px 0;padding-top:5px">'+pagoRows+'</div>':'')
+        +(function(){
+            var lbl,col,val;
+            if(estaPagada){lbl='TOTAL SEMANA';col='#22c55e';val=fmt(_c.neto);}
+            else if(saldoPagar>0){lbl=pagadoSem>0?'FALTA POR PAGAR':'SALDO A PAGAR';col='#f5a623';val=fmt(saldoPagar);}
+            else if(saldoPagar<0){lbl='PAGADO DE MÁS';col='#ef4444';val=fmt(Math.abs(saldoPagar));}
+            else {lbl='SALDO A PAGAR';col='var(--muted)';val=fmt(0);}
+            return'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:5px;padding-top:6px"><span style="font-weight:800;font-size:13px">'+lbl+'</span><span style="color:'+col+';font-weight:900;font-size:16px">'+val+'</span></div>';
+        })()
+        +(estaPagada?'<div style="background:#22c55e18;border:1px solid #22c55e33;border-radius:8px;padding:6px 8px;margin-top:8px;text-align:center;color:#22c55e;font-size:12px;font-weight:800">✅ SEMANA PAGADA · CERRADA</div>'
+          :(saldoPagar<0?'<div style="background:#ef444414;border:1px solid #ef444433;border-radius:8px;padding:6px 8px;margin-top:8px;text-align:center;color:#ef4444;font-size:11px;font-weight:700">⚠️ Se pagó '+fmt(Math.abs(saldoPagar))+' de más · puedes pasarlo a la próxima semana</div>'
+          :(pagadoSem>0&&saldoPagar>0?'<div style="background:#f5a62314;border:1px solid #f5a62333;border-radius:8px;padding:6px 8px;margin-top:8px;text-align:center;color:#f5a623;font-size:11px;font-weight:700">🕓 Pago parcial · falta '+fmt(saldoPagar)+'</div>':'')))
       +'</div>'
       // Largo plazo CON DETALLE (cuáles, fecha, abonos)
       +(largoP>0?(function(){
@@ -5432,6 +5586,7 @@ function renderEmpleados(){
         +'<button data-act="emp-prestamo" data-emp="'+e.id+'" style="flex:1;min-width:90px;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">💸 Préstamo</button>'
         +(largoP>0?'<button data-act="emp-mov" data-emp="'+e.id+'" data-tipo="abono" style="flex:1;min-width:90px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">✅ Abono largo plazo</button>':'')
         +(saldoPagar>0?'<button data-act="emp-pagar" data-emp="'+e.id+'" data-monto="'+saldoPagar+'" data-sem="'+semKey+'" style="flex:1;min-width:90px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer">💰 Pagar saldo</button>':'')
+        +(saldoPagar!==0?'<button data-act="emp-pasar" data-emp="'+e.id+'" data-sem="'+semKey+'" style="flex:1;min-width:90px;background:#c9b8f018;color:#c9b8f0;border:1px solid #c9b8f033;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">↪️ Pasar a próxima</button>':'')
       +'</div>'
     +'</div>';
   }).join('');
@@ -5595,23 +5750,71 @@ function pagarSaldoEmpleado(empId,monto,semKey){
   var fpOpts=FPAGO.slice().sort(function(a,b){return a.id==='efectivo'?-1:b.id==='efectivo'?1:0;}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💰 Pagar saldo semanal</div>'
     +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
-    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;text-align:center"><div style="color:var(--muted);font-size:11px">Saldo a pagar</div><div style="color:#22c55e;font-weight:900;font-size:24px">'+fmt(monto)+'</div></div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px;text-align:center"><div style="color:var(--muted);font-size:11px">Saldo pendiente</div><div style="color:#f5a623;font-weight:900;font-size:22px">'+fmt(monto)+'</div></div>'
+    +'<div style="margin-bottom:6px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Cuánto vas a pagar? *</div>'
+    +'<input class="inp money" id="pago-valor" type="text" inputmode="numeric" value="'+moneyFmt(monto)+'"/></div>'
+    +'<div style="color:var(--muted);font-size:10px;margin-bottom:12px">Puedes pagar más o menos. Si queda diferencia (o pagas de más), después podrás pasarla a la próxima semana con el botón ↪️.</div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de (forma de pago)</div>'
     +'<select class="inp" id="pago-fp">'+fpOpts+'</select></div>'
-    +'<button class="btn btn-green btn-full" onclick="confirmarPagoSaldo(\''+empId+'\','+monto+',\''+semKey+'\')">✓ Confirmar pago</button>');
+    +'<button class="btn btn-green btn-full" onclick="confirmarPagoSaldo(\''+empId+'\',\''+semKey+'\')">✓ Confirmar pago</button>');
 }
-function confirmarPagoSaldo(empId,monto,semKey){
+function confirmarPagoSaldo(empId,semKey){
   var emp=empleados.find(function(e){return e.id===empId;});
   if(!emp)return;
+  var valor=moneyVal('pago-valor')||0;
+  if(valor<=0){alert('Escribe cuánto vas a pagar.');return;}
   var fp=(document.getElementById('pago-fp')||{}).value||'efectivo';
-  var mov={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:'salario',valor:monto,fp:fp,nota:'Pago semana '+semKey,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var mov={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:'salario',valor:valor,fp:fp,nota:'Pago semana '+semKey,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   movEmpleados.push(mov);
   var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
   // SALE DE CAJA
-  var g={id:'g'+Date.now(),ts:Date.now(),concepto:'Pago nómina '+emp.nombre,categoria:'Personal',valor:monto,notas:'Semana '+semKey,fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var g={id:'g'+Date.now(),ts:Date.now(),concepto:'Pago nómina '+emp.nombre,categoria:'Personal',valor:valor,notas:'Semana '+semKey,fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   gastos.push(g);var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
   closeModal1();
-  showToast('💰 Pago registrado<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(monto)+'</span>','#22c55e');
+  // Recalcular saldo tras el pago
+  var c=calcSaldoSemana(empId,semKey);
+  var rest=c.saldo;
+  var restTxt=rest>0?' · falta '+fmt(rest):(rest<0?' · pagaste '+fmt(Math.abs(rest))+' de más':' · ✅ semana saldada');
+  showToast('💰 Pago registrado<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(valor)+restTxt+'</span>','#22c55e');
+  render();
+}
+// Pasa el saldo restante (o el exceso pagado) a la semana siguiente
+function pasarSaldoSemana(empId,semKey){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var c=calcSaldoSemana(empId,semKey);
+  var s=c.saldo;
+  if(s===0){alert('No hay saldo ni exceso para pasar en esta semana.');return;}
+  var next=_semKeyMas(semKey,1);
+  var nextLunes=_lunesDeSemKey(next);
+  var nextRango=nextLunes.getDate()+'/'+(nextLunes.getMonth()+1);
+  var esFalta=s>0;
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">↪️ Pasar saldo a la próxima semana</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
+    +'<div style="background:var(--bg);border:1px solid '+(esFalta?'#f5a62344':'#ef444444')+';border-radius:10px;padding:12px;margin-bottom:12px;text-align:center">'
+      +'<div style="color:var(--muted);font-size:11px">'+(esFalta?'Le quedas debiendo':'Se pagó de más')+'</div>'
+      +'<div style="color:'+(esFalta?'#f5a623':'#ef4444')+';font-weight:900;font-size:22px">'+fmt(Math.abs(s))+'</div></div>'
+    +'<div style="background:#c9b8f012;border:1px solid #c9b8f033;border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--text);line-height:1.5">'
+      +'Esta semana quedará <b>cerrada en $0</b> y '+(esFalta?'se <b>sumarán</b> '+fmt(s)+' al pago de la semana del '+nextRango+'.':'se <b>descontarán</b> '+fmt(Math.abs(s))+' del pago de la semana del '+nextRango+'.')
+    +'</div>'
+    +'<button class="btn btn-full" onclick="confirmarPasarSaldo(\''+empId+'\',\''+semKey+'\')" style="background:#c9b8f0;color:#1a1228;font-weight:800">✓ Pasar a la próxima semana</button>');
+}
+function confirmarPasarSaldo(empId,semKey){
+  var emp=empleados.find(function(e){return e.id===empId;});
+  if(!emp)return;
+  var c=calcSaldoSemana(empId,semKey);
+  var s=c.saldo;
+  if(s===0){closeModal1();return;}
+  var next=_semKeyMas(semKey,1);
+  var ts=Date.now();
+  // Cierra esta semana en 0
+  var m1={id:'me'+ts,ts:ts,empId:empId,tipo:'ajuste',valor:-s,fp:'',nota:(s>0?'Saldo pasado a semana siguiente':'Adelanto pasado a semana siguiente'),semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  // Lo traslada a la próxima
+  var m2={id:'me'+(ts+1),ts:ts+1,empId:empId,tipo:'ajuste',valor:s,fp:'',nota:(s>0?'Saldo traído de semana anterior':'Adelanto traído de semana anterior'),semanaKey:next,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  movEmpleados.push(m1);movEmpleados.push(m2);
+  var r=ref('movEmpleados');if(r){r.push(m1);r.push(m2);}else fbSet('movEmpleados',movEmpleados);
+  closeModal1();
+  showToast('↪️ Saldo pasado a la próxima semana<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(Math.abs(s))+'</span>','#c9b8f0');
   render();
 }
 
@@ -6636,6 +6839,8 @@ document.addEventListener('click',function(e){
   if(epr){abrirPrestamoEmpleado(epr.getAttribute('data-emp'));return;}
   var epg=e.target.closest('[data-act="emp-pagar"]');
   if(epg){pagarSaldoEmpleado(epg.getAttribute('data-emp'),epg.getAttribute('data-monto'),epg.getAttribute('data-sem'));return;}
+  var epa=e.target.closest('[data-act="emp-pasar"]');
+  if(epa){pasarSaldoSemana(epa.getAttribute('data-emp'),epa.getAttribute('data-sem'));return;}
   var evm=e.target.closest('[data-act="emp-vermov"]');
   if(evm && !e.target.closest('[data-act="emp-delmov"]')){
     verMovEmpleado(evm.getAttribute('data-id'));return;
@@ -6738,30 +6943,39 @@ document.addEventListener('click',function(e){
     if(act2==='ped-editqty'){
       var eidx=parseInt(btn2.getAttribute('data-idx'));
       if(isNaN(eidx)||!mesaActiva)return;
-      if(!(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))){
-        showToast('🔒 No tienes permiso para cambiar cantidades.','#ef4444',3000);return;
+      // Admin/subadmin: editor completo (sumar, fijar exacto, quitar).
+      // Los demás: picker que SOLO permite sumar más (elegir de una lista de números).
+      if(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')){
+        editarCantidadPedido(eidx);
+      } else {
+        abrirSumarCantidad(eidx);
       }
-      editarCantidadPedido(eidx);
       return;
     }
     if(act2==='ped-minus'||act2==='ped-plus'){
       var pidx=parseInt(btn2.getAttribute('data-idx'));
       if(isNaN(pidx)||!mesaActiva)return;
+      // El botón + abre el selector de cantidad (no suma de a uno).
+      if(act2==='ped-plus'){
+        if(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')){
+          editarCantidadPedido(pidx);
+        } else {
+          abrirSumarCantidad(pidx);
+        }
+        return;
+      }
       // Restar productos solo admin o subadmin
-      if(act2==='ped-minus' && !(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))){
+      if(!(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))){
         showToast('🔒 No tienes permiso para restar productos. Pide al administrador o subadministrador.','#ef4444',3500);
         return;
       }
       var pped=pedidos[mesaActiva.id]||[];
       var pit=pped[pidx];if(!pit)return;
-      if(act2==='ped-minus'){
-        ajustarStockItem(pit,+1);  // devolver al inventario
-        if(pit.qty===1)pped.splice(pidx,1);
-        else pit.qty--;
-      } else {
-        ajustarStockItem(pit,-1);  // descontar del inventario
-        pit.qty++;
-      }
+      var nomLogPM=pit.isCustom?pit.customNombre:(pit.isCombo?pit.comboNombre:(pit.cubMixNombre||((menu.find(function(m){return m.id===pit.pid;})||{}).nombre)||'Producto'))+(pit.varianteNombre?' ('+pit.varianteNombre+')':'')+(pit.cubeta?' 🪣':'');
+      ajustarStockItem(pit,+1);  // devolver al inventario
+      logPedido(mesaActiva.id,'-1 '+nomLogPM,-1);
+      if(pit.qty===1)pped.splice(pidx,1);
+      else pit.qty--;
       var pr=ref('pedidos/'+mesaActiva.id);
       if(pr)pr.set(pped.length?pped:null);
       renderSoloPedido();updateHeader();actualizarColorMesas();
