@@ -4503,6 +4503,179 @@ function verArqueo(aid){
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
 }
 
+/* ═══════════ CONCILIACIÓN BANCARIA (subir extracto y cruzar) ═══════════ */
+function abrirConcilBanco(){
+  if(typeof XLSX==='undefined'||!window._xlsxReady){alert('La librería de Excel aún no carga. Verifica la conexión e intenta de nuevo.');return;}
+  var fpChecks=FPAGO.filter(function(f){return f.id!=='efectivo';}).map(function(f){
+    return'<label style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:700;color:'+f.color+'"><input type="checkbox" class="cb-fp" value="'+f.id+'" checked style="accent-color:'+f.color+'"/>'+f.emoji+' '+f.label+'</label>';
+  }).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">🏦 Conciliación bancaria</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Sube el extracto de movimientos del banco (Excel). El sistema cruza cada pago digital del POS y cada gasto contra el extracto, y te muestra lo que no cuadra.</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:5px">Formas de pago que entran a ESTA cuenta:</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+fpChecks+'</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+      +'<span style="color:var(--muted);font-size:11px">Tolerancia de fecha:</span>'
+      +'<select class="inp" id="concil-tol" style="flex:1;padding:7px"><option value="1" selected>±1 día (recomendado: el banco registra al día siguiente)</option><option value="0">Mismo día exacto</option><option value="2">±2 días</option></select>'
+    +'</div>'
+    +'<input type="file" id="concil-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="procesarArchivoBanco(this)"/>'
+    +'<button onclick="document.getElementById(\'concil-file\').click()" style="width:100%;background:#38bdf818;color:#38bdf8;border:2px dashed #38bdf855;border-radius:12px;padding:22px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px">📄 Elegir archivo del extracto</button>'
+    +'<div id="concil-result"></div>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+function _concilDia(d){
+  // Normaliza cualquier formato de fecha a 'YYYY-MM-DD'
+  if(d instanceof Date&&!isNaN(d))return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  if(typeof d==='number'&&d>20000){var dd=new Date(Math.round((d-25569)*86400*1000));return _concilDia(dd);}
+  if(typeof d==='string'){
+    var m=d.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if(m){var y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);}
+    var m2=d.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m2)return m2[1]+'-'+('0'+m2[2]).slice(-2)+'-'+('0'+m2[3]).slice(-2);
+  }
+  return null;
+}
+function _diasEntre(d1,d2){
+  return Math.abs((new Date(d1+'T12:00:00')-new Date(d2+'T12:00:00'))/86400000);
+}
+function procesarArchivoBanco(input){
+  var file=input.files&&input.files[0];
+  if(!file)return;
+  var res=document.getElementById('concil-result');
+  if(res)res.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:14px">⏳ Leyendo y cruzando movimientos...</div>';
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      var wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array',cellDates:true});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      // Encontrar la fila de encabezados (contiene Fecha y Valor)
+      var hIdx=-1,cFecha=-1,cDesc=-1,cValor=-1;
+      for(var i=0;i<Math.min(rows.length,15);i++){
+        var r=(rows[i]||[]).map(function(c){return String(c||'').toLowerCase();});
+        var fi=r.findIndex(function(c){return c.indexOf('fecha')>=0;});
+        var vi=r.findIndex(function(c){return c.indexOf('valor')>=0||c.indexOf('monto')>=0||c.indexOf('importe')>=0;});
+        if(fi>=0&&vi>=0){hIdx=i;cFecha=fi;cValor=vi;cDesc=r.findIndex(function(c){return c.indexOf('desc')>=0||c.indexOf('concepto')>=0||c.indexOf('transac')>=0;});break;}
+      }
+      if(hIdx<0)throw new Error('No encontré columnas de Fecha y Valor en el archivo. ¿Es el extracto de movimientos?');
+      var movs=[];
+      for(var j=hIdx+1;j<rows.length;j++){
+        var row=rows[j];if(!row)continue;
+        var dia=_concilDia(row[cFecha]);
+        var val=row[cValor];
+        if(typeof val==='string')val=parseFloat(val.replace(/[^0-9.,-]/g,'').replace(/\./g,'').replace(',','.'))||parseFloat(val.replace(/[^0-9.-]/g,''));
+        val=Math.round(Number(val)||0);
+        if(!dia||!val)continue;
+        movs.push({dia:dia,desc:String((cDesc>=0?row[cDesc]:'')||'').trim(),valor:val,usado:false});
+      }
+      if(!movs.length)throw new Error('El archivo no tiene movimientos legibles.');
+      ejecutarConciliacion(movs);
+    }catch(err){
+      if(res)res.innerHTML='<div style="background:#ef444414;border:1px solid #ef444433;border-radius:9px;padding:10px;color:#ef4444;font-size:12px">❌ '+esc(err.message||'No pude leer el archivo.')+'</div>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function ejecutarConciliacion(movs){
+  var fps=[];document.querySelectorAll('.cb-fp').forEach(function(cb){if(cb.checked)fps.push(cb.value);});
+  if(!fps.length)fps=FPAGO.filter(function(f){return f.id!=='efectivo';}).map(function(f){return f.id;});
+  var tol=parseInt((document.getElementById('concil-tol')||{}).value);if(isNaN(tol))tol=1;
+  // Rango de fechas del extracto
+  var dias=movs.map(function(m){return m.dia;}).sort();
+  var dMin=dias[0],dMax=dias[dias.length-1];
+  function enRango(ts){var d=_concilDia(new Date(ts));return d>=dMin&&d<=dMax;}
+  // ── Lado POS: pagos digitales (de ventas) ──
+  var pagosPOS=[];
+  ventas.forEach(function(v){
+    if(!enRango(v.ts))return;
+    var pl=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+    pl.forEach(function(p){
+      if(fps.indexOf(p.fp)<0||!(p.monto>0))return;
+      pagosPOS.push({ts:v.ts,dia:_concilDia(new Date(v.ts)),mesa:v.mesa||'',fp:p.fp,monto:Math.round(p.monto),uidNombre:v.uidNombre||'',compId:v.compId||null,refPago:v.refPago||'',ok:false});
+    });
+  });
+  // ── Lado POS: gastos digitales ──
+  var gastosPOS=gastos.filter(function(g){return enRango(g.ts)&&fps.indexOf(g.fp||'')>=0;}).map(function(g){
+    return {ts:g.ts,dia:_concilDia(new Date(g.ts)),concepto:g.concepto||'',monto:Math.round(g.valor||0),fp:g.fp,uidNombre:g.uidNombre||'',ok:false};
+  });
+  // ── Lado banco ──
+  var bIngresos=movs.filter(function(m){return m.valor>0;});
+  var bEgresos=movs.filter(function(m){return m.valor<0;}).map(function(m){return {dia:m.dia,desc:m.desc,valor:Math.abs(m.valor),usado:false};});
+  // ── Cruce 1: pagos POS vs ingresos banco (mismo valor, fecha dentro de tolerancia) ──
+  pagosPOS.sort(function(a,b){return a.ts-b.ts;});
+  pagosPOS.forEach(function(p){
+    var mejor=-1,mejorDist=999;
+    for(var i=0;i<bIngresos.length;i++){
+      var b=bIngresos[i];
+      if(b.usado||b.valor!==p.monto)continue;
+      var dist=_diasEntre(b.dia,p.dia);
+      if(dist<=tol&&dist<mejorDist){mejor=i;mejorDist=dist;}
+    }
+    if(mejor>=0){bIngresos[mejor].usado=true;p.ok=true;}
+  });
+  // ── Cruce 2: gastos POS vs egresos banco ──
+  gastosPOS.forEach(function(g){
+    var mejor=-1,mejorDist=999;
+    for(var i=0;i<bEgresos.length;i++){
+      var b=bEgresos[i];
+      if(b.usado||b.valor!==g.monto)continue;
+      var dist=_diasEntre(b.dia,g.dia);
+      if(dist<=tol&&dist<mejorDist){mejor=i;mejorDist=dist;}
+    }
+    if(mejor>=0){bEgresos[mejor].usado=true;g.ok=true;}
+  });
+  // ── Clasificar restos ──
+  var pagosSinBanco=pagosPOS.filter(function(p){return !p.ok;});
+  var ingresosSinPOS=bIngresos.filter(function(b){return !b.usado;});
+  var esDelBanco=function(d){return /4X1000|INTERES|CUOTA.*MANEJO|C MANEJO|COMISION|IVA COMIS|GMF|RETENCION/i.test(d);};
+  var egresosBancoRestantes=bEgresos.filter(function(b){return !b.usado;});
+  var egresosDelBanco=egresosBancoRestantes.filter(function(b){return esDelBanco(b.desc);});
+  var egresosSinReportar=egresosBancoRestantes.filter(function(b){return !esDelBanco(b.desc);});
+  var gastosSinBanco=gastosPOS.filter(function(g){return !g.ok;});
+  var fpLbl=function(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.emoji+' '+f.label:fp;};
+  var sum=function(arr,k){return arr.reduce(function(a,x){return a+(x[k]||0);},0);};
+  function filaPOS(p){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(p.mesa)+' · '+fpLbl(p.fp)+'</div>'
+      +'<div style="color:var(--muted);font-size:10px">'+fmtFechaCorta(p.ts)+(p.refPago?' · Ref '+esc(p.refPago):'')+(p.uidNombre?' · ✍️ '+esc(p.uidNombre):'')+'</div></div>'
+      +'<span style="color:#ef4444;font-weight:900;white-space:nowrap">'+fmt(p.monto)+'</span>'
+      +(p.compId?'<button onclick="verComprobante(\''+p.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">📷</button>':'')
+    +'</div>';
+  }
+  function filaBanco(b,color){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(b.desc||'Movimiento')+'</div>'
+      +'<div style="color:var(--muted);font-size:10px">'+b.dia+'</div></div>'
+      +'<span style="color:'+color+';font-weight:900;white-space:nowrap">'+fmt(b.valor)+'</span></div>';
+  }
+  function filaGasto(g){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(g.concepto)+' · '+fpLbl(g.fp)+'</div>'
+      +'<div style="color:var(--muted);font-size:10px">'+fmtFechaCorta(g.ts)+(g.uidNombre?' · ✍️ '+esc(g.uidNombre):'')+'</div></div>'
+      +'<span style="color:#f5a623;font-weight:900;white-space:nowrap">'+fmt(g.monto)+'</span></div>';
+  }
+  function seccion(titulo,color,desc,filas,total){
+    return'<div style="background:'+color+'0d;border:1px solid '+color+'40;border-radius:11px;padding:10px 12px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:'+color+';font-weight:800;font-size:13px">'+titulo+'</span>'+(total!=null?'<span style="color:'+color+';font-weight:900;font-size:14px">'+fmt(total)+'</span>':'')+'</div>'
+      +'<div style="color:var(--muted);font-size:10px;margin:2px 0 6px">'+desc+'</div>'
+      +'<div style="max-height:32vh;overflow-y:auto">'+(filas||'<div style="color:#22c55e;font-size:12px;font-weight:700;padding:4px 0">✅ Nada pendiente aquí</div>')+'</div>'
+    +'</div>';
+  }
+  var conciliados=pagosPOS.length-pagosSinBanco.length;
+  var html='<div style="background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:10px">'
+    +'<div style="font-weight:800;font-size:13px;margin-bottom:4px">📊 Resumen · extracto del '+dMin+' al '+dMax+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;line-height:1.7">'
+      +'Movimientos del banco: <b style="color:var(--text)">'+movs.length+'</b> · Pagos digitales del POS en ese rango: <b style="color:var(--text)">'+pagosPOS.length+'</b><br>'
+      +'✅ Conciliados: <b style="color:#22c55e">'+conciliados+' ('+fmt(sum(pagosPOS.filter(function(p){return p.ok;}),'monto'))+')</b>'
+    +'</div></div>'
+    +seccion('🔴 Pagos del POS SIN respaldo en el banco ('+pagosSinBanco.length+')','#ef4444','Se cobraron en el sistema pero NO aparecen consignados. Revisa el comprobante 📷 de cada uno — puede ser un pago falsificado o de otra cuenta.',pagosSinBanco.map(filaPOS).join(''),sum(pagosSinBanco,'monto'))
+    +seccion('🟠 Salidas del banco NO reportadas como gasto ('+egresosSinReportar.length+')','#f97316','Plata que salió de la cuenta y nadie registró en Gastos.',egresosSinReportar.map(function(b){return filaBanco(b,'#f97316');}).join(''),sum(egresosSinReportar,'valor'))
+    +seccion('🔵 Ingresos al banco sin venta en el POS ('+ingresosSinPOS.length+')','#38bdf8','Consignaciones que no cruzaron con ningún cobro (transferencias personales, ventas sin registrar, o pagos con fecha/valor distinto).',ingresosSinPOS.map(function(b){return filaBanco(b,'#38bdf8');}).join(''),sum(ingresosSinPOS,'valor'))
+    +seccion('🟡 Gastos digitales del POS que no salieron del banco ('+gastosSinBanco.length+')','#f5a623','Registrados como gasto pero sin salida en el extracto (pueden ser de Nequi/Daviplata como apps aparte).',gastosSinBanco.map(filaGasto).join(''),sum(gastosSinBanco,'monto'))
+    +seccion('⚪ Movimientos propios del banco ('+egresosDelBanco.length+')','#94a3b8','4x1000, comisiones y cuotas de manejo. Normales, pero recuerda registrarlos como gasto para que la utilidad sea real.',egresosDelBanco.map(function(b){return filaBanco(b,'#94a3b8');}).join(''),sum(egresosDelBanco,'valor'));
+  var res=document.getElementById('concil-result');
+  if(res)res.innerHTML=html;
+}
+
 function renderCaja(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
   var hoyV=ventasTurno();
@@ -4614,7 +4787,11 @@ function renderCaja(){
     return'<div style="flex:1;min-width:100px;background:var(--bg);border-radius:8px;padding:7px 9px;text-align:center"><div style="color:var(--muted);font-size:9px">'+(fD?fD.emoji+' '+fD.label.toUpperCase():fp)+'</div><div style="color:'+(fD?fD.color:'var(--text)')+';font-weight:900;font-size:13px">'+fmt(digTotales[fp].t)+'</div><div style="color:var(--muted);font-size:9px">'+digTotales[fp].n+' pago'+(digTotales[fp].n!==1?'s':'')+'</div></div>';
   }).join('');
   var conciliacion='<div class="card mb12">'
-    +'<button data-act="toggle-sec" data-sec="concil" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0;margin-bottom:6px">'+(_secOpen.concil?'▼':'▶')+' 🧾 Conciliación pagos digitales ('+digRows.length+')</button>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+      +'<button data-act="toggle-sec" data-sec="concil" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0">'+(_secOpen.concil?'▼':'▶')+' 🧾 Conciliación pagos digitales ('+digRows.length+')</button>'
+      +(esAdmin?'<button onclick="abrirConcilBanco()" style="background:#38bdf8;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap">🏦 Subir extracto</button>':'')
+    +'</div>'
+    +'<div style="margin-top:6px"></div>'
     +(!_secOpen.concil?'':(digRows.length
       ?'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Compara estos totales contra los movimientos de la app del banco. Toca 📷 para ver el comprobante de cada pago.</div>'
         +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+digResumen+'</div>'
