@@ -1782,7 +1782,7 @@ function verHistorialMesa(){
     var badge=d==null?'':'<span style="color:'+color+';font-weight:800;white-space:nowrap;margin-left:8px">'+(d>0?'+'+d:d)+'</span>';
     return'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1"><span style="color:var(--text)">'+esc(e.texto)+'</span>'
-        +'<div style="color:var(--muted);font-size:10px;margin-top:2px">🕐 '+fmtTime(e.ts)+(e.uidNombre?' · '+esc(e.uidNombre):'')+'</div></div>'
+        +'<div style="color:var(--muted);font-size:10px;margin-top:2px">🕐 '+fmtFechaCorta(e.ts)+(e.uidNombre?' · '+esc(e.uidNombre):'')+'</div></div>'
       +badge
     +'</div>';
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin movimientos registrados en esta mesa todavía.</div>';
