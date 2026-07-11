@@ -366,6 +366,24 @@ var abonosMesa={};  // {mesaId:[{monto,fp,nombre,ts,uid}]}
 var pedidoLog={};   // {mesaId:[{ts,texto,delta,uidNombre}]}  historial de pedidos con hora
 var fotoCompCfg={on:true,min:0};  // foto de comprobante para pagos digitales: activada, monto mínimo
 var arqueos=[];  // [{ts,uid,uidNombre,denoms,total,esperado,dif,turnoTs}] conteos de efectivo
+var redBarCfg={on:false,ips:[]};  // bloqueo por red: meseros/cajeros solo entran desde las IPs autorizadas
+var _miIPCache=null;
+// Obtiene la IP pública de la red actual (con respaldo si el primer servicio falla)
+function obtenerIPPublica(cb){
+  var done=false;
+  function ok(ip){if(done)return;done=true;_miIPCache=ip;cb(ip);}
+  function fallo(){if(done)return;done=true;cb(null);}
+  try{
+    fetch('https://api.ipify.org?format=json').then(function(r){return r.json();}).then(function(d){ok(d.ip);})
+    .catch(function(){
+      fetch('https://api64.ipify.org?format=json').then(function(r){return r.json();}).then(function(d){ok(d.ip);}).catch(fallo);
+    });
+  }catch(e){fallo();}
+}
+function ipAutorizada(ip){
+  return !!ip&&(redBarCfg.ips||[]).some(function(x){return x.ip===ip;});
+}
+function rolRestringidoRed(rol){return rol==='mesero'||rol==='cajero';}
 var DENOMS=[
   {k:'b100',v:100000,l:'💵 $100.000'},{k:'b50',v:50000,l:'💵 $50.000'},{k:'b20',v:20000,l:'💵 $20.000'},
   {k:'b10',v:10000,l:'💵 $10.000'},{k:'b5',v:5000,l:'💵 $5.000'},{k:'b2',v:2000,l:'💵 $2.000'},
@@ -583,6 +601,10 @@ function iniciarSync(){
     Object.keys(pedidoLog).forEach(function(k){if(!Array.isArray(pedidoLog[k]))pedidoLog[k]=Object.values(pedidoLog[k]||{});});
   });
   fbOn('fotoCompCfg',function(v){if(v)fotoCompCfg=v;});
+  fbOn('redBarCfg',function(v){
+    if(v){redBarCfg=v;if(!Array.isArray(redBarCfg.ips))redBarCfg.ips=redBarCfg.ips?Object.values(redBarCfg.ips):[];}
+    if(tabActual==='admin')render();
+  });
   fbOn('arqueos',function(v){
     arqueos=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='caja')render();
@@ -652,6 +674,33 @@ function pinKey(k){
 function verificarPin(){
   if(!usuarioSelLogin){backToUsers();return;}
   if(pinBuffer===usuarioSelLogin.pin){
+    // ── BLOQUEO POR RED: meseros y cajeros solo desde la red del bar ──
+    if(redBarCfg.on&&rolRestringidoRed(usuarioSelLogin.rol)){
+      var errEl=document.getElementById('pin-err');
+      if(errEl){errEl.style.color='#38bdf8';errEl.textContent='📶 Verificando red del bar...';}
+      obtenerIPPublica(function(ip){
+        if(errEl)errEl.style.color='';
+        if(ip&&ipAutorizada(ip)){
+          completarLogin();
+        } else {
+          pinBuffer='';renderPinDots();
+          if(errEl){
+            errEl.style.color='#ef4444';
+            errEl.textContent=ip?'🚫 Solo puedes ingresar conectado al WiFi del bar.':'🚫 No pude verificar la red. Conéctate al WiFi del bar e intenta de nuevo.';
+            setTimeout(function(){errEl.textContent='';errEl.style.color='';},4500);
+          }
+        }
+      });
+      return;
+    }
+    completarLogin();
+  } else {
+    document.getElementById('pin-err').textContent='PIN incorrecto';
+    pinBuffer='';renderPinDots();
+    setTimeout(function(){document.getElementById('pin-err').textContent='';},2000);
+  }
+}
+function completarLogin(){
     usuarioActivo=usuarioSelLogin;
   window._usuarioActivoGlobal=usuarioActivo;
     document.getElementById('login-screen').style.display='none';
@@ -663,10 +712,29 @@ function verificarPin(){
     iniciarSync();
     tabActual=(ROLES[usuarioActivo.rol].tabs||['mesas'])[0];
     renderTabs();render();
-  } else {
-    document.getElementById('pin-err').textContent='PIN incorrecto';
-    pinBuffer='';renderPinDots();
-    setTimeout(function(){document.getElementById('pin-err').textContent='';},2000);
+    iniciarVigilanciaRed();
+}
+// Re-verifica la red durante la sesión (cada 10 min y al volver a la app):
+// evita que alguien entre en el bar y siga usando la sesión desde la casa.
+function iniciarVigilanciaRed(){
+  if(window._vigRedInt){clearInterval(window._vigRedInt);window._vigRedInt=null;}
+  if(!usuarioActivo||!rolRestringidoRed(usuarioActivo.rol))return;
+  function chequear(){
+    if(!redBarCfg.on||!usuarioActivo||!rolRestringidoRed(usuarioActivo.rol))return;
+    obtenerIPPublica(function(ip){
+      if(!usuarioActivo)return;
+      if(ip&&!ipAutorizada(ip)){
+        alert('🚫 Saliste de la red del bar. Tu sesión se cerró por seguridad.');
+        cerrarSesion();
+      }
+    });
+  }
+  window._vigRedInt=setInterval(chequear,10*60*1000);
+  if(!window._vigRedVisBound){
+    window._vigRedVisBound=true;
+    document.addEventListener('visibilitychange',function(){
+      if(document.visibilityState==='visible')chequear();
+    });
   }
 }
 function cerrarSesion(){
@@ -2058,7 +2126,7 @@ function abrirAbonoMesa(){
   var abs=(abonosMesa[mesaActiva.id]||[]);
   var abonado=abs.reduce(function(a,x){return a+(x.monto||0);},0);
   var falta=Math.max(0,totalReal-abonado);
-  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  var fpOpts='<option value="" selected disabled>👆 Elige la forma de pago...</option>'+FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
   modal2('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💵 Registrar abono</div>'
     +'<div style="color:var(--muted);font-size:13px;margin-bottom:12px">Total cuenta: '+fmt(totalReal)+' · Falta: <b style="color:#f5a623">'+fmt(falta)+'</b></div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Quién abona? (opcional)</div>'
@@ -2073,7 +2141,8 @@ function abrirAbonoMesa(){
 function guardarAbonoMesa(){
   if(!mesaActiva)return;
   var monto=moneyVal('abono-monto')||0;
-  var fp=(document.getElementById('abono-fp')||{}).value||'efectivo';
+  var fp=(document.getElementById('abono-fp')||{}).value||'';
+  if(!fp){alert('👆 Elige la forma de pago del abono.');return;}
   var nombre=((document.getElementById('abono-nombre')||{}).value||'').trim()||'Abono';
   if(monto<=0){alert('Escribe el monto.');return;}
   var id=mesaActiva.id;
@@ -2100,6 +2169,7 @@ function quitarAbonoMesa(idx){
 function abrirCobro(){
   if(!mesaActiva)return;
   window._compTemp=null;  // limpiar comprobante de un cobro anterior cancelado
+  window._cobroVerificado=false;  // exigir verificación de forma de pago en cada cobro
   var ped=pedidos[mesaActiva.id]||[];
   var total=totalPedido(mesaActiva.id);
   var zona=ZONAS.find(function(z){return z.id===mesaActiva.zona;});
@@ -2278,7 +2348,7 @@ function renderDividirModal(){
     +'</div>';
   }).join('');
 
-  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  var fpOpts='<option value="" selected disabled>👆 Elige la forma de pago...</option>'+FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
 
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🧾 Dividir cuenta</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-bottom:12px">Elige qué productos paga esta persona. El resto queda en la mesa.</div>'
@@ -2295,7 +2365,8 @@ function confirmarDividir(){
   if(!mesaActiva)return;
   var ped=pedidos[mesaActiva.id]||[];
   var sel=window._divSel||{};
-  var fp=(document.getElementById('div-fp')||{}).value||'efectivo';
+  var fp=(document.getElementById('div-fp')||{}).value||'';
+  if(!fp){alert('👆 Elige la forma de pago con la que pagó el cliente.');return;}
   // Construir items a cobrar
   var itemsPagar=[];var total=0;
   Object.keys(sel).forEach(function(idx){
@@ -2399,6 +2470,7 @@ function procesarFotoComprobante(input){
 }
 function cancelarCapturaComprobante(){
   window._compTempImg=null;window._compTemp=null;window._compCont=null;
+  window._cobroVerificado=false;
   closeModal2();
 }
 function confirmarCapturaComprobante(){
@@ -2444,6 +2516,32 @@ function purgarComprobantes(){
   });
 }
 
+// Pantalla de verificación: confirma la forma de pago antes de registrar el cobro.
+// Evita el error de tocar "Todo" en la primera opción por costumbre.
+function abrirVerificacionCobro(pagos,total){
+  var pagosList=Object.keys(pagos).filter(function(fp){return pagos[fp]>0;});
+  var chips=pagosList.map(function(fp){
+    var f=FPAGO.find(function(x){return x.id===fp;});
+    return'<div style="display:flex;justify-content:space-between;align-items:center;background:'+(f?f.color:'#fff')+'15;border:2px solid '+(f?f.color:'#fff')+'66;border-radius:12px;padding:14px 16px;margin-bottom:8px">'
+      +'<span style="font-size:15px;font-weight:800;color:'+(f?f.color:'var(--text)')+'">'+(f?f.emoji+' '+f.label:fp)+'</span>'
+      +'<span style="font-size:19px;font-weight:900;color:'+(f?f.color:'var(--text)')+'">'+fmt(pagos[fp])+'</span>'
+    +'</div>';
+  }).join('');
+  var unSolo=pagosList.length===1?FPAGO.find(function(x){return x.id===pagosList[0];}):null;
+  modal2('<div style="text-align:center;margin-bottom:12px">'
+      +'<div style="font-size:26px">🤔</div>'
+      +'<div style="font-weight:900;font-size:17px;margin-top:4px">Verifica la forma de pago</div>'
+      +(unSolo?'<div style="color:var(--muted);font-size:13px;margin-top:6px">¿El cliente pagó <b style="color:'+unSolo.color+'">TODO con '+unSolo.emoji+' '+unSolo.label.toUpperCase()+'</b>?</div>'
+        :'<div style="color:var(--muted);font-size:13px;margin-top:6px">¿El cliente pagó así?</div>')
+    +'</div>'
+    +chips
+    +'<div style="text-align:center;color:var(--muted);font-size:11px;margin:8px 0 12px">Total: <b style="color:var(--gold);font-size:14px">'+fmt(total)+'</b></div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-full" onclick="closeModal2()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444444;font-weight:800">← No, corregir</button>'
+      +'<button class="btn btn-green btn-full" onclick="window._cobroVerificado=true;closeModal2();confirmarCobro();" style="font-weight:800">✓ Sí, cobrar</button>'
+    +'</div>');
+}
+
 function confirmarCobro(){
   if(!mesaActiva)return;
   var pagos=window._pagosParciales||{};
@@ -2453,6 +2551,12 @@ function confirmarCobro(){
   var descMesa=descuentos[mesaActiva.id];
   if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
   if(Math.round(pagado)<Math.round(total)){alert('El total pagado ($'+total.toLocaleString('es-CO')+') no cubre el valor. Verifica los montos.');return;}
+
+  // ── VERIFICACIÓN: confirmar la forma de pago antes de seguir ──
+  if(!window._cobroVerificado){
+    abrirVerificacionCobro(pagos,total);
+    return;
+  }
 
   // ── COMPROBANTE: si hay pagos digitales, exigir foto antes de registrar ──
   var totalDig=0;var fpDigLabels=[];
@@ -2514,6 +2618,7 @@ function confirmarCobro(){
   if(pedidoLog[mesa.id]){delete pedidoLog[mesa.id];fbSet('pedidoLog/'+mesa.id,null);}
   // Limpiar marcas de cocina de esta mesa
   limpiarCocinaMesa(mesa.id);
+  window._cobroVerificado=false;
   mesaActiva=null;closeModal1();render();
   // Aviso con opción de imprimir recibo
   var nombreMesa=mesa.nombre||('Mesa '+mesa.num);
@@ -4507,15 +4612,16 @@ function verArqueo(aid){
 function abrirConcilBanco(){
   if(typeof XLSX==='undefined'||!window._xlsxReady){alert('La librería de Excel aún no carga. Verifica la conexión e intenta de nuevo.');return;}
   var fpChecks=FPAGO.filter(function(f){return f.id!=='efectivo';}).map(function(f){
-    return'<label style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:700;color:'+f.color+'"><input type="checkbox" class="cb-fp" value="'+f.id+'" checked style="accent-color:'+f.color+'"/>'+f.emoji+' '+f.label+'</label>';
+    return'<label style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:700;color:'+f.color+'"><input type="checkbox" class="cb-fp" value="'+f.id+'" checked onchange="reconciliarBanco()" style="accent-color:'+f.color+'"/>'+f.emoji+' '+f.label+'</label>';
   }).join('');
+  window._concilMovs=null;window._concilRes=null;
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">🏦 Conciliación bancaria</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Sube el extracto de movimientos del banco (Excel). El sistema cruza cada pago digital del POS y cada gasto contra el extracto, y te muestra lo que no cuadra.</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:5px">Formas de pago que entran a ESTA cuenta:</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+fpChecks+'</div>'
     +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
       +'<span style="color:var(--muted);font-size:11px">Tolerancia de fecha:</span>'
-      +'<select class="inp" id="concil-tol" style="flex:1;padding:7px"><option value="1" selected>±1 día (recomendado: el banco registra al día siguiente)</option><option value="0">Mismo día exacto</option><option value="2">±2 días</option></select>'
+      +'<select class="inp" id="concil-tol" onchange="reconciliarBanco()" style="flex:1;padding:7px"><option value="1" selected>±1 día (recomendado: el banco registra al día siguiente)</option><option value="0">Mismo día exacto</option><option value="2">±2 días</option></select>'
     +'</div>'
     +'<input type="file" id="concil-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="procesarArchivoBanco(this)"/>'
     +'<button onclick="document.getElementById(\'concil-file\').click()" style="width:100%;background:#38bdf818;color:#38bdf8;border:2px dashed #38bdf855;border-radius:12px;padding:22px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px">📄 Elegir archivo del extracto</button>'
@@ -4568,6 +4674,7 @@ function procesarArchivoBanco(input){
         movs.push({dia:dia,desc:String((cDesc>=0?row[cDesc]:'')||'').trim(),valor:val,usado:false});
       }
       if(!movs.length)throw new Error('El archivo no tiene movimientos legibles.');
+      window._concilMovs=movs;
       ejecutarConciliacion(movs);
     }catch(err){
       if(res)res.innerHTML='<div style="background:#ef444414;border:1px solid #ef444433;border-radius:9px;padding:10px;color:#ef4444;font-size:12px">❌ '+esc(err.message||'No pude leer el archivo.')+'</div>';
@@ -4575,9 +4682,83 @@ function procesarArchivoBanco(input){
   };
   reader.readAsArrayBuffer(file);
 }
+// Recalcula la conciliación en vivo cuando cambian los medios de pago o la tolerancia
+function reconciliarBanco(){
+  if(window._concilMovs)ejecutarConciliacion(window._concilMovs);
+}
+// Exporta el resultado de la conciliación a Excel
+function exportarConcilExcel(){
+  var r=window._concilRes;
+  if(!r){alert('Primero sube el extracto y ejecuta la conciliación.');return;}
+  if(typeof XLSX==='undefined'||!window._xlsxReady){alert('La librería de Excel aún no carga.');return;}
+  var wb=XLSX.utils.book_new();
+  function hoja(nombre,filas){XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(filas.length?filas:[['(sin datos)']]),nombre.slice(0,31));}
+  function fpN(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.label:fp;}
+  var sum=function(arr,k){return arr.reduce(function(a,x){return a+(x[k]||0);},0);};
+  // Resumen
+  hoja('Resumen',[
+    ['CONCILIACIÓN BANCARIA · ÁREA 52'],
+    ['Generada',new Date().toLocaleString('es-CO')],
+    ['Rango del extracto',r.dMin+' a '+r.dMax],
+    ['Formas de pago conciliadas',r.fps.map(fpN).join(', ')],
+    ['Tolerancia de fecha','±'+r.tol+' día(s)'],
+    [],
+    ['Concepto','Cantidad','Total'],
+    ['Movimientos del banco',r.totalMovs,''],
+    ['Pagos digitales del POS',r.pagosPOS.length,sum(r.pagosPOS,'monto')],
+    ['✅ Conciliados',r.pagosPOS.filter(function(p){return p.ok;}).length,sum(r.pagosPOS.filter(function(p){return p.ok;}),'monto')],
+    ['🔴 Pagos POS sin respaldo en banco',r.pagosSinBanco.length,sum(r.pagosSinBanco,'monto')],
+    ['🟣 Posibles montos mal digitados',(r.malDigitados||[]).length,''],
+    ['🟠 Salidas del banco no reportadas',r.egresosSinReportar.length,sum(r.egresosSinReportar,'valor')],
+    ['🔵 Ingresos al banco sin venta POS',r.ingresosSinPOS.length,sum(r.ingresosSinPOS,'valor')],
+    ['🟡 Gastos POS sin salida en banco',r.gastosSinBanco.length,sum(r.gastosSinBanco,'monto')],
+    ['⚪ Movimientos propios del banco',r.egresosDelBanco.length,sum(r.egresosDelBanco,'valor')]
+  ]);
+  // 1. Pagos sin respaldo (fraude potencial)
+  var h1=[['Fecha','Hora','Mesa','Forma de pago','Monto','Referencia','Cobró','Tiene foto']];
+  r.pagosSinBanco.forEach(function(p){h1.push([fmtFecha(p.ts),fmtTime(p.ts),p.mesa,fpN(p.fp),p.monto,p.refPago||'',p.uidNombre||'',p.compId?'Sí':'No']);});
+  hoja('POS sin respaldo banco',h1);
+  // 1b. Posibles mal digitados
+  var h1b=[['Fecha POS','Hora','Mesa','Forma de pago','POS registró','Banco recibió','Fecha banco','Diferencia','Interpretación','Cobró','Tiene foto']];
+  (r.malDigitados||[]).forEach(function(par){
+    var dif=par.banco.valor-par.pos.monto;
+    h1b.push([fmtFecha(par.pos.ts),fmtTime(par.pos.ts),par.pos.mesa,fpN(par.pos.fp),par.pos.monto,par.banco.valor,par.banco.dia,dif,
+      dif>0?'Entró MÁS de lo registrado (posible sub-registro)':'Entró MENOS de lo registrado (pago no cubre)',
+      par.pos.uidNombre||'',par.pos.compId?'Sí':'No']);
+  });
+  hoja('Posibles mal digitados',h1b);
+  // 2. Salidas del banco no reportadas
+  var h2=[['Fecha','Descripción del banco','Valor']];
+  r.egresosSinReportar.forEach(function(b){h2.push([b.dia,b.desc,b.valor]);});
+  hoja('Banco sin reportar gasto',h2);
+  // 3. Ingresos sin venta POS
+  var h3=[['Fecha','Descripción del banco','Valor']];
+  r.ingresosSinPOS.forEach(function(b){h3.push([b.dia,b.desc,b.valor]);});
+  hoja('Ingresos sin venta POS',h3);
+  // 4. Gastos POS sin salida
+  var h4=[['Fecha','Hora','Concepto','Forma de pago','Monto','Registró']];
+  r.gastosSinBanco.forEach(function(g){h4.push([fmtFecha(g.ts),fmtTime(g.ts),g.concepto,fpN(g.fp),g.monto,g.uidNombre||'']);});
+  hoja('Gastos sin salida banco',h4);
+  // 5. Movimientos propios del banco
+  var h5=[['Fecha','Descripción','Valor']];
+  r.egresosDelBanco.forEach(function(b){h5.push([b.dia,b.desc,b.valor]);});
+  hoja('Movs propios del banco',h5);
+  // 6. Conciliados
+  var h6=[['Fecha','Hora','Mesa','Forma de pago','Monto','Referencia','Cobró']];
+  r.pagosPOS.filter(function(p){return p.ok;}).forEach(function(p){h6.push([fmtFecha(p.ts),fmtTime(p.ts),p.mesa,fpN(p.fp),p.monto,p.refPago||'',p.uidNombre||'']);});
+  hoja('Conciliados',h6);
+  XLSX.writeFile(wb,'Area52-Conciliacion-'+r.dMin+'-a-'+r.dMax+'.xlsx');
+  showToast('📥 Conciliación exportada a Excel','#22c55e');
+}
 function ejecutarConciliacion(movs){
+  // Resetear cruces de corridas anteriores (permite recalcular al cambiar filtros)
+  movs.forEach(function(m){m.usado=false;});
   var fps=[];document.querySelectorAll('.cb-fp').forEach(function(cb){if(cb.checked)fps.push(cb.value);});
-  if(!fps.length)fps=FPAGO.filter(function(f){return f.id!=='efectivo';}).map(function(f){return f.id;});
+  var res0=document.getElementById('concil-result');
+  if(!fps.length){
+    if(res0)res0.innerHTML='<div style="background:#f5a62314;border:1px solid #f5a62333;border-radius:9px;padding:10px;color:#f5a623;font-size:12px">⚠️ Marca al menos una forma de pago para conciliar.</div>';
+    return;
+  }
   var tol=parseInt((document.getElementById('concil-tol')||{}).value);if(isNaN(tol))tol=1;
   // Rango de fechas del extracto
   var dias=movs.map(function(m){return m.dia;}).sort();
@@ -4626,6 +4807,23 @@ function ejecutarConciliacion(movs){
   // ── Clasificar restos ──
   var pagosSinBanco=pagosPOS.filter(function(p){return !p.ok;});
   var ingresosSinPOS=bIngresos.filter(function(b){return !b.usado;});
+  // ── Cruce 3: POSIBLES MONTOS MAL DIGITADOS (cero de más o de menos) ──
+  // Un pago sin respaldo y un ingreso sin venta, en fechas cercanas, donde uno es 10x o 100x el otro
+  var malDigitados=[];
+  pagosSinBanco.forEach(function(p){
+    var mejor=null,mejorDist=999;
+    ingresosSinPOS.forEach(function(b){
+      if(b.usadoAprox)return;
+      var factor=(b.valor===p.monto*10||b.valor===p.monto*100||p.monto===b.valor*10||p.monto===b.valor*100);
+      if(!factor)return;
+      var dist=_diasEntre(b.dia,p.dia);
+      if(dist<=tol&&dist<mejorDist){mejor=b;mejorDist=dist;}
+    });
+    if(mejor){mejor.usadoAprox=true;p.aprox=mejor;malDigitados.push({pos:p,banco:mejor});}
+  });
+  // Sacar los emparejados aproximados de las listas rojas/azules para no contarlos doble
+  pagosSinBanco=pagosSinBanco.filter(function(p){return !p.aprox;});
+  ingresosSinPOS=ingresosSinPOS.filter(function(b){return !b.usadoAprox;});
   var esDelBanco=function(d){return /4X1000|INTERES|CUOTA.*MANEJO|C MANEJO|COMISION|IVA COMIS|GMF|RETENCION/i.test(d);};
   var egresosBancoRestantes=bEgresos.filter(function(b){return !b.usado;});
   var egresosDelBanco=egresosBancoRestantes.filter(function(b){return esDelBanco(b.desc);});
@@ -4660,14 +4858,43 @@ function ejecutarConciliacion(movs){
       +'<div style="max-height:32vh;overflow-y:auto">'+(filas||'<div style="color:#22c55e;font-size:12px;font-weight:700;padding:4px 0">✅ Nada pendiente aquí</div>')+'</div>'
     +'</div>';
   }
-  var conciliados=pagosPOS.length-pagosSinBanco.length;
+  function filaMalDig(par){
+    var p=par.pos,b=par.banco;
+    var dif=b.valor-p.monto;
+    var subRegistro=dif>0;  // el banco recibió MÁS de lo registrado
+    return'<div style="padding:7px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(p.mesa)+' · '+fpLbl(p.fp)+'</div>'
+        +'<div style="color:var(--muted);font-size:10px">'+fmtFechaCorta(p.ts)+(p.uidNombre?' · ✍️ '+esc(p.uidNombre):'')+'</div></div>'
+        +(p.compId?'<button onclick="verComprobante(\''+p.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">📷</button>':'')
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px;background:var(--bg);border-radius:7px;padding:6px 8px">'
+        +'<span>POS registró: <b style="color:#ef4444">'+fmt(p.monto)+'</b></span>'
+        +'<span>Banco recibió: <b style="color:#22c55e">'+fmt(b.valor)+'</b> ('+b.dia+')</span>'
+      +'</div>'
+      +'<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(subRegistro?'#a855f7':'#ef4444')+'">'
+        +(subRegistro?'⬆️ Entró '+fmt(dif)+' MÁS de lo registrado — posible venta sub-registrada o cero de menos al digitar':'⬇️ Entró '+fmt(Math.abs(dif))+' MENOS de lo registrado — el pago no cubre la venta')
+      +'</div>'
+    +'</div>';
+  }
+  var conciliados=pagosPOS.length-pagosSinBanco.length-malDigitados.length;
+  // Guardar resultado para exportación a Excel
+  window._concilRes={dMin:dMin,dMax:dMax,fps:fps,tol:tol,totalMovs:movs.length,
+    pagosPOS:pagosPOS,pagosSinBanco:pagosSinBanco,egresosSinReportar:egresosSinReportar,
+    ingresosSinPOS:ingresosSinPOS,gastosSinBanco:gastosSinBanco,egresosDelBanco:egresosDelBanco,
+    malDigitados:malDigitados};
+  var fpsTxt=fps.map(fpLbl).join(' · ');
   var html='<div style="background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:10px">'
     +'<div style="font-weight:800;font-size:13px;margin-bottom:4px">📊 Resumen · extracto del '+dMin+' al '+dMax+'</div>'
     +'<div style="color:var(--muted);font-size:11px;line-height:1.7">'
+      +'Conciliando: <b style="color:var(--text)">'+fpsTxt+'</b><br>'
       +'Movimientos del banco: <b style="color:var(--text)">'+movs.length+'</b> · Pagos digitales del POS en ese rango: <b style="color:var(--text)">'+pagosPOS.length+'</b><br>'
       +'✅ Conciliados: <b style="color:#22c55e">'+conciliados+' ('+fmt(sum(pagosPOS.filter(function(p){return p.ok;}),'monto'))+')</b>'
-    +'</div></div>'
+    +'</div>'
+    +'<button onclick="exportarConcilExcel()" style="width:100%;margin-top:8px;background:#22c55e;color:#fff;border:none;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">📥 Exportar conciliación a Excel</button>'
+  +'</div>'
     +seccion('🔴 Pagos del POS SIN respaldo en el banco ('+pagosSinBanco.length+')','#ef4444','Se cobraron en el sistema pero NO aparecen consignados. Revisa el comprobante 📷 de cada uno — puede ser un pago falsificado o de otra cuenta.',pagosSinBanco.map(filaPOS).join(''),sum(pagosSinBanco,'monto'))
+    +seccion('🟣 Posibles montos MAL DIGITADOS ('+malDigitados.length+')','#a855f7','Pares donde el POS y el banco muestran el mismo pago pero con un cero de más o de menos (ej: se registraron $6.000 y entraron $60.000). Verifica el comprobante y corrige la venta.',malDigitados.map(filaMalDig).join(''),null)
     +seccion('🟠 Salidas del banco NO reportadas como gasto ('+egresosSinReportar.length+')','#f97316','Plata que salió de la cuenta y nadie registró en Gastos.',egresosSinReportar.map(function(b){return filaBanco(b,'#f97316');}).join(''),sum(egresosSinReportar,'valor'))
     +seccion('🔵 Ingresos al banco sin venta en el POS ('+ingresosSinPOS.length+')','#38bdf8','Consignaciones que no cruzaron con ningún cobro (transferencias personales, ventas sin registrar, o pagos con fecha/valor distinto).',ingresosSinPOS.map(function(b){return filaBanco(b,'#38bdf8');}).join(''),sum(ingresosSinPOS,'valor'))
     +seccion('🟡 Gastos digitales del POS que no salieron del banco ('+gastosSinBanco.length+')','#f5a623','Registrados como gasto pero sin salida en el extracto (pueden ser de Nequi/Daviplata como apps aparte).',gastosSinBanco.map(filaGasto).join(''),sum(gastosSinBanco,'monto'))
@@ -7018,6 +7245,27 @@ function renderAdmin(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
   if(!esAdmin) return '<div class="alert-box alert-blue">Solo administradores.</div>';
 
+  // Bloqueo por red del bar
+  var ipsRows=(redBarCfg.ips||[]).map(function(x,i){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
+      +'<div><span style="font-weight:800;font-size:13px;font-family:monospace">'+esc(x.ip)+'</span>'
+      +'<div style="color:var(--muted);font-size:10px">'+(x.nota?esc(x.nota)+' · ':'')+(x.ts?fmtFechaCorta(x.ts):'')+'</div></div>'
+      +'<button onclick="quitarRedAutorizada('+i+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">✕</button>'
+    +'</div>';
+  }).join('');
+  var redSection='<div class="card" style="grid-column:1/-1;border:1px solid #a855f744">'
+    +'<div style="color:#a855f7;font-weight:800;font-size:15px;margin-bottom:4px">📶 Bloqueo por red del bar</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Los <b>meseros y cajeros</b> solo podrán ingresar (y mantener la sesión) si están conectados a una red autorizada — así nadie mete productos a una mesa desde la casa. Admin y subadmin entran desde cualquier lugar. Funciona por la IP pública de la red: párate en el bar conectado al WiFi y toca "Autorizar esta red".</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
+      +'<button onclick="toggleRedBar()" style="background:'+(redBarCfg.on?'#22c55e':'var(--card2)')+';color:'+(redBarCfg.on?'#fff':'var(--muted)')+';border:1px solid '+(redBarCfg.on?'#22c55e':'var(--border)')+';border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">'+(redBarCfg.on?'✅ Bloqueo ACTIVADO':'⭕ Bloqueo desactivado')+'</button>'
+      +'<button onclick="autorizarRedActual()" style="background:#a855f7;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">➕ Autorizar ESTA red</button>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px">REDES AUTORIZADAS ('+(redBarCfg.ips||[]).length+')</div>'
+    +(ipsRows||'<div style="color:var(--dim);font-size:12px;padding:8px 0">Ninguna todavía. Conéctate al WiFi del bar y toca "Autorizar ESTA red".</div>')
+    +(redBarCfg.on&&!(redBarCfg.ips||[]).length?'<div style="background:#ef444414;border:1px solid #ef444433;border-radius:8px;padding:8px;margin-top:8px;color:#ef4444;font-size:11px;font-weight:700">⚠️ El bloqueo está activo pero no hay redes autorizadas: NINGÚN mesero o cajero podrá entrar.</div>':'')
+    +'<div style="color:var(--muted);font-size:10px;margin-top:10px">💡 Si el proveedor de internet cambia la IP del bar, los meseros verán "no puedes ingresar" — solo vuelve a tocar "Autorizar ESTA red" desde el bar y borra la vieja.</div>'
+  +'</div>';
+
   // Comprobantes de pago digital
   var compSection='<div class="card" style="grid-column:1/-1;border:1px solid #38bdf844">'
     +'<div style="color:#38bdf8;font-weight:800;font-size:15px;margin-bottom:4px">📷 Comprobantes de pagos digitales</div>'
@@ -7214,10 +7462,43 @@ function renderAdmin(){
     +'<button class="btn btn-sm btn-green btn-full" style="margin-top:12px" onclick="nuevoUsuario()">+ Agregar usuario</button>'
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
+    +redSection
     +compSection
     +backupSection
     +ticketSection
     +'</div>';
+}
+function toggleRedBar(){
+  if(!redBarCfg.on&&!(redBarCfg.ips||[]).length){
+    if(!confirm('Aún no has autorizado ninguna red. Si activas el bloqueo ahora, NINGÚN mesero o cajero podrá entrar hasta que autorices la red del bar.\n\n¿Activar de todas formas?'))return;
+  }
+  redBarCfg.on=!redBarCfg.on;
+  fbSet('redBarCfg',redBarCfg);
+  showToast(redBarCfg.on?'📶 Bloqueo por red ACTIVADO<br><span style="font-size:12px;opacity:.85">Meseros y cajeros solo entran desde las redes autorizadas</span>':'📶 Bloqueo por red desactivado','#a855f7');
+  render();
+}
+function autorizarRedActual(){
+  showToast('📶 Detectando la red actual...','#38bdf8',2500);
+  obtenerIPPublica(function(ip){
+    if(!ip){alert('No pude detectar la IP de esta red. Verifica la conexión a internet e intenta de nuevo.');return;}
+    if(!Array.isArray(redBarCfg.ips))redBarCfg.ips=[];
+    if(redBarCfg.ips.some(function(x){return x.ip===ip;})){
+      showToast('✅ Esta red ya está autorizada<br><span style="font-size:12px;opacity:.85;font-family:monospace">'+esc(ip)+'</span>','#22c55e');return;
+    }
+    var nota=(prompt('Nombre para esta red (ej: WiFi del bar):','WiFi del bar')||'').trim();
+    redBarCfg.ips.push({ip:ip,nota:nota,ts:Date.now()});
+    fbSet('redBarCfg',redBarCfg);
+    showToast('✅ Red autorizada<br><span style="font-size:12px;opacity:.85;font-family:monospace">'+esc(ip)+(nota?' · '+esc(nota):'')+'</span>','#22c55e');
+    render();
+  });
+}
+function quitarRedAutorizada(idx){
+  var x=(redBarCfg.ips||[])[idx];
+  if(!x)return;
+  if(!confirm('¿Quitar la red '+x.ip+(x.nota?' ('+x.nota+')':'')+'?'+(redBarCfg.on&&redBarCfg.ips.length===1?'\n\n⚠️ Es la única autorizada: los meseros y cajeros quedarán bloqueados.':'')))return;
+  redBarCfg.ips.splice(idx,1);
+  fbSet('redBarCfg',redBarCfg);
+  render();
 }
 function toggleFotoComp(){
   fotoCompCfg.on=!fotoCompCfg.on;
@@ -7932,6 +8213,12 @@ function initApp(){
         var ul=document.getElementById('user-list');
         if(ul) renderLogin();
       }
+    });
+    // Cargar la configuración de red ANTES del login (para poder bloquear el ingreso)
+    var rn=ref('redBarCfg');
+    if(rn)rn.on('value',function(snap){
+      var v=snap.val();
+      if(v){redBarCfg=v;if(!Array.isArray(redBarCfg.ips))redBarCfg.ips=redBarCfg.ips?Object.values(redBarCfg.ips):[];}
     });
   }
   cargarUsuariosYLogin();
