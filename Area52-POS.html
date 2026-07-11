@@ -753,9 +753,37 @@ function cerrarSesion(){
 /* ═══════════════ TABS + RENDER ═══════════════ */
 function renderTabs(){
   var tabs=ROLES[usuarioActivo&&usuarioActivo.rol]&&ROLES[usuarioActivo.rol].tabs||['mesas'];
-  document.getElementById('tabs').innerHTML=tabs.map(function(t){
+  var MAXVIS=4;
+  var visibles=tabs.slice(0,Math.min(MAXVIS,tabs.length));
+  // Si la pestaña activa no está entre las visibles, mostrarla en el último puesto
+  if(visibles.indexOf(tabActual)<0&&tabs.indexOf(tabActual)>=0){
+    visibles=tabs.slice(0,MAXVIS-1).concat([tabActual]);
+  }
+  var html=visibles.map(function(t){
     return '<button class="tab-btn'+(t===tabActual?' active':'')+'" onclick="setTab(\''+t+'\')">'+(TAB_LABELS[t]||t)+'</button>';
   }).join('');
+  if(tabs.length>MAXVIS){
+    html+='<button class="tab-btn" onclick="abrirMenuTabs()" style="border:1px dashed var(--border);border-radius:8px">☰ Más</button>';
+  }
+  document.getElementById('tabs').innerHTML=html;
+}
+// Menú de secciones en cuadrícula (para no tener una barra kilométrica)
+function abrirMenuTabs(){
+  var tabs=ROLES[usuarioActivo&&usuarioActivo.rol]&&ROLES[usuarioActivo.rol].tabs||['mesas'];
+  var grid=tabs.map(function(t){
+    var lbl=TAB_LABELS[t]||t;
+    var partes=lbl.split(' ');
+    var emoji=partes.shift();
+    var nombre=partes.join(' ');
+    var activa=t===tabActual;
+    return'<button onclick="setTab(\''+t+'\');closeModal2();" style="background:'+(activa?'var(--accent)22':'var(--bg)')+';border:1px solid '+(activa?'var(--accent)':'var(--border)')+';border-radius:12px;padding:14px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px">'
+      +'<span style="font-size:24px">'+emoji+'</span>'
+      +'<span style="font-size:11px;font-weight:700;color:'+(activa?'var(--accent)':'var(--text)')+'">'+esc(nombre)+'</span>'
+    +'</button>';
+  }).join('');
+  modal2('<div style="font-weight:800;font-size:16px;margin-bottom:12px;text-align:center">☰ Ir a sección</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:60vh;overflow-y:auto">'+grid+'</div>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
 }
 function setTab(t){tabActual=t;mesaActiva=null;editandoProd=null;renderTabs();render();}
 function render(){
@@ -4903,6 +4931,60 @@ function ejecutarConciliacion(movs){
   if(res)res.innerHTML=html;
 }
 
+/* ═══════════ DETALLE DE SALDO POR FORMA DE PAGO ═══════════ */
+// Muestra de dónde viene el saldo: caja inicial + cada pago que entró − cada gasto que salió
+function verDetalleSaldoFP(fpId){
+  var f=FPAGO.find(function(x){return x.id===fpId;});
+  if(!f)return;
+  var hoyV=ventasTurno();var hoyG=gastosTurno();
+  var ini=cajaHoy['ini_'+fpId]||0;
+  // Entradas: cada pago de venta con esta forma de pago
+  var entradas=[];
+  hoyV.forEach(function(v){
+    var pl=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+    pl.forEach(function(p){
+      if(p.fp!==fpId||!(p.monto>0))return;
+      entradas.push({ts:v.ts,mesa:v.mesa||'',monto:p.monto,uidNombre:v.uidNombre||'',compId:v.compId||null,refPago:v.refPago||'',mixto:pl.length>1});
+    });
+  });
+  // Salidas: gastos con esta forma de pago
+  var salidas=hoyG.filter(function(g){return (g.fp||'efectivo')===fpId;});
+  var totalIn=entradas.reduce(function(a,e){return a+e.monto;},0);
+  var totalOut=salidas.reduce(function(a,g){return a+(g.valor||0);},0);
+  var saldo=ini+totalIn-totalOut;
+  var entRows=entradas.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(e){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(e.mesa)+(e.mixto?' <span style="color:var(--muted);font-size:9px">(pago mixto)</span>':'')+'</div>'
+        +'<div style="color:var(--muted);font-size:10px">🕐 '+fmtFechaCorta(e.ts)+(e.refPago?' · Ref '+esc(e.refPago):'')+(e.uidNombre?' · ✍️ '+esc(e.uidNombre):'')+'</div></div>'
+      +'<span style="color:#22c55e;font-weight:900;white-space:nowrap">+'+fmt(e.monto)+'</span>'
+      +(e.compId?'<button onclick="verComprobante(\''+e.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">📷</button>':'')
+    +'</div>';
+  }).join('');
+  var salRows=salidas.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(g){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(g.concepto)+'</div>'
+        +'<div style="color:var(--muted);font-size:10px">🕐 '+fmtFechaCorta(g.ts)+' · '+esc(g.categoria||'')+(g.uidNombre?' · ✍️ '+esc(g.uidNombre):'')+'</div></div>'
+      +'<span style="color:#ef4444;font-weight:900;white-space:nowrap">−'+fmt(g.valor)+'</span>'
+    +'</div>';
+  }).join('');
+  modal1('<div style="text-align:center;margin-bottom:12px">'
+      +'<div style="font-size:26px">'+f.emoji+'</div>'
+      +'<div style="font-weight:900;font-size:16px;color:'+f.color+'">'+f.label+' · saldo del turno</div>'
+      +'<div style="font-size:24px;font-weight:900;color:'+f.color+';margin-top:2px">'+fmt(saldo)+'</div>'
+    +'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12px">'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">Caja inicial</span><span style="font-weight:700">'+fmt(ini)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">+ Entradas ('+entradas.length+' pago'+(entradas.length!==1?'s':'')+')</span><span style="color:#22c55e;font-weight:700">+'+fmt(totalIn)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">− Salidas ('+salidas.length+' gasto'+(salidas.length!==1?'s':'')+')</span><span style="color:#ef4444;font-weight:700">−'+fmt(totalOut)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:3px"><span style="font-weight:800">= Saldo</span><span style="color:'+f.color+';font-weight:900">'+fmt(saldo)+'</span></div>'
+    +'</div>'
+    +'<div style="color:#22c55e;font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:4px">⬇️ ENTRADAS · DE QUÉ PAGO VIENE LA PLATA</div>'
+    +'<div style="max-height:30vh;overflow-y:auto;margin-bottom:12px">'+(entRows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin pagos por este medio en el turno.</div>')+'</div>'
+    +'<div style="color:#ef4444;font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:4px">⬆️ SALIDAS · GASTOS POR ESTE MEDIO</div>'
+    +'<div style="max-height:22vh;overflow-y:auto;margin-bottom:12px">'+(salRows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin gastos por este medio en el turno.</div>')+'</div>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+
 function renderCaja(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
   var hoyV=ventasTurno();
@@ -4929,18 +5011,19 @@ function renderCaja(){
   }
 
   var kpis='<div class="kpi-grid">'
-    +[['💰','Caja inicial',fmt(cajaHoy.cajaInicial),'#f5a623'],
-      ['🧮','Caja calculada',fmt(cajaHoy.cajaInicial+totalV-totalG),utilidad>=0?'#22c55e':'#ef4444'],
-      ['📈','Ventas del día',fmt(totalV),'#22c55e'],
-      ['📋','Gastos del día',fmt(totalG),'#ef4444'],
-      ['🏦','Utilidad bruta',fmt(utilidad),utilidad>=0?'#22c55e':'#ef4444'],
-      ['📲','Nequi (saldo)',fmt(saldoFP('nequi')),'#8B5CF6'],
-      ['🔴','Daviplata (saldo)',fmt(saldoFP('daviplata')),'#EF4444'],
-      ['💠','Bre-B (saldo)',fmt(saldoFP('breb')),'#06B6D4'],
-      ['💳','Tarjeta (saldo)',fmt(saldoFP('tarjeta')),'#F59E0B'],
-      ['💵','Efectivo (saldo)',fmt(saldoFP('efectivo')),'#22C55E']
+    +[['💰','Caja inicial',fmt(cajaHoy.cajaInicial),'#f5a623',null],
+      ['🧮','Caja calculada',fmt(cajaHoy.cajaInicial+totalV-totalG),utilidad>=0?'#22c55e':'#ef4444',null],
+      ['📈','Ventas del día',fmt(totalV),'#22c55e',null],
+      ['📋','Gastos del día',fmt(totalG),'#ef4444',null],
+      ['🏦','Utilidad bruta',fmt(utilidad),utilidad>=0?'#22c55e':'#ef4444',null],
+      ['📲','Nequi (saldo)',fmt(saldoFP('nequi')),'#8B5CF6','nequi'],
+      ['🔴','Daviplata (saldo)',fmt(saldoFP('daviplata')),'#EF4444','daviplata'],
+      ['💠','Bre-B (saldo)',fmt(saldoFP('breb')),'#06B6D4','breb'],
+      ['💳','Tarjeta (saldo)',fmt(saldoFP('tarjeta')),'#F59E0B','tarjeta'],
+      ['💵','Efectivo (saldo)',fmt(saldoFP('efectivo')),'#22C55E','efectivo']
     ].map(function(x){
-      return'<div class="kpi"><div style="font-size:20px">'+x[0]+'</div><div style="color:var(--muted);font-size:10px;margin-top:2px">'+x[1]+'</div><div style="color:'+x[3]+';font-weight:900;font-size:15px;margin-top:2px">'+x[2]+'</div></div>';
+      var click=x[4]?' onclick="verDetalleSaldoFP(\''+x[4]+'\')" style="cursor:pointer"':'';
+      return'<div class="kpi"'+click+'><div style="font-size:20px">'+x[0]+'</div><div style="color:var(--muted);font-size:10px;margin-top:2px">'+x[1]+(x[4]?' <span style="opacity:.6">ⓘ</span>':'')+'</div><div style="color:'+x[3]+';font-weight:900;font-size:15px;margin-top:2px">'+x[2]+'</div></div>';
     }).join('')+'</div>';
 
   // Configurar caja inicial (solo admin)
