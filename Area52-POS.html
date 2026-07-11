@@ -4359,6 +4359,7 @@ function renderGastos(){
         +'<input class="inp" id="g-concepto" placeholder="Ej: 2 cajas cerveza, gas, taxi..."/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Categoría</div>'
         +'<select class="inp" id="g-cat" onchange="toggleGastoExtras()">'
+        +'<option value="" selected disabled>👆 Elige la categoría...</option>'
         +CATG_GASTOS.map(function(c){return'<option>'+c+'</option>';}).join('')
         +'</select></div>'
       +'<div id="g-emp-wrap" style="grid-column:1/-1;display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">👷 Empleado (opcional, lo enlaza a su nómina)</div>'
@@ -4371,6 +4372,7 @@ function renderGastos(){
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago *</div>'
         +'<select class="inp" id="g-fp">'
+        +'<option value="" selected disabled>👆 Elige la forma de pago...</option>'
         +FPAGO.slice().sort(function(a,b){return (a.id==='efectivo'?-1:b.id==='efectivo'?1:0);}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
@@ -4497,11 +4499,13 @@ function exportarGastosExcel(){
 function guardarGasto(){
   var concepto=(document.getElementById('g-concepto')||{}).value;concepto=concepto?concepto.trim():'';
   var valor=moneyVal('g-valor')||0;
-  var categoria=(document.getElementById('g-cat')||{}).value||'Otro';
+  var categoria=(document.getElementById('g-cat')||{}).value||'';
   var notas=(document.getElementById('g-notas')||{}).value||'';
-  var fp=(document.getElementById('g-fp')||{}).value||'efectivo';
+  var fp=(document.getElementById('g-fp')||{}).value||'';
   if(!concepto){alert('Escribe el concepto.');return;}
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
+  if(!categoria){alert('👆 Elige a qué categoría corresponde el gasto.');return;}
+  if(!fp){alert('👆 Elige de dónde salió la plata (forma de pago).');return;}
   var empId=(document.getElementById('g-emp')||{}).value||'';
   var provId=(document.getElementById('g-prov')||{}).value||'';
   var g={id:'g'+Date.now(),ts:Date.now(),concepto:concepto,categoria:categoria,valor:valor,notas:notas,fp:fp,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
