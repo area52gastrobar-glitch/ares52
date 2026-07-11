@@ -364,6 +364,14 @@ var saneamientoSemanal={};  // {semana_actId: {fecha,insumo,responsable,obs}}
 var _sanSemanaOffset=0;  // 0=semana actual, -1=anterior, etc.
 var abonosMesa={};  // {mesaId:[{monto,fp,nombre,ts,uid}]}
 var pedidoLog={};   // {mesaId:[{ts,texto,delta,uidNombre}]}  historial de pedidos con hora
+var fotoCompCfg={on:true,min:0};  // foto de comprobante para pagos digitales: activada, monto mínimo
+var arqueos=[];  // [{ts,uid,uidNombre,denoms,total,esperado,dif,turnoTs}] conteos de efectivo
+var DENOMS=[
+  {k:'b100',v:100000,l:'💵 $100.000'},{k:'b50',v:50000,l:'💵 $50.000'},{k:'b20',v:20000,l:'💵 $20.000'},
+  {k:'b10',v:10000,l:'💵 $10.000'},{k:'b5',v:5000,l:'💵 $5.000'},{k:'b2',v:2000,l:'💵 $2.000'},
+  {k:'m1000',v:1000,l:'🪙 $1.000'},{k:'m500',v:500,l:'🪙 $500'},{k:'m200',v:200,l:'🪙 $200'},
+  {k:'m100',v:100,l:'🪙 $100'},{k:'m50',v:50,l:'🪙 $50'}
+];
 var SAN_AREAS=[
   {id:'pisos',nombre:'Pisos y Paredes',cond:'Libres de residuos, grasa y humedad. Barrido y trapeado completo.'},
   {id:'banos',nombre:'Baños (Clientes/Staff)',cond:'Sanitarios, lavamanos y pisos desinfectados. Papeleras vaciadas.'},
@@ -573,6 +581,11 @@ function iniciarSync(){
   fbOn('pedidoLog',function(v){
     pedidoLog=v||{};
     Object.keys(pedidoLog).forEach(function(k){if(!Array.isArray(pedidoLog[k]))pedidoLog[k]=Object.values(pedidoLog[k]||{});});
+  });
+  fbOn('fotoCompCfg',function(v){if(v)fotoCompCfg=v;});
+  fbOn('arqueos',function(v){
+    arqueos=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='caja')render();
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -2086,6 +2099,7 @@ function quitarAbonoMesa(idx){
 
 function abrirCobro(){
   if(!mesaActiva)return;
+  window._compTemp=null;  // limpiar comprobante de un cobro anterior cancelado
   var ped=pedidos[mesaActiva.id]||[];
   var total=totalPedido(mesaActiva.id);
   var zona=ZONAS.find(function(z){return z.id===mesaActiva.zona;});
@@ -2231,6 +2245,7 @@ function actualizarBarraCobro(){
 }
 
 function abrirDividirCuenta(){
+  window._compTemp=null;
   if(!mesaActiva)return;
   var ped=pedidos[mesaActiva.id]||[];
   if(!ped.length){alert('La mesa no tiene productos.');return;}
@@ -2292,6 +2307,11 @@ function confirmarDividir(){
   });
   if(!itemsPagar.length||total<=0){alert('Selecciona al menos un producto.');return;}
   var f=FPAGO.find(function(x){return x.id===fp;});
+  // ── COMPROBANTE para pago digital en cuenta dividida ──
+  if(fp!=='efectivo'&&fotoCompCfg.on&&total>=(fotoCompCfg.min||0)&&!window._compTemp){
+    abrirCapturaComprobante((f?f.emoji+' '+f.label:fp)+' '+fmt(total),total,function(){confirmarDividir();});
+    return;
+  }
   // Registrar la venta de esta parte
   var venta={
     mesa:(mesaActiva.nombre||('Mesa '+mesaActiva.num))+' (dividida)',zona:mesaActiva.zona,
@@ -2302,6 +2322,13 @@ function confirmarDividir(){
     esDividida:true,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
+  if(window._compTemp){
+    var compIdD='comp_'+Date.now();
+    venta.compId=compIdD;
+    venta.refPago=window._compTemp.ref4||'';
+    fbSet('comprobantes/'+compIdD,{ts:Date.now(),img:window._compTemp.img,mesa:venta.mesa,monto:total,fp:(f?f.emoji+' '+f.label:fp),ref4:window._compTemp.ref4||'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+    window._compTemp=null;
+  }
   fbPush('ventas',venta);
   // Restar las cantidades pagadas del pedido
   Object.keys(sel).sort(function(a,b){return b-a;}).forEach(function(idx){
@@ -2324,6 +2351,99 @@ function confirmarDividir(){
   render();
 }
 
+/* ═══════════ COMPROBANTE DE PAGO DIGITAL (foto + referencia opcional) ═══════════ */
+function abrirCapturaComprobante(fpDetalle,montoDig,cont){
+  window._compTempImg=null;
+  window._compCont=cont;
+  modal2('<div style="text-align:center;margin-bottom:12px">'
+      +'<div style="font-size:28px">📷</div>'
+      +'<div style="font-weight:800;font-size:16px;margin-top:4px">Foto del comprobante</div>'
+      +'<div style="color:var(--muted);font-size:12px;margin-top:4px">'+esc(fpDetalle)+' · <b style="color:var(--gold)">'+fmt(montoDig)+'</b></div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:6px">Pídele al cliente que muestre la confirmación del pago y tómale la foto.</div>'
+    +'</div>'
+    +'<input type="file" accept="image/*" capture="environment" id="comp-file" style="display:none" onchange="procesarFotoComprobante(this)"/>'
+    +'<div id="comp-preview" style="margin-bottom:12px">'
+      +'<button onclick="document.getElementById(\'comp-file\').click()" style="width:100%;background:#38bdf818;color:#38bdf8;border:2px dashed #38bdf855;border-radius:12px;padding:26px;font-size:14px;font-weight:800;cursor:pointer">📷 Abrir cámara</button>'
+    +'</div>'
+    +'<div style="margin-bottom:12px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Últimos 4 dígitos de la referencia (opcional)</div>'
+      +'<input class="inp" id="comp-ref4" type="text" inputmode="numeric" maxlength="6" placeholder="Ej: 4821 — puedes dejarlo vacío" style="text-align:center;font-size:16px;letter-spacing:3px;font-weight:800"/></div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-outline btn-full" onclick="cancelarCapturaComprobante()">Cancelar</button>'
+      +'<button class="btn btn-green btn-full" id="comp-ok" onclick="confirmarCapturaComprobante()" disabled style="opacity:.4">✓ Continuar con el cobro</button>'
+    +'</div>');
+}
+function procesarFotoComprobante(input){
+  var file=input.files&&input.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var img=new Image();
+    img.onload=function(){
+      // Comprimir: máx 900px de lado, JPEG calidad 0.55 (~60-150 KB)
+      var maxDim=900;var w=img.width,h=img.height;
+      if(w>maxDim||h>maxDim){var esc2=maxDim/Math.max(w,h);w=Math.round(w*esc2);h=Math.round(h*esc2);}
+      var cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      window._compTempImg=cv.toDataURL('image/jpeg',0.55);
+      var prev=document.getElementById('comp-preview');
+      if(prev)prev.innerHTML='<div style="position:relative">'
+        +'<img src="'+window._compTempImg+'" style="width:100%;max-height:38vh;object-fit:contain;border-radius:12px;border:2px solid #22c55e66;background:#000"/>'
+        +'<button onclick="document.getElementById(\'comp-file\').click()" style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.7);color:#fff;border:1px solid #fff3;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">🔄 Repetir</button>'
+        +'</div>';
+      var ok=document.getElementById('comp-ok');
+      if(ok){ok.disabled=false;ok.style.opacity='1';}
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function cancelarCapturaComprobante(){
+  window._compTempImg=null;window._compTemp=null;window._compCont=null;
+  closeModal2();
+}
+function confirmarCapturaComprobante(){
+  if(!window._compTempImg){alert('Toma la foto del comprobante primero.');return;}
+  var ref4=((document.getElementById('comp-ref4')||{}).value||'').trim();
+  // Detector de comprobantes repetidos (últimos 3 días)
+  if(ref4){
+    var hace3d=Date.now()-3*24*3600*1000;
+    var dup=ventas.find(function(v){return v.refPago&&v.refPago===ref4&&v.ts>=hace3d;});
+    if(dup){
+      if(!confirm('⚠️ ATENCIÓN: esta referencia ('+ref4+') ya se usó el '+fmtFechaCorta(dup.ts)+' en '+(dup.mesa||'otra venta')+' por '+fmt(dup.total)+'.\n\nPuede ser un comprobante REPETIDO. ¿Seguro que es un pago distinto?'))return;
+    }
+  }
+  window._compTemp={img:window._compTempImg,ref4:ref4};
+  window._compTempImg=null;
+  var cont=window._compCont;window._compCont=null;
+  closeModal2();
+  if(cont)cont();
+}
+// Ver un comprobante guardado
+function verComprobante(compId){
+  var d=getDb();
+  if(!d){alert('Se necesita conexión para ver el comprobante.');return;}
+  modal2('<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Cargando comprobante...</div>');
+  d.ref('comprobantes/'+compId).once('value',function(s){
+    var c=s.val();
+    if(!c){modal2('<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Este comprobante ya no existe (pudo ser purgado por antigüedad).</div><button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');return;}
+    modal2('<div style="font-weight:800;font-size:15px;margin-bottom:4px">📷 Comprobante de pago</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">'+fmtFechaCorta(c.ts)+' · '+esc(c.mesa||'')+' · '+esc(c.fp||'')+' · <b style="color:var(--gold)">'+fmt(c.monto||0)+'</b>'+(c.ref4?' · Ref: <b>'+esc(c.ref4)+'</b>':'')+(c.uidNombre?' · ✍️ '+esc(c.uidNombre):'')+'</div>'
+      +'<img src="'+c.img+'" style="width:100%;max-height:60vh;object-fit:contain;border-radius:12px;background:#000;border:1px solid var(--border)"/>'
+      +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
+  });
+}
+// Purga comprobantes con más de 45 días (se ejecuta en el cierre del día)
+function purgarComprobantes(){
+  var d=getDb();if(!d)return;
+  var limite=Date.now()-45*24*3600*1000;
+  d.ref('comprobantes').once('value',function(s){
+    var v=s.val();if(!v)return;
+    Object.keys(v).forEach(function(k){
+      if((v[k].ts||0)<limite)d.ref('comprobantes/'+k).remove();
+    });
+  });
+}
+
 function confirmarCobro(){
   if(!mesaActiva)return;
   var pagos=window._pagosParciales||{};
@@ -2333,6 +2453,20 @@ function confirmarCobro(){
   var descMesa=descuentos[mesaActiva.id];
   if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
   if(Math.round(pagado)<Math.round(total)){alert('El total pagado ($'+total.toLocaleString('es-CO')+') no cubre el valor. Verifica los montos.');return;}
+
+  // ── COMPROBANTE: si hay pagos digitales, exigir foto antes de registrar ──
+  var totalDig=0;var fpDigLabels=[];
+  Object.keys(pagos).forEach(function(fp){
+    if(fp!=='efectivo'&&pagos[fp]>0){
+      totalDig+=pagos[fp];
+      var fD=FPAGO.find(function(x){return x.id===fp;});
+      fpDigLabels.push((fD?fD.emoji+' '+fD.label:fp)+' '+fmt(pagos[fp]));
+    }
+  });
+  if(fotoCompCfg.on&&totalDig>0&&totalDig>=(fotoCompCfg.min||0)&&!window._compTemp){
+    abrirCapturaComprobante(fpDigLabels.join(' + '),totalDig,function(){confirmarCobro();});
+    return;
+  }
 
   var mesa=mesaActiva;
   var ped=pedidos[mesa.id]||[];
@@ -2360,6 +2494,14 @@ function confirmarCobro(){
     sinStock:sinStock,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
+  // Amarrar el comprobante fotográfico si se capturó
+  if(window._compTemp){
+    var compId='comp_'+Date.now();
+    venta.compId=compId;
+    venta.refPago=window._compTemp.ref4||'';
+    fbSet('comprobantes/'+compId,{ts:Date.now(),img:window._compTemp.img,mesa:venta.mesa,monto:totalDig,fp:fpDigLabels.join(' + '),ref4:window._compTemp.ref4||'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+    window._compTemp=null;
+  }
   fbPush('ventas',venta);
   // Stock ya fue descontado al agregar a la mesa (con escritura atómica) — no se toca aquí
   // Guardar el último ticket por si el cliente quiere imprimirlo
@@ -4069,6 +4211,14 @@ function renderGastos(){
   var hoy=gastosTurno();
   var totalH=hoy.reduce(function(a,g){return a+g.valor;},0);
 
+  // Arqueo de efectivo accesible para cajero/subadmin (que no ven la pestaña Caja)
+  var puedeArqG=usuarioActivo&&(usuarioActivo.rol==='cajero'||usuarioActivo.rol==='subadmin');
+  var arqueoBanner=puedeArqG?'<div class="card2 mb12" style="display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--gold)44">'
+    +'<div><div style="color:var(--gold);font-weight:800;font-size:13px">🧮 Arqueo de efectivo</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-top:2px">Cuenta el dinero físico de la caja billete por billete. Queda registrado con tu nombre.</div></div>'
+    +'<button onclick="abrirArqueo()" style="background:var(--gold);color:#1a1a22;border:none;border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">🧮 Contar caja</button>'
+  +'</div>':'';
+
   var form='<div class="card2 mb12">'
     +'<div style="color:var(--gold);font-weight:800;font-size:14px;margin-bottom:12px">📋 Registrar gasto / compra</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
@@ -4162,7 +4312,7 @@ function renderGastos(){
     ):'')
   +'</div>';
 
-  return form+resHoy+resumen+historial;
+  return arqueoBanner+form+resHoy+resumen+historial;
 }
 
 function fmtFecha(ts){
@@ -4256,6 +4406,103 @@ function borrarGasto(id){
 }
 
 /* ═══════════════ CAJA ═══════════════ */
+/* ═══════════ ARQUEO DE EFECTIVO (conteo por denominaciones) ═══════════ */
+// Efectivo que DEBERÍA haber en caja en este momento del turno
+function efectivoEsperadoTurno(){
+  var ini=cajaHoy.ini_efectivo||0;
+  var vEf=ventasTurno().reduce(function(a,v){
+    var pl=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+    return a+pl.filter(function(p){return p.fp==='efectivo';}).reduce(function(s,p){return s+(p.monto||0);},0);
+  },0);
+  var gEf=gastosTurno().filter(function(g){return (g.fp||'efectivo')==='efectivo';}).reduce(function(a,g){return a+(g.valor||0);},0);
+  // Abonos en efectivo de mesas AÚN abiertas (plata que ya está en la caja pero sin venta registrada)
+  var abEf=0;
+  Object.keys(abonosMesa).forEach(function(mid){
+    (abonosMesa[mid]||[]).forEach(function(ab){if((ab.fp||'efectivo')==='efectivo')abEf+=(ab.monto||0);});
+  });
+  return {esperado:ini+vEf+abEf-gEf,ini:ini,ventas:vEf,abonos:abEf,gastos:gEf};
+}
+function abrirArqueo(){
+  var rows=DENOMS.map(function(d){
+    return'<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">'
+      +'<span style="min-width:92px;font-size:13px;font-weight:700">'+d.l+'</span>'
+      +'<input class="inp" id="arq-'+d.k+'" type="number" inputmode="numeric" min="0" placeholder="0" oninput="calcArqueo()" style="flex:1;text-align:center;font-size:15px;font-weight:800;padding:9px"/>'
+      +'<span id="arqs-'+d.k+'" style="min-width:86px;text-align:right;color:var(--muted);font-size:12px;font-weight:700">$0</span>'
+    +'</div>';
+  }).join('');
+  modal1('<div style="text-align:center;margin-bottom:12px">'
+      +'<div style="font-size:26px">🧮</div>'
+      +'<div style="font-weight:900;font-size:17px">Arqueo de efectivo</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:4px">Cuenta el dinero físico de la caja y escribe CUÁNTOS billetes y monedas hay de cada uno.</div>'
+    +'</div>'
+    +'<div style="max-height:46vh;overflow-y:auto;padding-right:4px">'+rows+'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--gold)55;border-radius:10px;padding:10px;margin:12px 0;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-weight:800;font-size:14px">TOTAL CONTADO</span>'
+      +'<span id="arq-total" style="color:var(--gold);font-weight:900;font-size:20px">$0</span>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-outline btn-full" onclick="closeModal1()">Cancelar</button>'
+      +'<button class="btn btn-gold btn-full" onclick="confirmarArqueo()">✓ Guardar arqueo</button>'
+    +'</div>');
+}
+function calcArqueo(){
+  var total=0;
+  DENOMS.forEach(function(d){
+    var q=parseInt((document.getElementById('arq-'+d.k)||{}).value)||0;
+    var sub=q*d.v;total+=sub;
+    var el=document.getElementById('arqs-'+d.k);
+    if(el)el.textContent=sub?fmt(sub):'$0';
+  });
+  var t=document.getElementById('arq-total');
+  if(t)t.textContent=fmt(total);
+  return total;
+}
+function confirmarArqueo(){
+  var denoms={};var total=0;var alguno=false;
+  DENOMS.forEach(function(d){
+    var q=parseInt((document.getElementById('arq-'+d.k)||{}).value)||0;
+    denoms[d.k]=q;total+=q*d.v;if(q>0)alguno=true;
+  });
+  if(!alguno&&!confirm('No registraste ningún billete ni moneda (caja en $0). ¿Guardar así?'))return;
+  var esp=efectivoEsperadoTurno();
+  var dif=total-esp.esperado;
+  var arq={id:'arq_'+Date.now(),ts:Date.now(),uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,
+    denoms:denoms,total:total,esperado:esp.esperado,dif:dif,
+    detalleEsperado:{ini:esp.ini,ventas:esp.ventas,abonos:esp.abonos,gastos:esp.gastos},
+    turnoTs:turnoInicio||0};
+  fbPush('arqueos',arq);
+  closeModal1();
+  // El cajero solo ve su total (conteo ciego); el admin ve la diferencia
+  if(usuarioActivo.rol==='admin'){
+    var difTxt=dif===0?'✅ Caja cuadrada':(dif<0?'🔴 Falta '+fmt(Math.abs(dif)):'🟡 Sobra '+fmt(dif));
+    showToast('🧮 Arqueo guardado · contado '+fmt(total)+'<br><span style="font-size:12px;opacity:.9">Esperado '+fmt(esp.esperado)+' · '+difTxt+'</span>',dif===0?'#22c55e':(dif<0?'#ef4444':'#f5a623'),6000);
+  } else {
+    showToast('🧮 Arqueo guardado<br><span style="font-size:12px;opacity:.85">Total contado: '+fmt(total)+' · quedó registrado con tu nombre</span>','#22c55e',5000);
+  }
+  render();
+}
+function verArqueo(aid){
+  var a=arqueos.find(function(x){return x.id===aid;});
+  if(!a)return;
+  var esAdm=usuarioActivo&&usuarioActivo.rol==='admin';
+  var rows=DENOMS.map(function(d){
+    var q=(a.denoms||{})[d.k]||0;
+    if(!q)return'';
+    return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)"><span>'+d.l+' × <b>'+q+'</b></span><span style="font-weight:700">'+fmt(q*d.v)+'</span></div>';
+  }).join('');
+  var de=a.detalleEsperado||{};
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">🧮 Arqueo de efectivo</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">'+fmtFechaCorta(a.ts)+' · ✍️ '+esc(a.uidNombre||'')+'</div>'
+    +'<div style="max-height:34vh;overflow-y:auto;margin-bottom:10px">'+(rows||'<div style="color:var(--muted);font-size:12px;padding:8px 0">Caja contada en $0.</div>')+'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span style="font-weight:800">CONTADO</span><span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(a.total)+'</span></div>'
+      +(esAdm?('<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted)"><span>Esperado</span><span>'+fmt(a.esperado)+'</span></div>'
+        +'<div style="color:var(--muted);font-size:10px;padding:2px 0">Inicial '+fmt(de.ini||0)+' + ventas efvo. '+fmt(de.ventas||0)+(de.abonos?' + abonos '+fmt(de.abonos):'')+' − gastos efvo. '+fmt(de.gastos||0)+'</div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px solid var(--border);margin-top:4px"><span style="font-weight:800">'+(a.dif===0?'✅ CUADRADA':(a.dif<0?'🔴 FALTANTE':'🟡 SOBRANTE'))+'</span><span style="color:'+(a.dif===0?'#22c55e':(a.dif<0?'#ef4444':'#f5a623'))+';font-weight:900;font-size:15px">'+fmt(Math.abs(a.dif))+'</span></div>'):'')
+    +'</div>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
+}
+
 function renderCaja(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
   var hoyV=ventasTurno();
@@ -4301,13 +4548,17 @@ function renderCaja(){
   var configCaja=esAdmin?'<div class="card2 mb12">'
     +'<div style="color:var(--gold);font-weight:800;font-size:14px;margin-bottom:4px">💰 Turno actual</div>'
     +turnoLabel
-    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px;margin-top:8px">Caja inicial en efectivo</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-      +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Caja inicial en efectivo</div>'
-        +FPAGO.map(function(f){return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:16px">'+f.emoji+'</span><span style="color:'+f.color+';font-weight:700;font-size:12px;min-width:80px">'+f.label+'</span><input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="0" value="'+moneyFmt(cajaHoy['ini_'+f.id]||0)+'" data-fp-ini="'+f.id+'" style="flex:1"/></div>';}).join('')+'<div style="color:var(--muted);font-size:12px;margin-top:2px">Total: '+fmt(FPAGO.reduce(function(a,f){return a+(cajaHoy['ini_'+f.id]||0);},0))+'</div></div>'
-      +'<div style="display:flex;align-items:flex-end">'
-        +'<button class="btn btn-gold btn-full" onclick="guardarCajaInicial()">Guardar caja inicial</button></div>'
-    +'</div></div>':'';
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px;margin-top:8px">Caja inicial por forma de pago</div>'
+    +FPAGO.map(function(f){
+      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'
+        +'<span style="font-size:16px;flex:0 0 auto">'+f.emoji+'</span>'
+        +'<span style="color:'+f.color+';font-weight:700;font-size:12px;flex:0 0 auto;width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.label+'</span>'
+        +'<input class="inp money" type="text" inputmode="numeric" placeholder="0" value="'+moneyFmt(cajaHoy['ini_'+f.id]||0)+'" data-fp-ini="'+f.id+'" style="flex:1;min-width:0;text-align:right;font-size:16px;font-weight:800;padding:10px 12px;letter-spacing:.5px"/>'
+      +'</div>';
+    }).join('')
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 12px;padding-top:8px;border-top:1px solid var(--border)"><span style="color:var(--muted);font-size:12px;font-weight:700">Total</span><span style="color:var(--gold);font-weight:900;font-size:17px">'+fmt(FPAGO.reduce(function(a,f){return a+(cajaHoy['ini_'+f.id]||0);},0))+'</span></div>'
+    +'<button class="btn btn-gold btn-full" onclick="guardarCajaInicial()">Guardar caja inicial</button>'
+  +'</div>':'';
 
   // Cierre del día (solo admin)
   var cierreBtn=esAdmin?'<div class="card" style="border-color:var(--gold)44;margin-bottom:12px">'
@@ -4340,7 +4591,77 @@ function renderCaja(){
       }).join(''))
     +'</div>';
 
-  return configCaja+kpis+trasladoCard+cierreBtn+histCierres;
+  // ── Conciliación de pagos digitales del turno ──
+  var digRows=[];var digTotales={};
+  hoyV.slice().sort(function(a,b){return b.ts-a.ts;}).forEach(function(v){
+    var pl=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,label:v.fpLabel||v.fp,monto:v.total}];
+    var digs=pl.filter(function(p){return p.fp&&p.fp!=='efectivo'&&p.monto>0;});
+    if(!digs.length)return;
+    digs.forEach(function(p){
+      if(!digTotales[p.fp])digTotales[p.fp]={n:0,t:0};
+      digTotales[p.fp].n++;digTotales[p.fp].t+=p.monto;
+    });
+    var det=digs.map(function(p){var fD=FPAGO.find(function(x){return x.id===p.fp;});return (fD?fD.emoji+' '+fD.label:p.fp)+' '+fmt(p.monto);}).join(' + ');
+    digRows.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(v.mesa||'')+' · <span style="color:var(--gold)">'+det+'</span></div>'
+        +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(v.ts)+(v.refPago?' · Ref: <b>'+esc(v.refPago)+'</b>':'')+(v.uidNombre?' · ✍️ '+esc(v.uidNombre):'')+'</div></div>'
+      +(v.compId?'<button onclick="verComprobante(\''+v.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷 Ver</button>'
+        :'<span style="color:#f5a623;font-size:10px;font-weight:700;white-space:nowrap">Sin foto</span>')
+    +'</div>');
+  });
+  var digResumen=Object.keys(digTotales).map(function(fp){
+    var fD=FPAGO.find(function(x){return x.id===fp;});
+    return'<div style="flex:1;min-width:100px;background:var(--bg);border-radius:8px;padding:7px 9px;text-align:center"><div style="color:var(--muted);font-size:9px">'+(fD?fD.emoji+' '+fD.label.toUpperCase():fp)+'</div><div style="color:'+(fD?fD.color:'var(--text)')+';font-weight:900;font-size:13px">'+fmt(digTotales[fp].t)+'</div><div style="color:var(--muted);font-size:9px">'+digTotales[fp].n+' pago'+(digTotales[fp].n!==1?'s':'')+'</div></div>';
+  }).join('');
+  var conciliacion='<div class="card mb12">'
+    +'<button data-act="toggle-sec" data-sec="concil" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0;margin-bottom:6px">'+(_secOpen.concil?'▼':'▶')+' 🧾 Conciliación pagos digitales ('+digRows.length+')</button>'
+    +(!_secOpen.concil?'':(digRows.length
+      ?'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Compara estos totales contra los movimientos de la app del banco. Toca 📷 para ver el comprobante de cada pago.</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+digResumen+'</div>'
+        +'<div style="max-height:40vh;overflow-y:auto">'+digRows.join('')+'</div>'
+      :'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin pagos digitales en este turno</div>'))
+  +'</div>';
+
+  // ── Gastos del turno por forma de pago (para cruzar contra el banco) ──
+  var gastosFPRows=FPAGO.map(function(f){
+    var gs=hoyG.filter(function(g){return (g.fp||'efectivo')===f.id;});
+    if(!gs.length)return'';
+    var tot=gs.reduce(function(a,g){return a+(g.valor||0);},0);
+    var det=gs.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(g){
+      return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0 3px 12px;border-bottom:1px solid var(--border)"><span>'+esc(g.concepto)+'<br><span style="font-size:9px">'+fmtFechaCorta(g.ts)+(g.uidNombre?' · '+esc(g.uidNombre):'')+'</span></span><span style="font-weight:700;white-space:nowrap">'+fmt(g.valor)+'</span></div>';
+    }).join('');
+    return'<div style="margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:8px;padding:8px 10px">'
+        +'<span style="font-size:13px;font-weight:800;color:'+f.color+'">'+f.emoji+' '+f.label+' <span style="color:var(--muted);font-weight:600;font-size:11px">· '+gs.length+' gasto'+(gs.length!==1?'s':'')+'</span></span>'
+        +'<span style="color:'+f.color+';font-weight:900;font-size:14px">'+fmt(tot)+'</span>'
+      +'</div>'+det+'</div>';
+  }).join('');
+  var gastosFPCard='<div class="card mb12">'
+    +'<button data-act="toggle-sec" data-sec="gastosFP" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0;margin-bottom:6px">'+(_secOpen.gastosFP?'▼':'▶')+' 💸 Gastos por forma de pago ('+hoyG.length+' · '+fmt(totalG)+')</button>'
+    +(!_secOpen.gastosFP?'':(gastosFPRows||'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin gastos en este turno</div>'))
+  +'</div>';
+
+  // ── Arqueos de efectivo del turno ──
+  var arqTurno=arqueos.filter(function(a){return a.ts>=turnoInicio;}).sort(function(a,b){return b.ts-a.ts;});
+  var arqRows=arqTurno.map(function(a){
+    var difHtml=esAdmin?('<span style="color:'+(a.dif===0?'#22c55e':(a.dif<0?'#ef4444':'#f5a623'))+';font-weight:900;font-size:13px;white-space:nowrap">'+(a.dif===0?'✅ Cuadrada':(a.dif<0?'🔴 −'+fmt(Math.abs(a.dif)):'🟡 +'+fmt(a.dif)))+'</span>'):'';
+    return'<div onclick="verArqueo(\''+a.id+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer">'
+      +'<div style="flex:1"><div style="font-size:12px;font-weight:700">🧮 Contado: <span style="color:var(--gold)">'+fmt(a.total)+'</span></div>'
+        +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(a.ts)+' · ✍️ '+esc(a.uidNombre||'')+'</div></div>'
+      +difHtml
+    +'</div>';
+  }).join('');
+  var puedeArq=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'||usuarioActivo.rol==='cajero');
+  var arqueoCard='<div class="card mb12">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<span style="font-weight:700;font-size:14px">🧮 Arqueos de efectivo ('+arqTurno.length+')</span>'
+      +(puedeArq?'<button onclick="abrirArqueo()" style="background:var(--gold);color:#1a1a22;border:none;border-radius:8px;padding:7px 14px;font-weight:800;font-size:12px;cursor:pointer">🧮 Contar caja</button>':'')
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:8px">El cajero cuenta el efectivo billete por billete. '+(esAdmin?'Tú ves si falta o sobra frente a lo esperado.':'El conteo queda registrado con tu nombre.')+'</div>'
+    +(arqRows||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin arqueos en este turno</div>')
+  +'</div>';
+
+  return configCaja+kpis+conciliacion+gastosFPCard+arqueoCard+trasladoCard+cierreBtn+histCierres;
 }
 
 function guardarCajaInicial(){
@@ -4411,6 +4732,7 @@ function abrirCierre(){
 }
 
 function confirmarCierre(){
+  purgarComprobantes();  // limpieza de fotos de comprobantes con más de 45 días
   var hoyV=ventasTurno();
   var hoyG=gastosTurno();
   var totalV=hoyV.reduce(function(a,v){return a+v.total;},0);
@@ -6519,6 +6841,18 @@ function renderAdmin(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
   if(!esAdmin) return '<div class="alert-box alert-blue">Solo administradores.</div>';
 
+  // Comprobantes de pago digital
+  var compSection='<div class="card" style="grid-column:1/-1;border:1px solid #38bdf844">'
+    +'<div style="color:#38bdf8;font-weight:800;font-size:15px;margin-bottom:4px">📷 Comprobantes de pagos digitales</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Al cobrar con Bre-B, Nequi, Daviplata o tarjeta, se exige foto del comprobante del cliente. Se guarda amarrada a la venta y se ve en Caja → Conciliación. Las fotos se borran solas a los 45 días.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Estado</div>'
+        +'<button onclick="toggleFotoComp()" style="background:'+(fotoCompCfg.on?'#22c55e':'var(--card2)')+';color:'+(fotoCompCfg.on?'#fff':'var(--muted)')+';border:1px solid '+(fotoCompCfg.on?'#22c55e':'var(--border)')+';border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">'+(fotoCompCfg.on?'✅ Activado':'⭕ Desactivado')+'</button></div>'
+      +'<div style="flex:1;min-width:160px"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Solo exigir foto desde (COP) — 0 = siempre</div>'
+        +'<input class="inp money" id="fotocomp-min" type="text" inputmode="numeric" value="'+moneyFmt(fotoCompCfg.min||0)+'"/></div>'
+      +'<button onclick="guardarFotoCompCfg()" style="background:#38bdf8;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">💾 Guardar</button>'
+    +'</div></div>';
+
   // Respaldo completo
   var backupSection='<div class="card" style="grid-column:1/-1;border:1px solid #22c55e44">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'
@@ -6703,9 +7037,21 @@ function renderAdmin(){
     +'<button class="btn btn-sm btn-green btn-full" style="margin-top:12px" onclick="nuevoUsuario()">+ Agregar usuario</button>'
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
+    +compSection
     +backupSection
     +ticketSection
     +'</div>';
+}
+function toggleFotoComp(){
+  fotoCompCfg.on=!fotoCompCfg.on;
+  fbSet('fotoCompCfg',fotoCompCfg);
+  render();
+}
+function guardarFotoCompCfg(){
+  fotoCompCfg.min=moneyVal('fotocomp-min')||0;
+  fbSet('fotoCompCfg',fotoCompCfg);
+  showToast('📷 Configuración guardada<br><span style="font-size:12px;opacity:.85">'+(fotoCompCfg.on?'Foto obligatoria'+(fotoCompCfg.min>0?' desde '+fmt(fotoCompCfg.min):' en todos los pagos digitales'):'Desactivado')+'</span>','#38bdf8');
+  render();
 }
 
 /* ═══════════════ ADMIN USUARIOS ═══════════════ */
