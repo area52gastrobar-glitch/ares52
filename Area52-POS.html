@@ -4936,56 +4936,81 @@ function ejecutarConciliacion(movs){
 }
 
 /* ═══════════ DETALLE DE SALDO POR FORMA DE PAGO ═══════════ */
-// Muestra de dónde viene el saldo: caja inicial + cada pago que entró − cada gasto que salió
-function verDetalleSaldoFP(fpId){
+// Muestra de dónde viene el dinero por ese medio, con fecha y hora,
+// en el periodo elegido: turno actual, últimos 7 días o todo el histórico.
+function verDetalleSaldoFP(fpId,modo){
   var f=FPAGO.find(function(x){return x.id===fpId;});
   if(!f)return;
-  var hoyV=ventasTurno();var hoyG=gastosTurno();
-  var ini=cajaHoy['ini_'+fpId]||0;
+  modo=modo||'todo';
+  var desde=modo==='turno'?(turnoInicio||0):(modo==='7d'?Date.now()-7*24*3600*1000:0);
+  var vlist=ventas.filter(function(v){return v.ts>=desde;});
+  var glist=gastos.filter(function(g){return g.ts>=desde;});
   // Entradas: cada pago de venta con esta forma de pago
   var entradas=[];
-  hoyV.forEach(function(v){
+  vlist.forEach(function(v){
     var pl=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
     pl.forEach(function(p){
       if(p.fp!==fpId||!(p.monto>0))return;
       entradas.push({ts:v.ts,mesa:v.mesa||'',monto:p.monto,uidNombre:v.uidNombre||'',compId:v.compId||null,refPago:v.refPago||'',mixto:pl.length>1});
     });
   });
-  // Salidas: gastos con esta forma de pago
-  var salidas=hoyG.filter(function(g){return (g.fp||'efectivo')===fpId;});
+  var salidas=glist.filter(function(g){return (g.fp||'efectivo')===fpId;});
   var totalIn=entradas.reduce(function(a,e){return a+e.monto;},0);
   var totalOut=salidas.reduce(function(a,g){return a+(g.valor||0);},0);
-  var saldo=ini+totalIn-totalOut;
-  var entRows=entradas.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(e){
-    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
-      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(e.mesa)+(e.mixto?' <span style="color:var(--muted);font-size:9px">(pago mixto)</span>':'')+'</div>'
-        +'<div style="color:var(--muted);font-size:10px">🕐 '+fmtFechaCorta(e.ts)+(e.refPago?' · Ref '+esc(e.refPago):'')+(e.uidNombre?' · ✍️ '+esc(e.uidNombre):'')+'</div></div>'
-      +'<span style="color:#22c55e;font-weight:900;white-space:nowrap">+'+fmt(e.monto)+'</span>'
-      +(e.compId?'<button onclick="verComprobante(\''+e.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">📷</button>':'')
-    +'</div>';
-  }).join('');
-  var salRows=salidas.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(g){
-    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
-      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(g.concepto)+'</div>'
-        +'<div style="color:var(--muted);font-size:10px">🕐 '+fmtFechaCorta(g.ts)+' · '+esc(g.categoria||'')+(g.uidNombre?' · ✍️ '+esc(g.uidNombre):'')+'</div></div>'
-      +'<span style="color:#ef4444;font-weight:900;white-space:nowrap">−'+fmt(g.valor)+'</span>'
-    +'</div>';
-  }).join('');
-  modal1('<div style="text-align:center;margin-bottom:12px">'
+  // Mezclar entradas y salidas en una sola línea de tiempo con separadores por día
+  var movs=entradas.map(function(e){e._t='in';return e;}).concat(salidas.map(function(g){return {_t:'out',ts:g.ts,concepto:g.concepto,categoria:g.categoria,valor:g.valor,uidNombre:g.uidNombre};}));
+  movs.sort(function(a,b){return b.ts-a.ts;});
+  var LIMITE=300;var recortado=movs.length>LIMITE;
+  movs=movs.slice(0,LIMITE);
+  var rows='';var diaPrev='';
+  movs.forEach(function(x){
+    var d=new Date(x.ts);
+    var dia=('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+String(d.getFullYear()).slice(-2);
+    if(dia!==diaPrev){
+      diaPrev=dia;
+      rows+='<div style="color:var(--gold);font-size:10px;font-weight:800;letter-spacing:1px;padding:8px 0 3px;border-bottom:1px solid var(--gold)33">📅 '+dia+'</div>';
+    }
+    if(x._t==='in'){
+      rows+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(x.mesa)+(x.mixto?' <span style="color:var(--muted);font-size:9px">(pago mixto)</span>':'')+'</div>'
+          +'<div style="color:var(--muted);font-size:10px">🕐 '+fmtTime(x.ts)+(x.refPago?' · Ref '+esc(x.refPago):'')+(x.uidNombre?' · ✍️ '+esc(x.uidNombre):'')+'</div></div>'
+        +'<span style="color:#22c55e;font-weight:900;white-space:nowrap">+'+fmt(x.monto)+'</span>'
+        +(x.compId?'<button onclick="verComprobante(\''+x.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">📷</button>':'')
+      +'</div>';
+    } else {
+      rows+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">💸 '+esc(x.concepto)+'</div>'
+          +'<div style="color:var(--muted);font-size:10px">🕐 '+fmtTime(x.ts)+' · '+esc(x.categoria||'')+(x.uidNombre?' · ✍️ '+esc(x.uidNombre):'')+'</div></div>'
+        +'<span style="color:#ef4444;font-weight:900;white-space:nowrap">−'+fmt(x.valor)+'</span>'
+      +'</div>';
+    }
+  });
+  // Caja de totales: en "turno" cuadra con el saldo; en otros periodos son totales del periodo
+  var cajaTotales;
+  if(modo==='turno'){
+    var ini=cajaHoy['ini_'+fpId]||0;
+    var saldo=ini+totalIn-totalOut;
+    cajaTotales='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">Caja inicial del turno</span><span style="font-weight:700">'+fmt(ini)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">+ Entradas ('+entradas.length+')</span><span style="color:#22c55e;font-weight:700">+'+fmt(totalIn)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">− Salidas ('+salidas.length+')</span><span style="color:#ef4444;font-weight:700">−'+fmt(totalOut)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:3px"><span style="font-weight:800">= Saldo del turno</span><span style="color:'+f.color+';font-weight:900">'+fmt(saldo)+'</span></div>';
+  } else {
+    cajaTotales='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">Entradas del periodo ('+entradas.length+' pago'+(entradas.length!==1?'s':'')+')</span><span style="color:#22c55e;font-weight:700">+'+fmt(totalIn)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">Salidas del periodo ('+salidas.length+' gasto'+(salidas.length!==1?'s':'')+')</span><span style="color:#ef4444;font-weight:700">−'+fmt(totalOut)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:3px"><span style="font-weight:800">Neto del periodo</span><span style="color:'+f.color+';font-weight:900">'+fmt(totalIn-totalOut)+'</span></div>';
+  }
+  function pill(id,lbl){
+    var sel=modo===id;
+    return'<button onclick="verDetalleSaldoFP(\''+fpId+'\',\''+id+'\')" style="flex:1;background:'+(sel?f.color:'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?f.color:'var(--border)')+';border-radius:99px;padding:7px 0;font-size:11px;font-weight:800;cursor:pointer">'+lbl+'</button>';
+  }
+  modal1('<div style="text-align:center;margin-bottom:10px">'
       +'<div style="font-size:26px">'+f.emoji+'</div>'
-      +'<div style="font-weight:900;font-size:16px;color:'+f.color+'">'+f.label+' · saldo del turno</div>'
-      +'<div style="font-size:24px;font-weight:900;color:'+f.color+';margin-top:2px">'+fmt(saldo)+'</div>'
+      +'<div style="font-weight:900;font-size:16px;color:'+f.color+'">'+f.label+' · movimientos</div>'
     +'</div>'
-    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12px">'
-      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">Caja inicial</span><span style="font-weight:700">'+fmt(ini)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">+ Entradas ('+entradas.length+' pago'+(entradas.length!==1?'s':'')+')</span><span style="color:#22c55e;font-weight:700">+'+fmt(totalIn)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">− Salidas ('+salidas.length+' gasto'+(salidas.length!==1?'s':'')+')</span><span style="color:#ef4444;font-weight:700">−'+fmt(totalOut)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--border);margin-top:3px"><span style="font-weight:800">= Saldo</span><span style="color:'+f.color+';font-weight:900">'+fmt(saldo)+'</span></div>'
-    +'</div>'
-    +'<div style="color:#22c55e;font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:4px">⬇️ ENTRADAS · DE QUÉ PAGO VIENE LA PLATA</div>'
-    +'<div style="max-height:30vh;overflow-y:auto;margin-bottom:12px">'+(entRows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin pagos por este medio en el turno.</div>')+'</div>'
-    +'<div style="color:#ef4444;font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:4px">⬆️ SALIDAS · GASTOS POR ESTE MEDIO</div>'
-    +'<div style="max-height:22vh;overflow-y:auto;margin-bottom:12px">'+(salRows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin gastos por este medio en el turno.</div>')+'</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:12px">'+pill('turno','Turno actual')+pill('7d','Últimos 7 días')+pill('todo','Todo')+'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12px">'+cajaTotales+'</div>'
+    +(recortado?'<div style="color:var(--muted);font-size:10px;margin-bottom:6px">Mostrando los últimos '+LIMITE+' movimientos.</div>':'')
+    +'<div style="max-height:48vh;overflow-y:auto;margin-bottom:12px">'+(rows||'<div style="color:var(--muted);font-size:12px;padding:10px 0;text-align:center">Sin movimientos por este medio en el periodo.</div>')+'</div>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
 }
 
