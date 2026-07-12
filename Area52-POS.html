@@ -683,6 +683,7 @@ function verificarPin(){
         if(ip&&ipAutorizada(ip)){
           completarLogin();
         } else {
+          registrarSesion('red_bloqueada',usuarioSelLogin);
           pinBuffer='';renderPinDots();
           if(errEl){
             errEl.style.color='#ef4444';
@@ -695,12 +696,50 @@ function verificarPin(){
     }
     completarLogin();
   } else {
+    registrarSesion('pin_fallido',usuarioSelLogin);
     document.getElementById('pin-err').textContent='PIN incorrecto';
     pinBuffer='';renderPinDots();
     setTimeout(function(){document.getElementById('pin-err').textContent='';},2000);
   }
 }
+// Registro de inicios de sesión (quién entra, sale, falla el PIN o es bloqueado por red)
+function registrarSesion(tipo,u){
+  if(!u)return;
+  fbPush('sesiones',{ts:Date.now(),tipo:tipo,uid:u.id||'',nombre:u.nombre||'',rol:u.rol||''});
+}
+function abrirSesiones(){
+  var d=getDb();
+  if(!d){alert('Se necesita conexión a Firebase para ver los inicios de sesión.');return;}
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:8px">👥 Inicios de sesión</div><div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Cargando...</div>');
+  d.ref('sesiones').limitToLast(300).once('value',function(snap){
+    var v=snap.val();
+    window._sesCache=v?Object.values(v).sort(function(a,b){return b.ts-a.ts;}):[];
+    window._sesFiltro='';
+    renderSesionesModal();
+  });
+}
+function renderSesionesModal(){
+  var f=(window._sesFiltro||'').toLowerCase();
+  var TIPOS={login:{e:'✅',l:'Entró',c:'#22c55e'},logout:{e:'🚪',l:'Salió',c:'var(--muted)'},pin_fallido:{e:'⚠️',l:'PIN incorrecto',c:'#f5a623'},red_bloqueada:{e:'🚫',l:'Bloqueado por red',c:'#ef4444'}};
+  var lista=(window._sesCache||[]).filter(function(e){
+    if(!f)return true;
+    return (e.nombre||'').toLowerCase().indexOf(f)>=0||(e.rol||'').toLowerCase().indexOf(f)>=0;
+  }).slice(0,250);
+  var rows=lista.length?lista.map(function(e){
+    var t=TIPOS[e.tipo]||{e:'•',l:e.tipo,c:'var(--muted)'};
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1"><span style="font-weight:700">'+t.e+' '+esc(e.nombre||'?')+'</span> <span style="color:var(--muted);font-size:10px">· '+esc((ROLES[e.rol]||{}).label||e.rol||'')+'</span>'
+        +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(e.ts)+'</div></div>'
+      +'<span style="color:'+t.c+';font-weight:800;font-size:11px;white-space:nowrap">'+t.l+'</span>'
+    +'</div>';
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin registros'+(f?' que coincidan':'')+'.</div>';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">👥 Inicios de sesión</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+(window._sesCache||[]).length+' eventos: entradas, salidas, PIN fallidos y bloqueos por red</div>'
+    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;renderSesionesModal();setTimeout(function(){var el=document.getElementById(\'ses-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:10px"/>'
+    +'<div style="max-height:56vh;overflow-y:auto">'+rows+'</div>');
+}
 function completarLogin(){
+  registrarSesion('login',usuarioSelLogin);
     usuarioActivo=usuarioSelLogin;
   window._usuarioActivoGlobal=usuarioActivo;
     document.getElementById('login-screen').style.display='none';
@@ -738,6 +777,7 @@ function iniciarVigilanciaRed(){
   }
 }
 function cerrarSesion(){
+  if(usuarioActivo)registrarSesion('logout',usuarioActivo);
   if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos'].forEach(fbOff);
   usuarioActivo=null;mesaActiva=null;tabActual='mesas';
   document.getElementById('header').style.display='none';
@@ -1817,6 +1857,26 @@ function renderKardexModal(){
   opciones.sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
   var opts='<option value=""'+(prodSel===''?' selected':'')+'>📦 Todos los productos</option>'
     +opciones.map(function(o){return'<option value="'+esc(o.k)+'"'+(prodSel===o.k?' selected':'')+'>'+(o.t==='i'?'🧂 ':'')+esc(o.nombre)+'</option>';}).join('');
+  // Calcular SIEMPRE el "quedan" de cada registro: por cada producto, se camina
+  // desde el stock ACTUAL hacia atrás sobre todo el historial cargado.
+  var porProducto={};
+  _kardexCache.forEach(function(e){
+    var k=e.t+'|'+e.id;
+    if(!porProducto[k])porProducto[k]=[];
+    porProducto[k].push(e);  // el cache ya viene ordenado del más nuevo al más viejo
+  });
+  Object.keys(porProducto).forEach(function(k){
+    var partes=k.split('|');var pT=partes[0];var pId=partes.slice(1).join('|');
+    var col=(pT==='p')?menu:ingredientes;
+    var itAct=col.find(function(x){return String(x.id)===String(pId);});
+    if(itAct){
+      var running=parseInt(itAct.stock)||0;
+      porProducto[k].forEach(function(e){e._queda=running;running-=(e.delta||0);});
+    } else {
+      // Producto que ya no existe: usar el saldo guardado en el registro si lo tiene
+      porProducto[k].forEach(function(e){if(typeof e.saldo==='number')e._queda=e.saldo;});
+    }
+  });
   var lista=_kardexCache.filter(function(e){
     if(prodSel&&(e.t+'|'+e.id)!==prodSel)return false;
     if(!f)return true;
@@ -1824,36 +1884,32 @@ function renderKardexModal(){
     var mm=(e.motivo||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     return n.indexOf(f)>=0||mm.indexOf(f)>=0;
   });
-  // Con producto seleccionado: calcular el saldo corriente hacia atrás desde el stock ACTUAL
-  var stockActual=null;var headerStock='';
+  // Con producto seleccionado: mostrar además el stock actual en el encabezado
+  var headerStock='';
   if(prodSel){
-    var partes=prodSel.split('|');var pT=partes[0];var pId=partes.slice(1).join('|');
-    var col=(pT==='p')?menu:ingredientes;
-    var itAct=col.find(function(x){return String(x.id)===String(pId);});
-    stockActual=itAct?(parseInt(itAct.stock)||0):null;
-    if(stockActual!=null){
-      var running=stockActual;
-      lista.forEach(function(e){e._queda=running;running-=(e.delta||0);});
-      headerStock='<div style="background:var(--bg);border:1px solid var(--gold)44;border-radius:9px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700">Stock actual</span><span style="color:var(--gold);font-weight:900;font-size:18px">'+stockActual+' und</span></div>';
-    }
+    var partes2=prodSel.split('|');var pT2=partes2[0];var pId2=partes2.slice(1).join('|');
+    var col2=(pT2==='p')?menu:ingredientes;
+    var itAct2=col2.find(function(x){return String(x.id)===String(pId2);});
+    if(itAct2)headerStock='<div style="background:var(--bg);border:1px solid var(--gold)44;border-radius:9px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700">Stock actual</span><span style="color:var(--gold);font-weight:900;font-size:18px">'+(parseInt(itAct2.stock)||0)+' und</span></div>';
   }
   var listaCorta=lista.slice(0,250);
   var rows=listaCorta.length?listaCorta.map(function(e){
     var pos=e.delta>0;
-    // "Queda": calculado (si hay producto elegido) o guardado en el movimiento (registros nuevos)
     var queda=(typeof e._queda==='number')?e._queda:((typeof e.saldo==='number')?e.saldo:null);
-    return'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">'
-      +'<div style="flex:1"><span style="font-weight:700">'+(e.t==='i'?'🧂 ':'')+esc(e.nombre||('#'+e.id))+'</span>'
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><span style="font-weight:700">'+(e.t==='i'?'🧂 ':'')+esc(e.nombre||('#'+e.id))+'</span>'
         +'<div style="color:var(--muted);font-size:10px;margin-top:1px">'+esc(e.motivo||'')+'</div>'
         +'<div style="color:var(--muted);font-size:10px">'+fmtFechaCorta(e.ts)+(e.uidNombre?' · '+esc(e.uidNombre):'')+'</div></div>'
-      +'<div style="text-align:right;white-space:nowrap">'
-        +'<div style="color:'+(pos?'#22c55e':'#ef4444')+';font-weight:900;font-size:14px">'+(pos?'+':'')+e.delta+'</div>'
-        +(queda!=null?'<div style="color:'+(queda<=0?'#ef4444':'var(--gold)')+';font-size:10px;font-weight:800;margin-top:1px">📦 quedan '+queda+'</div>':'')
+      +'<div style="display:flex;align-items:center;gap:8px;white-space:nowrap">'
+        +'<span style="color:'+(pos?'#22c55e':'#ef4444')+';font-weight:900;font-size:15px;min-width:34px;text-align:right">'+(pos?'+':'')+e.delta+'</span>'
+        +(queda!=null
+          ?'<span style="background:'+(queda<=0?'#ef444418':'var(--gold)18')+';border:1px solid '+(queda<=0?'#ef444444':'var(--gold)44')+';color:'+(queda<=0?'#ef4444':'var(--gold)')+';border-radius:8px;padding:4px 9px;font-weight:900;font-size:13px">'+queda+'</span>'
+          :'<span style="color:var(--muted);font-size:11px">—</span>')
       +'</div>'
     +'</div>';
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin movimientos'+(f||prodSel?' que coincidan con el filtro':'')+'.</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:8px">📒 Kardex de inventario</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · quién, cuánto, por qué y cuántas unidades quedan</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · a la derecha: el cambio y <b style="color:var(--gold)">cuántas quedaron</b> después de cada movimiento</div>'
     +'<select class="inp" id="kardex-prod" onchange="window._kardexProd=this.value;renderKardexModal();" style="margin-bottom:8px">'+opts+'</select>'
     +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;renderKardexModal();setTimeout(function(){var el=document.getElementById(\'kardex-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:10px"/>'
     +headerStock
@@ -7647,6 +7703,7 @@ function renderAdmin(){
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">👥 Usuarios</div>'
     +userRows
     +'<button class="btn btn-sm btn-green btn-full" style="margin-top:12px" onclick="nuevoUsuario()">+ Agregar usuario</button>'
+    +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)" onclick="abrirSesiones()">👥 Ver inicios de sesión</button>'
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
