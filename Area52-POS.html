@@ -625,7 +625,7 @@ function iniciarSync(){
   });
   fbOn('arqueos',function(v){
     arqueos=v?(Array.isArray(v)?v:Object.values(v)):[];
-    if(tabActual==='caja')render();
+    if(tabActual==='caja'||tabActual==='gastos')render();
   });
   fbOn('usuarios',function(v){
     if(v){usuarios=Array.isArray(v)?v:Object.values(v);}
@@ -4603,13 +4603,29 @@ function renderGastos(){
   var hoy=gastosTurno();
   var totalH=hoy.reduce(function(a,g){return a+g.valor;},0);
 
-  // Arqueo de efectivo accesible para cajero/subadmin (que no ven la pestaña Caja)
+  // Arqueo de efectivo accesible para cajero/subadmin (que no ven la pestaña Caja).
+  // Versión CIEGA: ven sus conteos registrados pero nunca el esperado ni la diferencia.
   var puedeArqG=usuarioActivo&&(usuarioActivo.rol==='cajero'||usuarioActivo.rol==='subadmin');
-  var arqueoBanner=puedeArqG?'<div class="card2 mb12" style="display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--gold)44">'
-    +'<div><div style="color:var(--gold);font-weight:800;font-size:13px">🧮 Arqueo de efectivo</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-top:2px">Cuenta el dinero físico de la caja billete por billete. Queda registrado con tu nombre.</div></div>'
-    +'<button onclick="abrirArqueo()" style="background:var(--gold);color:#1a1a22;border:none;border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">🧮 Contar caja</button>'
-  +'</div>':'';
+  var arqueoBanner='';
+  if(puedeArqG){
+    var arqTurnoG=arqueos.filter(function(a){return a.ts>=turnoInicio;}).sort(function(a,b){return b.ts-a.ts;});
+    var arqRowsG=arqTurnoG.map(function(a){
+      return'<div onclick="verArqueo(\''+a.id+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">'
+        +'<div><div style="font-size:12px;font-weight:700">🧮 Contado: <span style="color:var(--gold)">'+fmt(a.total)+'</span></div>'
+          +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(a.ts)+' · ✍️ '+esc(a.uidNombre||'')+'</div></div>'
+        +'<span style="color:#22c55e;font-size:10px;font-weight:700">✓ Registrado</span>'
+      +'</div>';
+    }).join('');
+    arqueoBanner='<div class="card2 mb12" style="border:1px solid var(--gold)44">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">'
+        +'<div><div style="color:var(--gold);font-weight:800;font-size:13px">🧮 Arqueo de efectivo</div>'
+        +'<div style="color:var(--muted);font-size:11px;margin-top:2px">Cuenta el dinero físico billete por billete. Queda registrado con tu nombre.</div></div>'
+        +'<button onclick="abrirArqueo()" style="background:var(--gold);color:#1a1a22;border:none;border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">🧮 Contar caja</button>'
+      +'</div>'
+      +'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:4px">ARQUEOS DE ESTE TURNO ('+arqTurnoG.length+')</div>'
+      +(arqRowsG||'<div style="color:var(--dim);font-size:12px;padding:6px 0">Aún no has contado la caja en este turno.</div>')
+    +'</div>';
+  }
 
   var form='<div class="card2 mb12">'
     +'<div style="color:var(--gold);font-weight:800;font-size:14px;margin-bottom:12px">📋 Registrar gasto / compra</div>'
