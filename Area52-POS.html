@@ -1782,11 +1782,12 @@ function cambiarStock(tipo,id,delta,motivo){
       var c=parseInt(cur);if(isNaN(c))c=0;return c+delta;
     });
   }
-  logKardex(tipo,id,it?it.nombre:'',delta,motivo);
+  logKardex(tipo,id,it?it.nombre:'',delta,motivo,it?parseInt(it.stock):null);
 }
-function logKardex(tipo,id,nombre,delta,motivo){
+function logKardex(tipo,id,nombre,delta,motivo,saldo){
   fbPush('kardex',{
     ts:Date.now(),t:tipo,id:id,nombre:nombre||'',delta:delta,motivo:motivo||'',
+    saldo:(typeof saldo==='number'&&!isNaN(saldo))?saldo:null,
     uid:usuarioActivo?usuarioActivo.id:'',uidNombre:usuarioActivo?usuarioActivo.nombre:''
   });
 }
@@ -1799,31 +1800,64 @@ function abrirKardex(){
   d.ref('kardex').limitToLast(400).once('value',function(s){
     var v=s.val();
     _kardexCache=v?Object.values(v).sort(function(a,b){return b.ts-a.ts;}):[];
-    _kardexFiltro='';
+    _kardexFiltro='';window._kardexProd='';
     renderKardexModal();
   });
 }
 function renderKardexModal(){
   var f=(_kardexFiltro||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  var prodSel=window._kardexProd||'';
+  // Opciones del selector: productos/ingredientes que aparecen en el kardex
+  var vistos={};var opciones=[];
+  _kardexCache.forEach(function(e){
+    var k=e.t+'|'+e.id;
+    if(vistos[k])return;vistos[k]=true;
+    opciones.push({k:k,t:e.t,id:e.id,nombre:e.nombre||('#'+e.id)});
+  });
+  opciones.sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
+  var opts='<option value=""'+(prodSel===''?' selected':'')+'>📦 Todos los productos</option>'
+    +opciones.map(function(o){return'<option value="'+esc(o.k)+'"'+(prodSel===o.k?' selected':'')+'>'+(o.t==='i'?'🧂 ':'')+esc(o.nombre)+'</option>';}).join('');
   var lista=_kardexCache.filter(function(e){
+    if(prodSel&&(e.t+'|'+e.id)!==prodSel)return false;
     if(!f)return true;
     var n=(e.nombre||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     var mm=(e.motivo||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     return n.indexOf(f)>=0||mm.indexOf(f)>=0;
-  }).slice(0,250);
-  var rows=lista.length?lista.map(function(e){
+  });
+  // Con producto seleccionado: calcular el saldo corriente hacia atrás desde el stock ACTUAL
+  var stockActual=null;var headerStock='';
+  if(prodSel){
+    var partes=prodSel.split('|');var pT=partes[0];var pId=partes.slice(1).join('|');
+    var col=(pT==='p')?menu:ingredientes;
+    var itAct=col.find(function(x){return String(x.id)===String(pId);});
+    stockActual=itAct?(parseInt(itAct.stock)||0):null;
+    if(stockActual!=null){
+      var running=stockActual;
+      lista.forEach(function(e){e._queda=running;running-=(e.delta||0);});
+      headerStock='<div style="background:var(--bg);border:1px solid var(--gold)44;border-radius:9px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700">Stock actual</span><span style="color:var(--gold);font-weight:900;font-size:18px">'+stockActual+' und</span></div>';
+    }
+  }
+  var listaCorta=lista.slice(0,250);
+  var rows=listaCorta.length?listaCorta.map(function(e){
     var pos=e.delta>0;
+    // "Queda": calculado (si hay producto elegido) o guardado en el movimiento (registros nuevos)
+    var queda=(typeof e._queda==='number')?e._queda:((typeof e.saldo==='number')?e.saldo:null);
     return'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1"><span style="font-weight:700">'+(e.t==='i'?'🧂 ':'')+esc(e.nombre||('#'+e.id))+'</span>'
         +'<div style="color:var(--muted);font-size:10px;margin-top:1px">'+esc(e.motivo||'')+'</div>'
         +'<div style="color:var(--muted);font-size:10px">'+fmtFechaCorta(e.ts)+(e.uidNombre?' · '+esc(e.uidNombre):'')+'</div></div>'
-      +'<span style="color:'+(pos?'#22c55e':'#ef4444')+';font-weight:900;white-space:nowrap;font-size:14px">'+(pos?'+':'')+e.delta+'</span>'
+      +'<div style="text-align:right;white-space:nowrap">'
+        +'<div style="color:'+(pos?'#22c55e':'#ef4444')+';font-weight:900;font-size:14px">'+(pos?'+':'')+e.delta+'</div>'
+        +(queda!=null?'<div style="color:'+(queda<=0?'#ef4444':'var(--gold)')+';font-size:10px;font-weight:800;margin-top:1px">📦 quedan '+queda+'</div>':'')
+      +'</div>'
     +'</div>';
-  }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin movimientos'+(f?' que coincidan con la búsqueda':'')+'.</div>';
+  }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin movimientos'+(f||prodSel?' que coincidan con el filtro':'')+'.</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:8px">📒 Kardex de inventario</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · quién, cuánto y por qué cambió cada stock</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · quién, cuánto, por qué y cuántas unidades quedan</div>'
+    +'<select class="inp" id="kardex-prod" onchange="window._kardexProd=this.value;renderKardexModal();" style="margin-bottom:8px">'+opts+'</select>'
     +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;renderKardexModal();setTimeout(function(){var el=document.getElementById(\'kardex-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:10px"/>'
-    +'<div style="max-height:55vh;overflow-y:auto">'+rows+'</div>');
+    +headerStock
+    +'<div style="max-height:52vh;overflow-y:auto">'+rows+'</div>');
 }
 
 function ajustarStockItem(item,delta,motivo){
@@ -2422,10 +2456,16 @@ function confirmarDividir(){
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
   if(window._compTemp){
-    var compIdD='comp_'+Date.now();
-    venta.compId=compIdD;
-    venta.refPago=window._compTemp.ref4||'';
-    fbSet('comprobantes/'+compIdD,{ts:Date.now(),img:window._compTemp.img,mesa:venta.mesa,monto:total,fp:(f?f.emoji+' '+f.label:fp),ref4:window._compTemp.ref4||'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+    if(window._compTemp.sinFoto){
+      venta.sinFoto=true;
+      venta.sinFotoMotivo=window._compTemp.motivo||'';
+      venta.refPago=window._compTemp.ref4||'';
+    } else {
+      var compIdD='comp_'+Date.now();
+      venta.compId=compIdD;
+      venta.refPago=window._compTemp.ref4||'';
+      fbSet('comprobantes/'+compIdD,{ts:Date.now(),img:window._compTemp.img,mesa:venta.mesa,monto:total,fp:(f?f.emoji+' '+f.label:fp),ref4:window._compTemp.ref4||'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+    }
     window._compTemp=null;
   }
   fbPush('ventas',venta);
@@ -2469,7 +2509,26 @@ function abrirCapturaComprobante(fpDetalle,montoDig,cont){
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-outline btn-full" onclick="cancelarCapturaComprobante()">Cancelar</button>'
       +'<button class="btn btn-green btn-full" id="comp-ok" onclick="confirmarCapturaComprobante()" disabled style="opacity:.4">✓ Continuar con el cobro</button>'
-    +'</div>');
+    +'</div>'
+    +(fotoCompCfg.permitirSinFoto!==false?'<button onclick="continuarSinFoto()" style="width:100%;background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;margin-top:10px;text-decoration:underline">🚫 Este equipo no tiene cámara — continuar sin foto</button>':''));
+}
+// Salida para equipos sin cámara (ej. el PC de la caja): exige motivo y queda marcado en la venta
+function continuarSinFoto(){
+  var motivo=(prompt('¿Por qué no se puede tomar la foto? (obligatorio)\nEj: "Cobro desde el PC de la caja"')||'').trim();
+  if(!motivo){return;}
+  var ref4=((document.getElementById('comp-ref4')||{}).value||'').trim();
+  if(ref4){
+    var hace3d=Date.now()-3*24*3600*1000;
+    var dup=ventas.find(function(v){return v.refPago&&v.refPago===ref4&&v.ts>=hace3d;});
+    if(dup){
+      if(!confirm('⚠️ ATENCIÓN: esta referencia ('+ref4+') ya se usó el '+fmtFechaCorta(dup.ts)+' en '+(dup.mesa||'otra venta')+' por '+fmt(dup.total)+'.\n\nPuede ser un comprobante REPETIDO. ¿Seguro que es un pago distinto?'))return;
+    }
+  }
+  window._compTemp={img:null,ref4:ref4,sinFoto:true,motivo:motivo};
+  window._compTempImg=null;
+  var cont=window._compCont;window._compCont=null;
+  closeModal2();
+  if(cont)cont();
 }
 function procesarFotoComprobante(input){
   var file=input.files&&input.files[0];
@@ -2626,12 +2685,18 @@ function confirmarCobro(){
     sinStock:sinStock,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
-  // Amarrar el comprobante fotográfico si se capturó
+  // Amarrar el comprobante fotográfico si se capturó (o marcar venta sin foto con motivo)
   if(window._compTemp){
-    var compId='comp_'+Date.now();
-    venta.compId=compId;
-    venta.refPago=window._compTemp.ref4||'';
-    fbSet('comprobantes/'+compId,{ts:Date.now(),img:window._compTemp.img,mesa:venta.mesa,monto:totalDig,fp:fpDigLabels.join(' + '),ref4:window._compTemp.ref4||'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+    if(window._compTemp.sinFoto){
+      venta.sinFoto=true;
+      venta.sinFotoMotivo=window._compTemp.motivo||'';
+      venta.refPago=window._compTemp.ref4||'';
+    } else {
+      var compId='comp_'+Date.now();
+      venta.compId=compId;
+      venta.refPago=window._compTemp.ref4||'';
+      fbSet('comprobantes/'+compId,{ts:Date.now(),img:window._compTemp.img,mesa:venta.mesa,monto:totalDig,fp:fpDigLabels.join(' + '),ref4:window._compTemp.ref4||'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+    }
     window._compTemp=null;
   }
   fbPush('ventas',venta);
@@ -5118,7 +5183,7 @@ function renderCaja(){
       +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+esc(v.mesa||'')+' · <span style="color:var(--gold)">'+det+'</span></div>'
         +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(v.ts)+(v.refPago?' · Ref: <b>'+esc(v.refPago)+'</b>':'')+(v.uidNombre?' · ✍️ '+esc(v.uidNombre):'')+'</div></div>'
       +(v.compId?'<button onclick="verComprobante(\''+v.compId+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📷 Ver</button>'
-        :'<span style="color:#f5a623;font-size:10px;font-weight:700;white-space:nowrap">Sin foto</span>')
+        :'<span style="color:#f5a623;font-size:10px;font-weight:700;white-space:nowrap;text-align:right">Sin foto'+(v.sinFotoMotivo?'<br><span style="font-weight:600;opacity:.8">'+esc(v.sinFotoMotivo)+'</span>':'')+'</span>')
     +'</div>');
   });
   var digResumen=Object.keys(digTotales).map(function(fp){
@@ -5431,10 +5496,13 @@ function renderVentas(){
       fpDisplay=v.fpLabel||(f?f.emoji+' '+f.label:'');
     }
     var z=ZONAS.find(function(x){return x.id===v.zona;});
-    // Items detail
+    // Items detail (plegado por defecto: se toca el cobro para ver el detalle)
     var itemsHtml='';
+    var vKey=String(v.ts);
+    var abierto=!!(window._cobroDet&&window._cobroDet[vKey]);
     var vItems=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
-    if(vItems.length){
+    var nItems=vItems.reduce(function(a,it){return a+(it.qty||1);},0);
+    if(vItems.length&&abierto){
       itemsHtml='<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'
         +vItems.map(function(it){
           var nombre,pr;
@@ -5455,8 +5523,9 @@ function renderVentas(){
         +'</div>';
     }
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-        +'<div><div style="font-size:12px;font-weight:700">'+(z?z.label:'')+' · '+esc(v.mesa||'?')+'</div>'
+      +'<div onclick="toggleCobroDet(\''+vKey+'\')" style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer">'
+        +'<div><div style="font-size:12px;font-weight:700">'+(abierto?'▼':'▶')+' '+(z?z.label:'')+' · '+esc(v.mesa||'?')
+          +(vItems.length?' <span style="color:var(--muted);font-weight:600;font-size:10px">· '+nItems+' ítem'+(nItems!==1?'s':'')+'</span>':'')+'</div>'
         +'<div style="color:var(--muted);font-size:11px">'+fpDisplay+'</div>'
         +'<div style="color:var(--muted);font-size:10px">'+fmtTime(v.ts)+' · '+esc(v.uidNombre||v.uid||'')+'</div></div>'
         +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(v.total)+'</span>'
@@ -5485,7 +5554,11 @@ function renderVentas(){
     +'<div class="res-grid">'
     +'<div class="res-card"><div class="section-title">Por forma de pago — turno</div>'+pagoRows+'</div>'
     +'<div class="res-card"><div class="section-title">Top productos — turno</div>'+prodRows+'</div>'
-    +'<div class="res-card full-col"><div class="section-title">Cobros del turno actual</div>'+histRows+'</div>'
+    +'<div class="res-card full-col"><div style="display:flex;justify-content:space-between;align-items:center"><div class="section-title" style="margin:0">Cobros del turno actual</div>'
+      +'<div style="display:flex;gap:6px">'
+        +'<button onclick="expandirCobros(true)" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">▼ Abrir todo</button>'
+        +'<button onclick="expandirCobros(false)" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">▲ Cerrar todo</button>'
+      +'</div></div><div style="margin-top:8px"></div>'+histRows+'</div>'
     +'</div>'
     +'<div style="background:#38bdf818;border:1px solid #38bdf833;border-radius:10px;padding:8px 14px;margin:14px 0 8px;font-size:12px;color:#38bdf8;font-weight:700">📊 Histórico total — todos los turnos</div>'
     +'<div class="res-grid">'
@@ -7385,6 +7458,8 @@ function renderAdmin(){
     +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Estado</div>'
         +'<button onclick="toggleFotoComp()" style="background:'+(fotoCompCfg.on?'#22c55e':'var(--card2)')+';color:'+(fotoCompCfg.on?'#fff':'var(--muted)')+';border:1px solid '+(fotoCompCfg.on?'#22c55e':'var(--border)')+';border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">'+(fotoCompCfg.on?'✅ Activado':'⭕ Desactivado')+'</button></div>'
+      +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Salida "sin foto" (PC sin cámara)</div>'
+        +'<button onclick="togglePermitirSinFoto()" style="background:'+(fotoCompCfg.permitirSinFoto!==false?'#f5a623':'var(--card2)')+';color:'+(fotoCompCfg.permitirSinFoto!==false?'#1a1a22':'var(--muted)')+';border:1px solid '+(fotoCompCfg.permitirSinFoto!==false?'#f5a623':'var(--border)')+';border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">'+(fotoCompCfg.permitirSinFoto!==false?'🚪 Permitida (con motivo)':'🔒 Bloqueada')+'</button></div>'
       +'<div style="flex:1;min-width:160px"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Solo exigir foto desde (COP) — 0 = siempre</div>'
         +'<input class="inp money" id="fotocomp-min" type="text" inputmode="numeric" value="'+moneyFmt(fotoCompCfg.min||0)+'"/></div>'
       +'<button onclick="guardarFotoCompCfg()" style="background:#38bdf8;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer">💾 Guardar</button>'
@@ -7615,6 +7690,14 @@ function quitarRedAutorizada(idx){
 function toggleFotoComp(){
   fotoCompCfg.on=!fotoCompCfg.on;
   fbSet('fotoCompCfg',fotoCompCfg);
+  render();
+}
+function togglePermitirSinFoto(){
+  fotoCompCfg.permitirSinFoto=(fotoCompCfg.permitirSinFoto===false);
+  fbSet('fotoCompCfg',fotoCompCfg);
+  showToast(fotoCompCfg.permitirSinFoto!==false
+    ?'🚪 Salida "sin foto" PERMITIDA<br><span style="font-size:12px;opacity:.85">Con motivo obligatorio · queda marcado en la conciliación</span>'
+    :'🔒 Salida "sin foto" BLOQUEADA<br><span style="font-size:12px;opacity:.85">Todo pago digital exige la foto, sin excepción</span>','#f5a623');
   render();
 }
 function guardarFotoCompCfg(){
@@ -7857,6 +7940,20 @@ function imprimirTicket(mesa,ped,total,fpId){
 }
 
 /* ═══════════════ EXCEL ═══════════════ */
+// Plegar/desplegar el detalle de un cobro del turno
+function toggleCobroDet(k){
+  if(!window._cobroDet)window._cobroDet={};
+  window._cobroDet[k]=!window._cobroDet[k];
+  render();
+}
+function expandirCobros(abrir){
+  window._cobroDet={};
+  if(abrir){
+    ventasTurno().forEach(function(v){window._cobroDet[String(v.ts)]=true;});
+  }
+  render();
+}
+
 function exportarExcel(){
   if(!window.XLSX){alert('La librería Excel no está disponible. Verifica tu conexión a internet e intenta de nuevo.');return;}
   var X=window.XLSX,wb=X.utils.book_new();
