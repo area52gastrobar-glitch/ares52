@@ -4536,17 +4536,17 @@ function renderGastos(){
 
   var resHoy='<div class="card mb12">'
     +'<div class="flex-between mb8">'
-    +'<div class="section-title" style="margin-bottom:0">Gastos de hoy — '+todayStr()+'</div>'
+    +'<div class="section-title" style="margin-bottom:0">Gastos del turno actual</div>'
     +'<span style="color:var(--red);font-weight:900;font-size:15px">'+fmt(totalH)+'</span>'
     +'</div>'
     +(fpBreakdown?'<div style="background:var(--bg);border-radius:8px;padding:6px 12px;margin-bottom:10px">'+fpBreakdown+'</div>':'')
     +(hoy.length===0?'<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin gastos registrados hoy</div>'
-      :hoy.slice().reverse().map(function(g){
+      :hoy.slice().sort(function(a,b){return b.ts-a.ts;}).map(function(g){
         return'<div class="gasto-row">'
           +'<div style="flex:1">'
             +'<div style="font-size:13px;font-weight:600">'+esc(g.concepto)+'</div>'
             +(function(){var f=FPAGO.find(function(x){return x.id===g.fp;});return f?'<span style="background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+'44;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700">'+f.emoji+' '+f.label+'</span> ':'';})()
-            +'<div style="color:var(--muted);font-size:11px">'+g.categoria+' · '+fmtTime(g.ts)+' · '+esc(g.uidNombre||g.uid||'')+(g.notas?' · '+esc(g.notas):'')+'</div>'
+            +'<div style="color:var(--muted);font-size:11px">'+g.categoria+' · 🕐 '+fmtFechaCorta(g.ts)+' · '+esc(g.uidNombre||g.uid||'')+(g.notas?' · '+esc(g.notas):'')+'</div>'
           +'</div>'
           +'<span style="color:var(--red);font-weight:700;font-size:13px">'+fmt(g.valor)+'</span>'
           +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="borrarGasto(\''+g.id+'\')" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px">✕</button>':'')
