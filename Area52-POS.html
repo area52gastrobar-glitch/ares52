@@ -361,6 +361,7 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var consumoEmpleados=[];  // [{id,ts,empId,empNombre,prodNombre,cantidad,stockDetalle,uid,uidNombre}] consumo interno del personal (sin valor, solo inventario)
 var proveedores=[];  // [{id, nombre}]
 var ingresosInv=[];  // [{id, ts, fecha, prodId, prodNombre, cantidad, proveedor, factura, uid, uidNombre}]
 var empleados=[];      // [{id, nombre, cargo, activo, pagoDiario}]
@@ -568,6 +569,9 @@ function iniciarSync(){
   fbOn('cierres',function(v){cierres=v?Object.values(v):[];if(tabActual==='caja')render();});
   fbOn('cajaHoy',function(v){if(v)cajaHoy=v;if(tabActual==='caja')render();});
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
+  fbOn('consumoEmpleados',function(v){
+    consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
   fbOn('consumoSocios',function(v){
     consumoSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
     if(tabActual==='socios')render();
@@ -1856,6 +1860,116 @@ function logKardex(tipo,id,nombre,delta,motivo,saldo){
 }
 // Visor del kardex: carga bajo demanda los últimos movimientos
 var _kardexCache=[];var _kardexFiltro='';
+/* ═══════════ CONSUMO DE PERSONAL (sin valor: solo descuenta inventario) ═══════════ */
+function abrirConsumoEmpleados(){
+  window._ceEmp=window._ceEmp||'';window._ceBusq='';
+  renderConsumoEmpModal();
+}
+function renderConsumoEmpModal(){
+  var activos=empleados.filter(function(e){return e.activo!==false;});
+  var empOpts='<option value="" '+(window._ceEmp?'':'selected ')+'disabled>👆 ¿Quién consume?...</option>'
+    +activos.map(function(e){return'<option value="'+e.id+'"'+(window._ceEmp===e.id?' selected':'')+'>'+esc(e.nombre)+(e.cargo?' · '+esc(e.cargo):'')+'</option>';}).join('');
+  // Buscador de producto
+  var q=_normTxt((window._ceBusq||'').trim());
+  var matches=q?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,8):[];
+  var prodBtns=matches.map(function(p){
+    return'<button onclick="elegirProdConsumoEmp('+p.id+')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
+      +'<span style="font-size:13px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+'</span>'
+      +'<span style="color:'+((parseInt(p.stock)||0)>0?'var(--muted)':'#ef4444')+';font-size:11px;font-weight:700">stock: '+(parseInt(p.stock)||0)+'</span>'
+    +'</button>';
+  }).join('');
+  // Resumen del mes por empleado
+  var iniMes=new Date();iniMes.setDate(1);iniMes.setHours(0,0,0,0);
+  var mesPorEmp={};
+  consumoEmpleados.forEach(function(c){
+    if(c.ts<iniMes.getTime())return;
+    mesPorEmp[c.empNombre]=(mesPorEmp[c.empNombre]||0)+(c.cantidad||1);
+  });
+  var chips=Object.keys(mesPorEmp).sort(function(a,b){return mesPorEmp[b]-mesPorEmp[a];}).map(function(n){
+    return'<span style="background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700">'+esc(n)+': <b style="color:var(--gold)">'+mesPorEmp[n]+'</b> und</span>';
+  }).join(' ');
+  // Últimos registros
+  var esAdm=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin');
+  var rows=consumoEmpleados.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,50).map(function(c){
+    return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><span style="font-weight:700">'+esc(c.empNombre||'?')+'</span> · '+(c.cantidad||1)+'× '+esc(c.prodNombre||'?')
+        +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(c.ts)+(c.uidNombre?' · anotó '+esc(c.uidNombre):'')+'</div></div>'
+      +(esAdm?'<button onclick="eliminarConsumoEmp(\''+c.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer">✕</button>':'')
+    +'</div>';
+  }).join('');
+  modal1('<div style="text-align:center;margin-bottom:10px">'
+      +'<div style="font-size:26px">🥤</div>'
+      +'<div style="font-weight:900;font-size:16px">Consumo de personal</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:3px">Descuenta del inventario, NO genera venta ni entra a caja. Queda con nombre, fecha y hora.</div>'
+    +'</div>'
+    +'<select class="inp" id="ce-emp" onchange="window._ceEmp=this.value" style="margin-bottom:8px">'+empOpts+'</select>'
+    +'<input class="inp" id="ce-busq" placeholder="🔍 Buscar producto (ej: club, aguila...)" value="'+esc(window._ceBusq||'')+'" oninput="window._ceBusq=this.value;renderConsumoEmpModal();setTimeout(function(){var el=document.getElementById(\'ce-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:8px"/>'
+    +(q?(prodBtns||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px">Sin coincidencias.</div>'):'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Escribe el nombre del producto que se consumió.</div>')
+    +(chips?'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:12px 0 5px">ESTE MES POR EMPLEADO</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+chips+'</div>':'')
+    +'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:12px 0 4px">ÚLTIMOS REGISTROS</div>'
+    +'<div style="max-height:30vh;overflow-y:auto;margin-bottom:12px">'+(rows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin consumos registrados todavía.</div>')+'</div>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+function elegirProdConsumoEmp(pid){
+  if(!window._ceEmp){alert('👆 Primero elige quién consume.');return;}
+  var p=menu.find(function(m){return m.id===pid;});if(!p)return;
+  var btns=[1,2,3,4,5,6].map(function(n){
+    return'<button onclick="confirmarConsumoEmp('+pid+','+n+')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:10px;padding:16px 0;font-size:19px;font-weight:900;cursor:pointer">'+n+'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:12px">'
+      +'<div style="font-size:26px">'+p.emoji+'</div>'
+      +'<div style="font-weight:800;font-size:15px">'+esc(p.nombre)+'</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:2px">Stock: '+(parseInt(p.stock)||0)+' · ¿cuántas consumió?</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'+btns+'</div>'
+    +'<div style="display:flex;gap:8px">'
+      +'<input id="ce-qty" type="number" inputmode="numeric" min="1" placeholder="Otra..." class="inp" style="flex:1;text-align:center;font-weight:800"/>'
+      +'<button onclick="confirmarConsumoEmp('+pid+',parseInt((document.getElementById(\'ce-qty\')||{}).value)||0)" style="background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0 18px;font-weight:800;cursor:pointer">✓</button>'
+    +'</div>');
+}
+function confirmarConsumoEmp(pid,qty){
+  qty=parseInt(qty)||0;
+  if(qty<=0){alert('Escribe la cantidad.');return;}
+  var p=menu.find(function(m){return m.id===pid;});if(!p)return;
+  var emp=empleados.find(function(e){return e.id===window._ceEmp;});
+  if(!emp){alert('👆 Elige quién consume.');return;}
+  if(!ventaSinStock&&(parseInt(p.stock)||0)<qty){
+    if(!confirm('Stock insuficiente ('+(parseInt(p.stock)||0)+' und). ¿Registrar de todas formas? El stock quedará en negativo.'))return;
+  }
+  // Detalle para poder devolver si se elimina el registro
+  var stockDetalle=[{t:'p',id:p.id,cant:qty}];
+  if(p.receta&&p.receta.length){
+    p.receta.forEach(function(ri){
+      var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
+      stockDetalle.push({t:enMenu?'p':'i',id:ri.pid,cant:ri.cantidad*qty});
+    });
+  }
+  stockDetalle.forEach(function(d){
+    cambiarStock(d.t,d.id,-d.cant,'🥤 Consumo empleado: '+emp.nombre);
+  });
+  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:p.nombre,cantidad:qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  consumoEmpleados.push(reg);
+  var r=ref('consumoEmpleados');
+  if(r)r.push(reg);else fbSet('consumoEmpleados',consumoEmpleados);
+  closeModal2();
+  window._ceBusq='';
+  showToast('🥤 '+qty+'× '+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">Descontado del inventario · sin valor en caja</span>','#38bdf8');
+  renderConsumoEmpModal();
+}
+function eliminarConsumoEmp(cid){
+  var c=consumoEmpleados.find(function(x){return x.id===cid;});
+  if(!c)return;
+  if(!confirm('¿Eliminar este consumo? El stock volverá al inventario.'))return;
+  (c.stockDetalle&&c.stockDetalle.length?c.stockDetalle:[{t:'p',id:c.prodId,cant:c.cantidad||1}]).forEach(function(d){
+    cambiarStock(d.t||'p',d.id,+d.cant,'Devolución: consumo de personal eliminado ('+(c.empNombre||'')+')');
+  });
+  consumoEmpleados=consumoEmpleados.filter(function(x){return x.id!==cid;});
+  var r=ref('consumoEmpleados');
+  if(r)r.set(consumoEmpleados.length?consumoEmpleados:null);
+  showToast('🗑️ Consumo eliminado · stock devuelto','#22c55e');
+  renderConsumoEmpModal();
+}
+
 function abrirKardex(){
   var d=getDb();
   if(!d){alert('El kardex necesita conexión a Firebase.');return;}
@@ -3085,6 +3199,7 @@ function renderInventario(){
     +(esAdmin?'<button onclick="abrirProveedores()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🏭 Proveedores</button>':'')
     +(esAdmin?'<button onclick="verIngresosInv()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Ingresos</button>':'')
     +(esAdmin?'<button onclick="abrirKardex()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📒 Kardex</button>':'')
+    +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
