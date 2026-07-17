@@ -5693,6 +5693,61 @@ function ventasDiariasHTML(){
   }).join('');
 }
 
+/* ═══════════ CALENDARIO PROPIO (selector de fecha en cuadrícula) ═══════════ */
+var MESES_CAL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function abrirCalendario(target){
+  window._calTarget=target;
+  var actual=(target==='d1'?window._vcD1:window._vcD2);
+  window._calMes=actual?new Date(actual+'T12:00:00'):new Date();
+  renderCalendario();
+}
+function moverCalMes(delta){
+  window._calMes.setMonth(window._calMes.getMonth()+delta);
+  renderCalendario();
+}
+function renderCalendario(){
+  var base=window._calMes;
+  var y=base.getFullYear(),mo=base.getMonth();
+  var sel=(window._calTarget==='d1'?window._vcD1:window._vcD2)||'';
+  var hoyKey=(function(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);})();
+  var primerDia=new Date(y,mo,1).getDay(); // 0=domingo
+  var diasMes=new Date(y,mo+1,0).getDate();
+  var celdas='';
+  ['D','L','M','M','J','V','S'].forEach(function(d){
+    celdas+='<div style="text-align:center;color:var(--muted);font-size:10px;font-weight:800;padding:4px 0">'+d+'</div>';
+  });
+  for(var i=0;i<primerDia;i++)celdas+='<div></div>';
+  for(var dia=1;dia<=diasMes;dia++){
+    var key=y+'-'+('0'+(mo+1)).slice(-2)+'-'+('0'+dia).slice(-2);
+    var esSel=key===sel;var esHoy=key===hoyKey;
+    celdas+='<button onclick="elegirDiaCal(\''+key+'\')" style="aspect-ratio:1;background:'+(esSel?'var(--accent)':(esHoy?'var(--accent)22':'var(--bg)'))+';color:'+(esSel?'#fff':'var(--text)')+';border:1px solid '+(esSel?'var(--accent)':(esHoy?'var(--accent)66':'var(--border)'))+';border-radius:9px;font-size:13px;font-weight:'+(esSel||esHoy?'900':'600')+';cursor:pointer">'+dia+'</button>';
+  }
+  // Selector rápido de año
+  var anios='';for(var a=y-3;a<=y+1;a++){anios+='<option value="'+a+'"'+(a===y?' selected':'')+'>'+a+'</option>';}
+  modal2('<div style="text-align:center;margin-bottom:8px"><div style="font-weight:900;font-size:15px">📅 '+(window._calTarget==='d1'?'Fecha DESDE':'Fecha HASTA')+'</div></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:6px">'
+      +'<button onclick="moverCalMes(-1)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 14px;font-weight:900;font-size:15px;cursor:pointer">‹</button>'
+      +'<span style="font-weight:800;font-size:14px">'+MESES_CAL[mo]+'</span>'
+      +'<select class="inp" onchange="window._calMes.setFullYear(parseInt(this.value));renderCalendario();" style="width:auto;padding:6px 8px;font-weight:800">'+anios+'</select>'
+      +'<button onclick="moverCalMes(1)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 14px;font-weight:900;font-size:15px;cursor:pointer">›</button>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">'+celdas+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+      +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
+      +((window._calTarget==='d1'?window._vcD1:window._vcD2)?'<button class="btn btn-full" onclick="elegirDiaCal(\'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444444">Limpiar</button>':'')
+    +'</div>');
+}
+function elegirDiaCal(key){
+  if(window._calTarget==='d1')window._vcD1=key||'';else window._vcD2=key||'';
+  closeModal2();
+  render();
+}
+function _fmtDiaCal(key){
+  if(!key)return null;
+  var p=key.split('-');
+  return p[2]+'/'+p[1]+'/'+p[0];
+}
+
 /* ═══════════ VENTAS POR CATEGORÍA (comida, cerveza, etc.) ═══════════ */
 function ventasPorCategoria(desde,hasta){
   var cats={};
@@ -5915,8 +5970,8 @@ function renderVentas(){
         +'</div>'
         +(abiertoVC?'<div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap">'+pillVC('turno','Turno')+pillVC('7d','7 días')+pillVC('todo','Todo')+pillVC('rango','📅 Fechas')+'</div>'
           +(modoVC==='rango'?'<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">'
-            +'<div style="flex:1;min-width:130px"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Desde</div><input type="date" class="inp" value="'+esc(window._vcD1||'')+'" onchange="window._vcD1=this.value;render();" style="padding:8px"/></div>'
-            +'<div style="flex:1;min-width:130px"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Hasta</div><input type="date" class="inp" value="'+esc(window._vcD2||'')+'" onchange="window._vcD2=this.value;render();" style="padding:8px"/></div>'
+            +'<div style="flex:1;min-width:130px"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Desde</div><button onclick="abrirCalendario(\'d1\')" style="width:100%;background:var(--bg);border:1px solid '+(window._vcD1?'var(--accent)66':'var(--border)')+';color:'+(window._vcD1?'var(--text)':'var(--muted)')+';border-radius:9px;padding:10px;font-weight:800;font-size:13px;cursor:pointer">📅 '+(_fmtDiaCal(window._vcD1)||'Elegir fecha...')+'</button></div>'
+            +'<div style="flex:1;min-width:130px"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Hasta</div><button onclick="abrirCalendario(\'d2\')" style="width:100%;background:var(--bg);border:1px solid '+(window._vcD2?'var(--accent)66':'var(--border)')+';color:'+(window._vcD2?'var(--text)':'var(--muted)')+';border-radius:9px;padding:10px;font-weight:800;font-size:13px;cursor:pointer">📅 '+(_fmtDiaCal(window._vcD2)||'Hoy')+'</button></div>'
           +'</div>':'')
           +(filas||'<div style="color:var(--dim);text-align:center;padding:12px;font-size:12px">Sin ventas en el periodo</div>')
           +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Toca una categoría para ver el detalle por producto. El Excel exporta el periodo elegido.</div>':'')
