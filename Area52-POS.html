@@ -13,6 +13,44 @@
 <link rel="apple-touch-icon" href="icon.png"/>
 <link rel="icon" type="image/png" href="icon.png"/>
 <script>
+// ═══ Auto-detección de versiones nuevas ═══
+// Compara el ETag/Last-Modified del archivo en el servidor contra el cargado.
+// Si cambió: en la pantalla de login recarga solo; con sesión abierta muestra
+// un aviso con botón (nunca interrumpe una operación en curso).
+(function(){
+  var tagInicial=null;var avisado=false;
+  function leerTag(cb){
+    fetch(location.href.split('#')[0],{method:'HEAD',cache:'no-store'}).then(function(r){
+      cb((r.headers.get('etag')||'')+'|'+(r.headers.get('last-modified')||''));
+    }).catch(function(){cb(null);});
+  }
+  function chequear(){
+    leerTag(function(tag){
+      if(!tag||tag==='|')return;
+      if(tagInicial===null){tagInicial=tag;return;}
+      if(tag!==tagInicial&&!avisado){
+        var logueado=window._usuarioActivoGlobal;
+        if(!logueado){location.reload();return;}  // en login: actualizar de una, sin molestar
+        avisado=true;
+        var b=document.createElement('div');
+        b.id='banner-update';
+        b.style.cssText='position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#8B5CF6;color:#fff;border-radius:14px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:inherit';
+        b.innerHTML='<span style="font-size:13px;font-weight:700">🛸 Hay una versión nueva de la app</span>'
+          +'<button onclick="location.reload()" style="background:#fff;color:#8B5CF6;border:none;border-radius:9px;padding:9px 16px;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap">🔄 Actualizar</button>';
+        document.body.appendChild(b);
+      }
+    });
+  }
+  window.addEventListener('load',function(){
+    chequear();  // guarda el tag inicial
+    setInterval(chequear,10*60*1000);  // cada 10 minutos
+    document.addEventListener('visibilitychange',function(){
+      if(document.visibilityState==='visible')chequear();  // al volver a abrir la app
+    });
+  });
+})();
+</script>
+<script>
 // Manifest generado en tiempo real (Android: instala como app con ícono y pantalla completa)
 (function(){
   try{
@@ -823,6 +861,7 @@ function iniciarVigilanciaRed(){
 }
 function cerrarSesion(){
   if(usuarioActivo)registrarSesion('logout',usuarioActivo);
+  window._usuarioActivoGlobal=null;
   if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos'].forEach(fbOff);
   usuarioActivo=null;mesaActiva=null;tabActual='mesas';
   document.getElementById('header').style.display='none';
