@@ -4,6 +4,33 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>AREA 52 — Gastro Bar POS</title>
+<!-- ═══ App instalable (acceso directo con ícono, pantalla completa) ═══ -->
+<meta name="theme-color" content="#0d0d16"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Área 52"/>
+<link rel="apple-touch-icon" href="icon.png"/>
+<link rel="icon" type="image/png" href="icon.png"/>
+<script>
+// Manifest generado en tiempo real (Android: instala como app con ícono y pantalla completa)
+(function(){
+  try{
+    var base=location.href.split('#')[0].split('?')[0];
+    var dir=base.slice(0,base.lastIndexOf('/')+1);
+    var manifest={
+      name:'Área 52 Gastro Bar',short_name:'Área 52',
+      start_url:base,scope:dir,display:'standalone',
+      background_color:'#0d0d16',theme_color:'#0d0d16',
+      icons:[{src:dir+'icon.png',sizes:'512x512',type:'image/png',purpose:'any'}]
+    };
+    var blob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    var link=document.createElement('link');
+    link.rel='manifest';link.href=URL.createObjectURL(blob);
+    document.head.appendChild(link);
+  }catch(e){}
+})();
+</script>
 <script>
 // Load external scripts dynamically so app works even if they fail (file:// mode)
 function _loadScript(src, cb){
