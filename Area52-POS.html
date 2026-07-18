@@ -3271,6 +3271,7 @@ function renderInventario(){
     +(esAdmin?'<button onclick="verIngresosInv()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Ingresos</button>':'')
     +(esAdmin?'<button onclick="abrirKardex()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📒 Kardex</button>':'')
     +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
+    +'<button onclick="imprimirInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
@@ -8381,6 +8382,62 @@ function imprimirPrecuenta(){
   w.document.close();w.print();
 }
 
+/* ═══ Imprimir inventario actual (solo lo que queda, sin ceros) ═══ */
+function imprimirInventario(){
+  // Solo productos/ingredientes con unidades restantes (stock > 0)
+  var conStock=menu.filter(function(p){return (parseInt(p.stock)||0)>0;});
+  var ingsStock=ingredientes.filter(function(x){return (parseInt(x.stock)||0)>0;});
+  if(!conStock.length&&!ingsStock.length){alert('No hay productos con unidades en inventario.');return;}
+  // Agrupar por categoría
+  var porCat={};
+  conStock.forEach(function(p){
+    var c=p.cat||'Sin categoría';
+    if(!porCat[c])porCat[c]=[];
+    porCat[c].push(p);
+  });
+  var cats=Object.keys(porCat).sort();
+  var cuerpo='';var totalUnd=0;
+  cats.forEach(function(c){
+    cuerpo+='<tr><td colspan="2" style="font-weight:900;border-bottom:1px solid #000;padding-top:6px">'+esc(c.toUpperCase())+'</td></tr>';
+    porCat[c].sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).forEach(function(p){
+      var st=parseInt(p.stock)||0;totalUnd+=st;
+      cuerpo+='<tr><td>'+esc(p.nombre)+'</td><td align="right" style="font-weight:900">'+st+'</td></tr>';
+    });
+  });
+  if(ingsStock.length){
+    cuerpo+='<tr><td colspan="2" style="font-weight:900;border-bottom:1px solid #000;padding-top:6px">INSUMOS</td></tr>';
+    ingsStock.sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).forEach(function(x){
+      var st=parseInt(x.stock)||0;
+      cuerpo+='<tr><td>'+esc(x.nombre)+'</td><td align="right" style="font-weight:900">'+st+'</td></tr>';
+    });
+  }
+  var w=window.open('','_blank','width=340,height=700');
+  var fs=ticketConfig.fontSize||14;
+  var pw=ticketConfig.paperWidth||280;
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+    +'@page{margin:0;size:'+pw+'px auto}'
+    +'html,body{margin:0;padding:0;width:'+pw+'px}'
+    +'body{font-family:"Courier New",monospace;font-size:'+fs+'px;padding:8px 10px 16px}'
+    +'.t{font-size:'+(fs+6)+'px;font-weight:900;letter-spacing:4px;text-align:center}'
+    +'.s{text-align:center;font-size:'+(fs-3)+'px;letter-spacing:3px;color:#555;margin-bottom:4px}'
+    +'p{text-align:center;margin:2px 0;font-size:'+(fs-2)+'px}'
+    +'hr{border:none;border-top:1px dashed #000;margin:6px 0}'
+    +'table{width:100%;border-collapse:collapse}'
+    +'td{padding:2px 0;font-size:'+(fs-1)+'px}'
+    +'.tot{font-size:'+(fs+2)+'px;font-weight:900;text-align:right;margin-top:6px}'
+    +'.pie{text-align:center;font-size:'+(fs-3)+'px;margin-top:8px;color:#777}'
+    +'</style></head><body>');
+  w.document.write('<div style="text-align:center;font-size:26px">🛸</div><div class="t">AREA 52</div><div class="s">GASTRO BAR</div><hr/>'
+    +'<p style="font-weight:900">INVENTARIO ACTUAL</p>'
+    +'<p>'+new Date().toLocaleString('es-CO')+'</p>'
+    +'<p>Imprimió: '+esc(usuarioActivo?usuarioActivo.nombre:'')+'</p><hr/>'
+    +'<table>'+cuerpo+'</table><hr/>'
+    +'<div class="tot">'+conStock.length+' productos · '+totalUnd+' und</div>'
+    +'<p class="pie">Solo se listan productos con unidades. Los agotados (0) no aparecen.</p>');
+  w.document.write('</body></html>');
+  w.document.close();
+  setTimeout(function(){w.print();},300);
+}
 function imprimirTicket(mesa,ped,total,fpId,abonos){
   // fpId can be array of {fp,label,monto} or string
   var pagosList=Array.isArray(fpId)?fpId:null;
