@@ -6379,12 +6379,25 @@ function cobrarACredito(){
   var total=totalPedido(mesa.id);
   var descMesa=descuentos[mesa.id];
   if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
+  // Abonos ya recibidos en la mesa: se respetan — solo se fía el SALDO
+  var absMesa=(abonosMesa[mesa.id]||[]);
+  var abonado=absMesa.reduce(function(a,x){return a+(x.monto||0);},0);
+  var saldoFiar=Math.max(0,total-abonado);
+  if(saldoFiar<=0){alert('Los abonos ya cubren el total de la mesa. Usa el cobro normal.');return;}
 
   // Build client selector
   var clientesActivos=clientesCredito.filter(function(c){return c.activo!==false;});
   var opts=clientesActivos.map(function(c){return'<option value="'+c.id+'">'+esc(c.nombre)+'</option>';}).join('');
   modal2('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📒 Dejar como fiado</div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(mesa.nombre||'Mesa '+mesa.num)+' · '+fmt(total)+'</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:6px">'+esc(mesa.nombre||'Mesa '+mesa.num)+'</div>'
+    +(abonado>0
+      ?'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--muted)">Total de la mesa</span><span style="font-weight:800">'+fmt(total)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px"><span style="color:#22c55e">Ya abonado ('+absMesa.length+')</span><span style="font-weight:800;color:#22c55e">− '+fmt(abonado)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:14px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)"><span style="font-weight:800;color:#f5a623">Queda FIADO solo</span><span style="font-weight:900;color:#f5a623">'+fmt(saldoFiar)+'</span></div>'
+        +'<div style="color:var(--muted);font-size:10px;margin-top:5px">Los abonos entran a caja hoy y quedan en el historial del fiado.</div>'
+      +'</div>'
+      :'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+fmt(total)+'</div>')
     +(clientesActivos.length?'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cliente existente</div>'
       +'<select class="inp" id="cred-cliente"><option value="">— Selecciona —</option>'+opts+'</select></div>'
       +'<div style="text-align:center;color:var(--muted);font-size:11px;margin:8px 0">— o —</div>':'')
@@ -6415,16 +6428,34 @@ function confirmarCredito(total){
     alert('Selecciona o crea un cliente.');return;
   }
 
+  // Abonos ya recibidos: NO se pierden — quedan como pagos del fiado y entran a caja HOY
+  var absMesa=(abonosMesa[mesa.id]||[]);
+  var abonado=absMesa.reduce(function(a,x){return a+(x.monto||0);},0);
+  var deudaId='deu'+Date.now();
   var deuda={
-    id:'deu'+Date.now(),ts:Date.now(),
+    id:deudaId,ts:Date.now(),
     clienteId:clienteId,clienteNombre:clienteNombre,
     mesa:mesa.nombre||('Mesa '+mesa.num),
     items:JSON.parse(JSON.stringify(ped)),
-    total:total,pagado:0,pagos:[],
+    total:total,pagado:abonado,
+    pagos:absMesa.map(function(ab){return {ts:ab.ts||Date.now(),valor:ab.monto||0,fp:ab.fp||'efectivo',nota:'Abono en mesa'+(ab.nombre?' · '+ab.nombre:'')};}),
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
   deudasCredito.push(deuda);
   var rd=ref('deudasCredito');if(rd)rd.push(deuda);else fbSet('deudasCredito',deudasCredito);
+  // Cada abono entra a caja como pago de fiado (misma contabilidad que un abono normal de fiado)
+  absMesa.forEach(function(ab){
+    var f=FPAGO.find(function(x){return x.id===ab.fp;});
+    fbPush('ventas',{
+      mesa:'Fiado: '+clienteNombre,zona:'credito',ts:Date.now(),
+      total:ab.monto||0,
+      items:[{isCustom:true,customNombre:'Abono en mesa'+(ab.nombre?' ('+ab.nombre+')':'')+' fiado '+clienteNombre,customPrecio:ab.monto||0,qty:1}],
+      fp:ab.fp||'efectivo',fpLabel:(f?f.label:ab.fp),
+      pagos:[{fp:ab.fp||'efectivo',label:(f?f.label:ab.fp),monto:ab.monto||0}],
+      esPagoCredito:true,deudaId:deudaId,
+      uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
+    });
+  });
 
   // El inventario YA se descontó al agregar a la mesa, así que NO se toca aquí.
   // NO se registra venta (no afecta caja/cierre) hasta que el cliente pague.
@@ -6436,7 +6467,7 @@ function confirmarCredito(total){
   if(abonosMesa[mesa.id]){delete abonosMesa[mesa.id];fbSet('abonosMesa',abonosMesa);}
   mesaActiva=null;
   closeModal2();closeModal1();
-  showToast('📒 Fiado registrado<br><span style="font-size:12px;opacity:.85">'+esc(clienteNombre)+' · '+fmt(total)+'</span>','#f5a623');
+  showToast('📒 Fiado registrado<br><span style="font-size:12px;opacity:.85">'+esc(clienteNombre)+' · debe '+fmt(total-abonado)+(abonado>0?' (abonó '+fmt(abonado)+')':'')+'</span>','#f5a623');
   render();
 }
 
@@ -6887,6 +6918,7 @@ function eliminarFiado(deudaId){
 
 function renderCreditos(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+  var puedeDevolver=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin');
 
   function saldoCliente(cid){
     return deudasCredito.filter(function(d){return d.clienteId===cid;}).reduce(function(s,d){return s+(d.total-(d.pagado||0));},0);
@@ -6915,6 +6947,7 @@ function renderCreditos(){
           +'</div>'
           +'<div style="display:flex;gap:6px;margin-top:6px">'
           +'<button data-act="cred-pagar" data-id="'+d.id+'" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💵 Registrar pago</button>'
+          +(puedeDevolver?'<button data-act="cred-volver" data-id="'+d.id+'" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">↩️ A mesa</button>':'')
           +(esAdmin?'<button data-act="cred-del" data-id="'+d.id+'" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>':'')
           +'</div>'
         +'</div>';
@@ -6984,6 +7017,62 @@ function abrirPagoCredito(deudaId){
     +'<button class="btn btn-green btn-full" onclick="confirmarPagoCredito(\''+deudaId+'\')">💵 Confirmar pago</button>');
 }
 
+/* ═══ Devolver un fiado a una mesa (sin perder el historial de abonos) ═══ */
+function abrirDevolverFiado(deudaId){
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var libres=mesas.filter(function(m){return !(pedidos[m.id]&&pedidos[m.id].length);});
+  if(!libres.length){alert('No hay mesas libres para devolver este fiado.');return;}
+  var opts=libres.map(function(m){
+    var z=ZONAS.find(function(x){return x.id===m.zona;});
+    return'<option value="'+m.id+'">'+(z?z.label+' · ':'')+esc(m.nombre||('Mesa '+m.num))+'</option>';
+  }).join('');
+  var pagosInfo=(d.pagos&&d.pagos.length)
+    ?'<div style="background:var(--bg);border:1px solid #22c55e44;border-radius:9px;padding:9px 11px;margin-bottom:12px">'
+      +'<div style="font-size:11px;font-weight:800;color:#22c55e;margin-bottom:4px">✓ PAGOS YA RECIBIDOS — se conservan como abonos de la mesa</div>'
+      +d.pagos.map(function(p){
+        var f=FPAGO.find(function(x){return x.id===p.fp;});
+        return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:1px 0"><span>'+(f?f.emoji+' '+f.label:p.fp)+(p.nota?' · '+esc(p.nota):'')+'</span><span style="font-weight:700">'+fmt(p.valor)+'</span></div>';
+      }).join('')
+    +'</div>':'';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">↩️ Devolver fiado a mesa</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:12px">'+esc(d.clienteNombre)+' · total '+fmt(d.total)+' · pendiente <b style="color:#f5a623">'+fmt(d.total-(d.pagado||0))+'</b></div>'
+    +pagosInfo
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué mesa?</div>'
+    +'<select class="inp" id="devfiado-mesa" style="margin-bottom:12px">'+opts+'</select>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Los productos vuelven a la mesa y los pagos recibidos quedan como abonos. El fiado desaparece de la lista y sus registros en ventas se retiran (la plata quedará contada al cobrar la mesa).</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarDevolverFiado(\''+deudaId+'\')">↩️ Devolver a la mesa</button>');
+}
+function confirmarDevolverFiado(deudaId){
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var mesaId=(document.getElementById('devfiado-mesa')||{}).value;
+  var mesa=mesas.find(function(m){return String(m.id)===String(mesaId);});
+  if(!mesa){alert('Elige la mesa.');return;}
+  if(pedidos[mesa.id]&&pedidos[mesa.id].length){alert('Esa mesa ya está ocupada.');return;}
+  // 1. Productos de vuelta a la mesa (el stock nunca se devolvió: no se toca)
+  pedidos[mesa.id]=JSON.parse(JSON.stringify(d.items||[]));
+  var rp=ref('pedidos/'+mesa.id);if(rp)rp.set(pedidos[mesa.id]);
+  // 2. Pagos del fiado → abonos de la mesa (historial intacto)
+  if(d.pagos&&d.pagos.length){
+    abonosMesa[mesa.id]=d.pagos.map(function(p){
+      return {monto:p.valor||0,fp:p.fp||'efectivo',nombre:(p.nota||'Pago fiado')+' · '+d.clienteNombre,ts:p.ts||Date.now()};
+    });
+    fbSet('abonosMesa',abonosMesa);
+  }
+  // 3. Retirar las ventas que esos pagos generaron (para no contar la plata dos veces:
+  //    quedará contada cuando la mesa se cobre, con los abonos incluidos)
+  var aBorrar=ventas.filter(function(v){return v.esPagoCredito&&v.deudaId===d.id&&v._fbkey;});
+  aBorrar.forEach(function(v){var rv=ref('ventas/'+v._fbkey);if(rv)rv.set(null);});
+  ventas=ventas.filter(function(v){return !(v.esPagoCredito&&v.deudaId===d.id);});
+  // 4. Eliminar la deuda
+  deudasCredito=deudasCredito.filter(function(x){return x.id!==deudaId;});
+  var ob={};deudasCredito.forEach(function(x){ob[x.id]=x;});fbSet('deudasCredito',ob);
+  closeModal1();
+  showToast('↩️ Fiado devuelto a '+esc(mesa.nombre||('Mesa '+mesa.num))+'<br><span style="font-size:12px;opacity:.85">'+((d.pagos||[]).length?'Con '+(d.pagos||[]).length+' abono(s) conservados':'Sin pagos previos')+'</span>','#38bdf8');
+  render();
+}
+
 function confirmarPagoCredito(deudaId){
   var d=deudasCredito.find(function(x){return x.id===deudaId;});
   if(!d)return;
@@ -7016,7 +7105,7 @@ function confirmarPagoCredito(deudaId){
     items:ventaItems,
     fp:fp,fpLabel:(f?f.label:fp),
     pagos:[{fp:fp,label:(f?f.label:fp),monto:valor}],
-    esPagoCredito:true,fiadoSaldado:esFinal,
+    esPagoCredito:true,fiadoSaldado:esFinal,deudaId:d.id,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
   fbPush('ventas',venta);
@@ -8793,6 +8882,10 @@ document.addEventListener('click',function(e){
   var cdel=e.target.closest('[data-act="cred-del"]');
   if(cdel){
     eliminarFiado(cdel.getAttribute('data-id'));return;
+  }
+  var cvol=e.target.closest('[data-act="cred-volver"]');
+  if(cvol){
+    abrirDevolverFiado(cvol.getAttribute('data-id'));return;
   }
   var sec=e.target.closest('[data-act="toggle-sec"]');
   if(sec){
