@@ -426,6 +426,8 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
+var prestamosSocios=[];  // préstamos de socios al negocio [{id,ts,socio,tipo:'dinero'|'compra',monto,fp,concepto,devuelto,devoluciones[],uid,uidNombre}]
 var consumoEmpleados=[];  // [{id,ts,empId,empNombre,prodNombre,cantidad,stockDetalle,uid,uidNombre}] consumo interno del personal (sin valor, solo inventario)
 var proveedores=[];  // [{id, nombre}]
 var ingresosInv=[];  // [{id, ts, fecha, prodId, prodNombre, cantidad, proveedor, factura, uid, uidNombre}]
@@ -434,7 +436,7 @@ var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid, largoPlaz
 var asistenciaEmp={};  // {empId_YYYY-MM-DD: true} días trabajados
 var _empSemanaOffset=0;  // navegación de semana en nómina
 var clientesCredito=[];// [{id, nombre, telefono, activo}]
-var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true,stockBajo:false,socProds:false,cobrosTurno:true,concil:false,gastosFP:false};  // secciones plegables
+var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true,stockBajo:false,socProds:false,cobrosTurno:true,concil:false,gastosFP:false,prestamosHist:false};  // secciones plegables
 var ventasRappi=[];   // [{id,ts,items,total,uid}]
 var _rappiPedido=[];  // pedido en construcción
 var _rappiCat='';  // categoría abierta en acordeón Rappi
@@ -636,6 +638,14 @@ function iniciarSync(){
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
     consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
+  fbOn('trasladosFP',function(v){
+    trasladosFP=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='caja')render();
+  });
+  fbOn('prestamosSocios',function(v){
+    prestamosSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='caja')render();
   });
   fbOn('consumoSocios',function(v){
     consumoSocios=v?(Array.isArray(v)?v:Object.values(v)):[];
@@ -5476,9 +5486,40 @@ function renderCaja(){
 
   // Traslado Tarjeta -> Bre-B (cuando el banco deposita)
   var trasladoCard='<div class="card mb12">'
-    +'<div class="section-title">🔄 Traslado Tarjeta → Bre-B</div>'
+    +'<div class="section-title">🔄 Movimientos de dinero</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-bottom:10px">Cuando el banco deposita lo de las tarjetas, pásalo a Bre-B. Caja actual en tarjeta: <b style="color:#F59E0B">'+fmt(cajaHoy.ini_tarjeta||0)+'</b></div>'
     +'<button onclick="abrirTrasladoTarjeta()" style="width:100%;background:#06B6D418;color:#06B6D4;border:1px solid #06B6D444;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">🔄 Pasar Tarjeta a Bre-B</button>'
+    +'<button onclick="abrirTrasladoFP()" style="width:100%;margin-top:8px;background:#8B5CF618;color:#8B5CF6;border:1px solid #8B5CF644;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">🔀 Mover entre medios (Nequi, Bre-B, Efectivo...)</button>'
+  +'</div>';
+
+  // Préstamos de socios al negocio
+  var pendientesPS=prestamosSocios.filter(function(p){return (p.monto-(p.devuelto||0))>0;}).sort(function(a,b){return b.ts-a.ts;});
+  var totalPS=pendientesPS.reduce(function(a,p){return a+(p.monto-(p.devuelto||0));},0);
+  var saldadosPS=prestamosSocios.filter(function(p){return (p.monto-(p.devuelto||0))<=0;}).sort(function(a,b){return b.ts-a.ts;});
+  var prestamosCard='<div class="card mb12">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<div class="section-title" style="margin:0">🤝 Préstamos de socios</div>'
+      +(totalPS>0?'<span style="color:#f5a623;font-weight:900;font-size:15px">'+fmt(totalPS)+'</span>':'')
+    +'</div>'
+    +(totalPS>0?'<div style="color:var(--muted);font-size:11px;margin-bottom:8px">El negocio les debe esto a los socios.</div>':'')
+    +pendientesPS.map(function(p){
+      var pend=p.monto-(p.devuelto||0);
+      var f=FPAGO.find(function(x){return x.id===p.fp;});
+      return'<div style="background:var(--card2);border-radius:9px;padding:9px 11px;margin-bottom:6px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center">'
+          +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800">'+(p.tipo==='compra'?'🛒':'💵')+' '+esc(p.socio)+' <span style="color:var(--muted);font-weight:600;font-size:11px">· '+esc(p.concepto||'')+'</span></div>'
+          +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(p.ts)+(p.tipo==='dinero'&&f?' · entró a '+f.emoji+' '+f.label:'')+((p.devuelto||0)>0?' · devuelto '+fmt(p.devuelto):'')+'</div></div>'
+          +'<span style="color:#f5a623;font-weight:900;font-size:14px;white-space:nowrap">'+fmt(pend)+'</span>'
+        +'</div>'
+        +'<button onclick="abrirDevolucionPrestamo(\''+p.id+'\')" style="width:100%;margin-top:6px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💸 Devolver</button>'
+      +'</div>';
+    }).join('')
+    +(pendientesPS.length===0?'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin préstamos pendientes</div>':'')
+    +'<button onclick="abrirPrestamoSocio()" style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">+ Registrar préstamo de socio</button>'
+    +(saldadosPS.length?'<button data-act="toggle-sec" data-sec="prestamosHist" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;text-align:left">'+(_secOpen.prestamosHist?'▼':'▶')+' Saldados ('+saldadosPS.length+')</button>'
+      +(_secOpen.prestamosHist?saldadosPS.map(function(p){
+        return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border)"><span>✓ '+esc(p.socio)+' · '+esc(p.concepto||'')+' <span style="font-size:9px">'+fmtFechaCorta(p.ts)+'</span></span><span style="font-weight:700">'+fmt(p.monto)+'</span></div>';
+      }).join(''):''):'')
   +'</div>';
 
   // Historial de cierres
@@ -5572,7 +5613,7 @@ function renderCaja(){
     +(arqRows||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin arqueos en este turno</div>')
   +'</div>';
 
-  return configCaja+kpis+conciliacion+gastosFPCard+arqueoCard+trasladoCard+cierreBtn+histCierres;
+  return configCaja+kpis+conciliacion+gastosFPCard+arqueoCard+trasladoCard+prestamosCard+cierreBtn+histCierres;
 }
 
 function guardarCajaInicial(){
@@ -6468,6 +6509,147 @@ function confirmarCredito(total){
   mesaActiva=null;
   closeModal2();closeModal1();
   showToast('📒 Fiado registrado<br><span style="font-size:12px;opacity:.85">'+esc(clienteNombre)+' · debe '+fmt(total-abonado)+(abonado>0?' (abonó '+fmt(abonado)+')':'')+'</span>','#f5a623');
+  render();
+}
+
+/* ═══ Saldo actual por medio de pago (misma fórmula de la pestaña Caja) ═══ */
+function saldoActualFP(fpId){
+  var porFP=0;
+  ventasTurno().forEach(function(v){
+    if(v.pagos&&v.pagos.length){v.pagos.forEach(function(p){if(p.fp===fpId)porFP+=(p.monto||0);});}
+    else if(v.fp===fpId){porFP+=v.total;}
+  });
+  var gFP=0;
+  gastosTurno().forEach(function(g){if((g.fp||'efectivo')===fpId)gFP+=g.valor;});
+  return (cajaHoy['ini_'+fpId]||0)+porFP-gFP;
+}
+
+/* ═══ Mover dinero entre medios de pago (Nequi→Bre-B, Efectivo→Bre-B, etc.) ═══ */
+function abrirTrasladoFP(){
+  var chips=FPAGO.map(function(f){
+    return f.emoji+' '+f.label+': <b style="color:'+f.color+'">'+fmt(saldoActualFP(f.id))+'</b>';
+  }).join(' · ');
+  var opts=function(sel){return FPAGO.map(function(f){return'<option value="'+f.id+'"'+(f.id===sel?' selected':'')+'>'+f.emoji+' '+f.label+'</option>';}).join('');};
+  var ultimos=trasladosFP.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,8).map(function(t){
+    var fD=FPAGO.find(function(x){return x.id===t.de;});var fA=FPAGO.find(function(x){return x.id===t.a;});
+    return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border)">'
+      +'<span>'+(fD?fD.emoji:'')+' → '+(fA?fA.emoji+' '+fA.label:'')+' <span style="font-size:9px">'+fmtFechaCorta(t.ts)+' · '+esc(t.uidNombre||'')+'</span></span>'
+      +'<span style="font-weight:700">'+fmt(t.monto)+'</span></div>';
+  }).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🔄 Mover dinero entre medios</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">'+chips+'</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'
+      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de</div><select class="inp" id="tfp-de">'+opts('nequi')+'</select></div>'
+      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Entra a</div><select class="inp" id="tfp-a">'+opts('breb')+'</select></div>'
+    +'</div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto</div>'
+    +'<input class="inp money" id="tfp-monto" type="text" inputmode="numeric" placeholder="0"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarTrasladoFP()">🔄 Mover el dinero</button>'
+    +(ultimos?'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:14px 0 4px">ÚLTIMOS TRASLADOS</div>'+ultimos:''));
+}
+function confirmarTrasladoFP(){
+  var de=(document.getElementById('tfp-de')||{}).value;
+  var a=(document.getElementById('tfp-a')||{}).value;
+  var monto=moneyVal('tfp-monto')||0;
+  if(!de||!a)return;
+  if(de===a){alert('Elige dos medios distintos.');return;}
+  if(monto<=0){alert('Escribe el monto.');return;}
+  var disp=saldoActualFP(de);
+  if(monto>disp){alert('No hay saldo suficiente en '+de+' (disponible: '+fmt(disp)+').');return;}
+  cajaHoy['ini_'+de]=(cajaHoy['ini_'+de]||0)-monto;
+  cajaHoy['ini_'+a]=(cajaHoy['ini_'+a]||0)+monto;
+  fbSet('cajaHoy',cajaHoy);
+  var reg={ts:Date.now(),de:de,a:a,monto:monto,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  trasladosFP.push(reg);
+  var r=ref('trasladosFP');if(r)r.push(reg);else fbSet('trasladosFP',trasladosFP);
+  var fD=FPAGO.find(function(x){return x.id===de;});var fA=FPAGO.find(function(x){return x.id===a;});
+  closeModal1();
+  showToast('🔄 '+fmt(monto)+' movidos<br><span style="font-size:12px;opacity:.85">'+(fD?fD.emoji+' '+fD.label:de)+' → '+(fA?fA.emoji+' '+fA.label:a)+'</span>','#06B6D4');
+  render();
+}
+
+/* ═══ Préstamos de socios al negocio (dinero o compras, para devolver) ═══ */
+function abrirPrestamoSocio(){
+  window._psSocio=window._psSocio||'CARLOS';window._psTipo=window._psTipo||'dinero';
+  renderPrestamoModal();
+}
+function renderPrestamoModal(){
+  var socioBtn=function(n){var sel=window._psSocio===n;
+    return'<button onclick="window._psSocio=\''+n+'\';renderPrestamoModal();" style="flex:1;background:'+(sel?'var(--accent)':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:10px;padding:10px 0;font-weight:800;font-size:13px;cursor:pointer">'+n+'</button>';};
+  var tipoBtn=function(t,lbl){var sel=window._psTipo===t;
+    return'<button onclick="window._psTipo=\''+t+'\';renderPrestamoModal();" style="flex:1;background:'+(sel?'#22c55e':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'#22c55e':'var(--border)')+';border-radius:10px;padding:10px 0;font-weight:800;font-size:12px;cursor:pointer">'+lbl+'</button>';};
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🤝 Registrar préstamo de socio</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">El socio le presta al negocio. Queda pendiente hasta que el negocio se lo devuelva.</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Quién presta?</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'+socioBtn('CARLOS')+socioBtn('JAVIER')+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Qué prestó?</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'+tipoBtn('dinero','💵 Dinero a la caja')+tipoBtn('compra','🛒 Compra / pagó algo')+'</div>'
+    +(window._psTipo==='dinero'
+      ?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué medio entró el dinero?</div><select class="inp" id="ps-fp" style="margin-bottom:10px">'+fpOpts+'</select>'
+      :'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:10px;color:var(--muted);font-size:11px">El socio pagó con su plata (no entra dinero a la caja). Solo queda la deuda del negocio con él.</div>')
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto</div>'
+    +'<input class="inp money" id="ps-monto" type="text" inputmode="numeric" placeholder="0"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto</div>'
+    +'<input class="inp" id="ps-concepto" placeholder="Ej: préstamo para nómina, compró licor, pagó arriendo..."/></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPrestamoSocio()">🤝 Registrar préstamo</button>');
+}
+function confirmarPrestamoSocio(){
+  var monto=moneyVal('ps-monto')||0;
+  var concepto=((document.getElementById('ps-concepto')||{}).value||'').trim();
+  if(monto<=0){alert('Escribe el monto.');return;}
+  if(!concepto){alert('Escribe el concepto (para qué fue).');return;}
+  var tipo=window._psTipo||'dinero';
+  var fp=tipo==='dinero'?(((document.getElementById('ps-fp')||{}).value)||'efectivo'):'';
+  if(tipo==='dinero'){
+    cajaHoy['ini_'+fp]=(cajaHoy['ini_'+fp]||0)+monto;
+    fbSet('cajaHoy',cajaHoy);
+  }
+  var reg={id:'ps_'+Date.now(),ts:Date.now(),socio:window._psSocio||'CARLOS',tipo:tipo,monto:monto,fp:fp,concepto:concepto,devuelto:0,devoluciones:[],uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  prestamosSocios.push(reg);
+  var r=ref('prestamosSocios');if(r)r.push(reg);else fbSet('prestamosSocios',prestamosSocios);
+  var f=FPAGO.find(function(x){return x.id===fp;});
+  closeModal1();
+  showToast('🤝 Préstamo registrado<br><span style="font-size:12px;opacity:.85">'+esc(reg.socio)+' · '+fmt(monto)+(tipo==='dinero'?' → '+(f?f.emoji+' '+f.label:fp):' (compra)')+'</span>','#22c55e');
+  render();
+}
+function abrirDevolucionPrestamo(pid){
+  var p=prestamosSocios.find(function(x){return x.id===pid;});
+  if(!p)return;
+  var pend=p.monto-(p.devuelto||0);
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+' (disp: '+fmt(saldoActualFP(f.id))+')</option>';}).join('');
+  var dev=(p.devoluciones||[]).map(function(d){
+    var f=FPAGO.find(function(x){return x.id===d.fp;});
+    return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:2px 0"><span>'+(f?f.emoji+' '+f.label:d.fp)+' · '+fmtFechaCorta(d.ts)+'</span><span style="font-weight:700">'+fmt(d.monto)+'</span></div>';
+  }).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💸 Devolver préstamo</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:10px">'+esc(p.socio)+' · '+esc(p.concepto)+'<br>Prestó '+fmt(p.monto)+' · pendiente <b style="color:#f5a623">'+fmt(pend)+'</b></div>'
+    +(dev?'<div style="background:var(--bg);border-radius:8px;padding:7px 10px;margin-bottom:10px">'+dev+'</div>':'')
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto a devolver</div>'
+    +'<input class="inp money" id="dp-monto" type="text" inputmode="numeric" value="'+moneyFmt(pend)+'"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿De qué medio sale?</div>'
+    +'<select class="inp" id="dp-fp">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarDevolucionPrestamo(\''+pid+'\')">💸 Registrar devolución</button>');
+}
+function confirmarDevolucionPrestamo(pid){
+  var p=prestamosSocios.find(function(x){return x.id===pid;});
+  if(!p)return;
+  var monto=moneyVal('dp-monto')||0;
+  var fp=(document.getElementById('dp-fp')||{}).value||'efectivo';
+  var pend=p.monto-(p.devuelto||0);
+  if(monto<=0){alert('Escribe el monto.');return;}
+  if(monto>pend){alert('No puedes devolver más de lo pendiente ('+fmt(pend)+').');return;}
+  var disp=saldoActualFP(fp);
+  if(monto>disp){alert('Saldo insuficiente en ese medio (disponible: '+fmt(disp)+').');return;}
+  cajaHoy['ini_'+fp]=(cajaHoy['ini_'+fp]||0)-monto;
+  fbSet('cajaHoy',cajaHoy);
+  p.devuelto=(p.devuelto||0)+monto;
+  p.devoluciones=p.devoluciones||[];
+  p.devoluciones.push({ts:Date.now(),monto:monto,fp:fp,uidNombre:usuarioActivo.nombre});
+  var ob={};prestamosSocios.forEach(function(x){ob[x.id]=x;});fbSet('prestamosSocios',ob);
+  var f=FPAGO.find(function(x){return x.id===fp;});
+  closeModal1();
+  showToast('💸 Devolución registrada<br><span style="font-size:12px;opacity:.85">'+esc(p.socio)+' · '+fmt(monto)+' desde '+(f?f.emoji+' '+f.label:fp)+(p.devuelto>=p.monto?' · ✓ Saldado':'')+'</span>','#22c55e');
   render();
 }
 
