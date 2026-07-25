@@ -6124,6 +6124,56 @@ function renderVentas(){
     +(_secOpen.socios?'<div class="res-card full-col">'+rankingConsumoSocios()+'</div>':'');
 }
 
+/* ═══ Devolver una venta a la mesa (anular el cobro para corregir o agregar) ═══ */
+function abrirDevolverVenta(fbkey){
+  var v=ventas.find(function(x){return x._fbkey===fbkey;});
+  if(!v){alert('Venta no encontrada.');return;}
+  if(v.esPagoCredito){alert('Los pagos de fiados no se devuelven a mesa. Usa "↩️ A mesa" en la pestaña Fiados.');return;}
+  var vItems=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+  if(!vItems.length){alert('Esta venta no tiene productos para devolver (es un registro sin ítems).');return;}
+  var libres=mesas.filter(function(m){return !(pedidos[m.id]&&pedidos[m.id].length);});
+  if(!libres.length){alert('No hay mesas libres.');return;}
+  var opts=libres.map(function(m){
+    var z=ZONAS.find(function(x){return x.id===m.zona;});
+    return'<option value="'+m.id+'">'+(z?z.label+' · ':'')+esc(m.nombre||('Mesa '+m.num))+'</option>';
+  }).join('');
+  var esTurno=v.ts>=turnoInicio;
+  var absV=v.abonos?(Array.isArray(v.abonos)?v.abonos:Object.values(v.abonos)):[];
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">↩️ Devolver cobro a la mesa</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:10px">'+esc(v.mesa||'')+' · '+fmt(v.total)+' · '+fmtFechaCorta(v.ts)+'</div>'
+    +'<div style="background:#f5a62318;border:1px solid #f5a62333;border-radius:9px;padding:9px 11px;margin-bottom:10px;color:#f5a623;font-size:12px">⚠️ El cobro se ANULA: sale de ventas y de los saldos de caja. Los productos vuelven a la mesa para corregir el pago o agregar más, y ahí la cobras de nuevo.</div>'
+    +(esTurno?'':'<div style="background:#ef444418;border:1px solid #ef444433;border-radius:9px;padding:9px 11px;margin-bottom:10px;color:#ef4444;font-size:12px">🚨 Esta venta NO es del turno actual: anularla cambia los números de un día ya cerrado.</div>')
+    +(absV.length?'<div style="background:var(--bg);border:1px solid #22c55e44;border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:11px;color:#22c55e;font-weight:700">✓ Sus '+absV.length+' abono(s) volverán a la mesa como abonos.</div>':'')
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué mesa vuelve?</div>'
+    +'<select class="inp" id="devventa-mesa" style="margin-bottom:14px">'+opts+'</select>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarDevolverVenta(\''+fbkey+'\')">↩️ Devolver a la mesa</button>');
+}
+function confirmarDevolverVenta(fbkey){
+  var v=ventas.find(function(x){return x._fbkey===fbkey;});
+  if(!v)return;
+  var mesaId=(document.getElementById('devventa-mesa')||{}).value;
+  var mesa=mesas.find(function(m){return String(m.id)===String(mesaId);});
+  if(!mesa){alert('Elige la mesa.');return;}
+  if(pedidos[mesa.id]&&pedidos[mesa.id].length){alert('Esa mesa ya está ocupada.');return;}
+  // 1. Productos de vuelta (el stock no se toca: se descontó al agregarlos y siguen "servidos")
+  var vItems=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+  pedidos[mesa.id]=JSON.parse(JSON.stringify(vItems));
+  var rp=ref('pedidos/'+mesa.id);if(rp)rp.set(pedidos[mesa.id]);
+  // 2. Abonos de la venta vuelven como abonos de mesa
+  var absV=v.abonos?(Array.isArray(v.abonos)?v.abonos:Object.values(v.abonos)):[];
+  if(absV.length){
+    abonosMesa[mesa.id]=absV.map(function(ab){return {monto:ab.monto||0,fp:ab.fp||'efectivo',nombre:ab.nombre||'Abono',ts:ab.ts||Date.now()};});
+    fbSet('abonosMesa',abonosMesa);
+  }
+  // 3. Registrar la anulación (auditoría) y borrar la venta
+  fbPush('anulaciones',{ts:Date.now(),ventaTs:v.ts,mesa:v.mesa||'',total:v.total||0,fp:v.fp||'',motivo:'Devuelta a '+(mesa.nombre||('Mesa '+mesa.num)),uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+  var rv=ref('ventas/'+fbkey);if(rv)rv.set(null);
+  ventas=ventas.filter(function(x){return x._fbkey!==fbkey;});
+  closeModal1();
+  showToast('↩️ Cobro devuelto a '+esc(mesa.nombre||('Mesa '+mesa.num))+'<br><span style="font-size:12px;opacity:.85">'+fmt(v.total)+' anulado de ventas · corrige y cobra de nuevo</span>','#38bdf8');
+  render();
+}
+
 function abrirEditarFP(fbkey){
   var v=ventas.find(function(x){return x._fbkey===fbkey;});
   if(!v){alert('Venta no encontrada.');return;}
@@ -6332,6 +6382,7 @@ function histTodasVentas(){
       +'</div>'+itemsHtml
       +(v._fbkey?'<button onclick="reimprimirVenta(\''+v._fbkey+'\')" style="width:100%;margin-top:6px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Imprimir recibo</button>':'')
       +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey)?'<button data-act="venta-editfp" data-key="'+v._fbkey+'" style="width:100%;margin-top:6px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✏️ Corregir forma de pago</button>':'')
+      +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey&&!v.esPagoCredito)?'<button data-act="venta-devolver" data-key="'+v._fbkey+'" style="width:100%;margin-top:6px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">↩️ Devolver a mesa (anular cobro)</button>':'')
     +'</div>';
   }
 
@@ -9118,6 +9169,12 @@ document.addEventListener('click',function(e){
   if(vef){
     if(usuarioActivo&&usuarioActivo.rol==='admin')abrirEditarFP(vef.getAttribute('data-key'));
     else alert('Solo el administrador puede corregir la forma de pago.');
+    return;
+  }
+  var vdev=e.target.closest('[data-act="venta-devolver"]');
+  if(vdev){
+    if(usuarioActivo&&usuarioActivo.rol==='admin')abrirDevolverVenta(vdev.getAttribute('data-key'));
+    else alert('Solo el administrador puede devolver un cobro a la mesa.');
     return;
   }
   var scb=e.target.closest('[data-act="soc-add-combo"]');
