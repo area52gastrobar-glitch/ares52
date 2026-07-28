@@ -298,6 +298,31 @@ body.cliente-mode #doc{
   body.modo-claro #doc .item-name{color:#1a1208 !important;}
   body.modo-claro #doc .item-price{color:#7b2ff7 !important;}
 }
+
+/* ═══ FLUJO CONTINUO SIN CORTES FEOS ═══
+   Las categorías fluyen una tras otra (las chicas comparten hoja con otras),
+   pero nada queda partido: */
+@media print{
+  /* Un ítem jamás se parte a la mitad entre dos hojas */
+  .menu-item{break-inside:avoid;page-break-inside:avoid;}
+  /* Cada subcategoría (título + sus productos) viaja como bloque:
+     si no cabe en lo que queda de hoja, salta completa a la siguiente */
+  .subcat-block{break-inside:avoid;page-break-inside:avoid;}
+  /* Las categorías PEQUEÑAS (Café, Cigarrillos, Cócteles...) van completas:
+     nunca quedan con el título en una hoja y los productos en otra */
+  .cat-chica{break-inside:avoid;page-break-inside:avoid;}
+  /* El título de una categoría grande nunca queda huérfano al pie de página */
+  .cat-header{break-inside:avoid;break-after:avoid-page;page-break-after:avoid;}
+  /* El pie (dirección, teléfono, redes) NUNCA se va solo a una hoja aparte:
+     viaja pegado al final del contenido, y en impresión se compacta para caber */
+  .menu-footer{
+    break-inside:avoid;page-break-inside:avoid;
+    break-before:avoid-page;page-break-before:avoid;
+    padding:12px 28px!important;gap:10px!important;
+  }
+  .footer-contact{gap:2px!important;}
+  .footer-contact span{font-size:10px!important;letter-spacing:1.5px!important;}
+}
 </style>
 </head>
 <body>
@@ -523,14 +548,17 @@ function regenerar(){
     } else {
       items=subs.map(function(s){
         var lista=cats[cat].filter(function(m){return (m.subcat||'')===s;});
-        return (s?'<div class="subcat-label" style="color:'+color+';margin-left:24px;margin-right:24px;text-shadow:0 0 10px '+color+'">▸ '+esc(s)+'</div>':'')
-          +'<div class="items-grid">'+lista.map(_menuItem).join("")+'</div>';
+        return '<div class="subcat-block">'
+          +(s?'<div class="subcat-label" style="color:'+color+';margin-left:24px;margin-right:24px;text-shadow:0 0 10px '+color+'">▸ '+esc(s)+'</div>':'')
+          +'<div class="items-grid">'+lista.map(_menuItem).join("")+'</div>'
+        +'</div>';
       }).join("");
     }
 
     var catEmoji=getCatEmoji(cat);
     var icon_div='<span style="font-size:18px;opacity:.8">'+catEmoji+'</span>';
-    return'<div class="cat-section">'
+    var esChica=cats[cat].length<=6;
+    return'<div class="cat-section'+(esChica?' cat-chica':'')+'">'
       +'<div class="cat-header" style="color:'+color+'">'
         +'<div class="cat-emoji">'+catEmoji+'</div>'
         +'<div class="cat-title">'+esc(cat.toUpperCase())+'</div>'
