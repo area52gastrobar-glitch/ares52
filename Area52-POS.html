@@ -427,6 +427,7 @@ var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en 
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
+var promos=[];  // promociones por día/hora [{id,prodId,tipo:'unidad'|'cubeta',valor,dias:[0-6],horaIni:'HH:MM',horaFin:'HH:MM',on}]
 var prestamosSocios=[];  // préstamos de socios al negocio [{id,ts,socio,tipo:'dinero'|'compra',monto,fp,concepto,devuelto,devoluciones[],uid,uidNombre}]
 var consumoEmpleados=[];  // [{id,ts,empId,empNombre,prodNombre,cantidad,stockDetalle,uid,uidNombre}] consumo interno del personal (sin valor, solo inventario)
 var proveedores=[];  // [{id, nombre}]
@@ -566,9 +567,43 @@ function precioItem(it){
   if(it.isCombo) return it.comboPrecio||0;
   if(it.isCustom) return it.customPrecio||0;
   if(it.isCubetazoMix) return it.cubMixPrecio||0;
+  // Precio de promoción CONGELADO al momento de agregar el producto a la mesa
+  if(it.precioPromo) return it.precioPromo;
   // Variante con precio propio (ej: Pizza Personal/Mediana)
   if(it.variantePrecio) return it.variantePrecio;
   var p=menu.find(function(m){return m.id===it.pid;});if(!p)return 0;return it.cubeta?(p.cubeta||p.precio*5):p.precio;
+}
+/* ═══ PROMOCIONES por día y hora (ej: jueves y viernes cubetazo Miller a 30.000) ═══ */
+function _hm(str){  // 'HH:MM' → minutos del día; vacío → null
+  if(!str)return null;
+  var p=String(str).split(':');
+  return (parseInt(p[0])||0)*60+(parseInt(p[1])||0);
+}
+function promoVigente(prodId,tipo){
+  var ahora=new Date();
+  var dia=ahora.getDay();               // 0=domingo ... 6=sábado
+  var diaAnt=(dia+6)%7;
+  var min=ahora.getHours()*60+ahora.getMinutes();
+  return promos.find(function(pr){
+    if(pr.on===false)return false;
+    if(String(pr.prodId)!==String(prodId))return false;
+    if((pr.tipo||'unidad')!==tipo)return false;
+    var dias=pr.dias||[];
+    var ini=_hm(pr.horaIni),fin=_hm(pr.horaFin);
+    if(ini===null||fin===null){                       // sin horario: todo el día
+      return dias.indexOf(dia)>=0;
+    }
+    if(fin>=ini){                                     // horario normal en el mismo día
+      return dias.indexOf(dia)>=0&&min>=ini&&min<=fin;
+    }
+    // Cruza medianoche (ej: 20:00 → 02:00): vale la noche del día elegido
+    return (dias.indexOf(dia)>=0&&min>=ini)||(dias.indexOf(diaAnt)>=0&&min<=fin);
+  })||null;
+}
+var DIAS_SEMANA=[{n:1,l:'L'},{n:2,l:'M'},{n:3,l:'X'},{n:4,l:'J'},{n:5,l:'V'},{n:6,l:'S'},{n:0,l:'D'}];
+function _promoDiasTxt(pr){
+  var m={0:'Dom',1:'Lun',2:'Mar',3:'Mié',4:'Jue',5:'Vie',6:'Sáb'};
+  return (pr.dias||[]).slice().sort(function(a,b){return (a===0?7:a)-(b===0?7:b);}).map(function(d){return m[d];}).join(', ');
 }
 function totalPedido(mid){return(pedidos[mid]||[]).reduce(function(a,it){return a+precioItem(it)*it.qty;},0);}
 function ventasTurno(){return ventas.filter(function(v){return v.ts>=turnoInicio;});}
@@ -639,6 +674,10 @@ function iniciarSync(){
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
     consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
+  fbOn('promos',function(v){
+    promos=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(tabActual==='mesas'||tabActual==='admin')render();
   });
   fbOn('trasladosFP',function(v){
     trasladosFP=v?(Array.isArray(v)?v:Object.values(v)):[];
@@ -1236,8 +1275,12 @@ function renderPanelPedido(){
       +'<div style="color:var(--text);font-size:12px;font-weight:700;margin:3px 0 1px;line-height:1.2">'+esc(p.nombre)+'</div>'
       +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">Stock: '+p.stock+' '+p.und+'</div>'
       +'<div style="display:flex;gap:4px">'
-      +'<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:var(--accent)18;color:var(--accent);border:1px solid var(--accent)33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+((p.variantes&&p.variantes.length)?'desde '+fmt(Math.min.apply(null,p.variantes.map(function(v){return v.precio;}))):fmt(p.precio))+'</button>'
-      +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+fmt(p.cubeta)+'</button>':'')
+      +(function(){
+        var prU=(p.variantes&&p.variantes.length)?null:promoVigente(p.id,'unidad');
+        var prC=promoVigente(p.id,'cubeta');
+        return '<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:'+(prU?'#f5a62322':'var(--accent)18')+';color:'+(prU?'#f5a623':'var(--accent)')+';border:1px solid '+(prU?'#f5a62366':'var(--accent)33')+';border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+(prU?'🏷️'+fmt(prU.valor):((p.variantes&&p.variantes.length)?'desde '+fmt(Math.min.apply(null,p.variantes.map(function(v){return v.precio;}))):fmt(p.precio)))+'</button>'
+        +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:'+(prC?'#f5a62322':'#22c55e18')+';color:'+(prC?'#f5a623':'#22c55e')+';border:1px solid '+(prC?'#f5a62366':'#22c55e33')+';border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+(prC?'🏷️'+fmt(prC.valor):fmt(p.cubeta))+'</button>':'');
+      })()
       +'</div>'
       +(((p.cat||'').toLowerCase().indexOf('nacional')>=0)?'<button onclick="abrirCantidadPromo('+p.id+')" '+(okN?'':'disabled')+' style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:6px;padding:4px 0;font-size:11px;font-weight:800;cursor:'+(okN?'pointer':'not-allowed')+'">⭐ Promo '+fmt(PROMO_NACIONAL_PRECIO)+'</button>':'')
       +'</div>';
@@ -2318,14 +2361,19 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   var p=menu.find(function(m){return m.id===pid;});
   var id=mesaActiva.id;
   if(!pedidos[id])pedidos[id]=[];
+  // Promo vigente al momento de agregar: el precio se CONGELA en el ítem
+  // (si la promo termina con la mesa abierta, lo ya pedido conserva su precio)
+  var _promo=(!varianteNombre)?promoVigente(pid,cubeta?'cubeta':'unidad'):null;
+  var _pPromo=_promo?(_promo.valor||0):0;
   var idx=pedidos[id].findIndex(function(it){
-    return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'');
+    return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
   });
   if(idx>=0)pedidos[id][idx].qty+=cantidad;
   else pedidos[id].push({
     pid:pid,cubeta:cubeta,qty:cantidad,
     varianteNombre:varianteNombre||'',
     variantePrecio:variantePrecio||0,
+    precioPromo:_pPromo,
     uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36),
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
@@ -6657,6 +6705,106 @@ function confirmarCredito(total){
   render();
 }
 
+/* ═══ GESTIÓN DE PROMOCIONES (Admin) ═══ */
+function abrirPromos(){window._prEdit=null;renderPromosModal();}
+function renderPromosModal(){
+  var lista=promos.slice().sort(function(a,b){return (b.on!==false?1:0)-(a.on!==false?1:0);}).map(function(pr){
+    var p=menu.find(function(m){return String(m.id)===String(pr.prodId);});
+    var vig=promoVigente(pr.prodId,pr.tipo||'unidad')===pr;
+    var normal=p?((pr.tipo==='cubeta')?(p.cubeta||0):(p.precio||0)):0;
+    return'<div style="background:var(--bg);border:1px solid '+(vig?'#22c55e66':'var(--border)')+';border-radius:10px;padding:9px 11px;margin-bottom:7px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:800">'+(pr.tipo==='cubeta'?'🪣 ':'')+esc(p?p.nombre:('#'+pr.prodId))+(vig?' <span style="background:#22c55e22;color:#22c55e;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:900">ACTIVA AHORA</span>':'')+'</div>'
+          +'<div style="color:var(--muted);font-size:10px;margin-top:1px">'+_promoDiasTxt(pr)+(pr.horaIni&&pr.horaFin?' · '+pr.horaIni+' a '+pr.horaFin:' · todo el día')+'</div>'
+          +'<div style="font-size:11px;margin-top:2px"><span style="color:#f5a623;font-weight:900">🏷️ '+fmt(pr.valor)+'</span> <span style="color:var(--muted);text-decoration:line-through;font-size:10px">'+fmt(normal)+'</span></div>'
+        +'</div>'
+        +'<div style="display:flex;flex-direction:column;gap:5px">'
+          +'<button onclick="togglePromo(\''+pr.id+'\')" style="background:'+(pr.on!==false?'#22c55e':'var(--card2)')+';color:'+(pr.on!==false?'#fff':'var(--muted)')+';border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800;cursor:pointer">'+(pr.on!==false?'✅ ON':'⭕ OFF')+'</button>'
+          +'<div style="display:flex;gap:4px">'
+            +'<button onclick="editarPromo(\''+pr.id+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer">✏️</button>'
+            +'<button onclick="eliminarPromo(\''+pr.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer">🗑️</button>'
+          +'</div>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🏷️ Promociones</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Precios especiales por días y horas. El mesero las ve marcadas 🏷️ y el precio se aplica solo mientras la promo está vigente.</div>'
+    +(lista||'<div style="color:var(--dim);text-align:center;padding:14px;font-size:12px">Sin promociones creadas.</div>')
+    +'<button class="btn btn-green btn-full" style="margin-top:8px" onclick="editarPromo(null)">+ Nueva promoción</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cerrar</button>');
+}
+function editarPromo(id){
+  var pr=id?promos.find(function(x){return x.id===id;}):null;
+  window._prEdit={id:id,prodId:pr?pr.prodId:null,tipo:pr?(pr.tipo||'unidad'):'unidad',valor:pr?pr.valor:0,
+    dias:pr?(pr.dias||[]).slice():[],horaIni:pr?(pr.horaIni||''):'',horaFin:pr?(pr.horaFin||''):'',busq:''};
+  renderPromoForm();
+}
+function renderPromoForm(){
+  var e=window._prEdit;
+  var p=e.prodId?menu.find(function(m){return String(m.id)===String(e.prodId);}):null;
+  var q=_normTxt((e.busq||'').trim());
+  var matches=(!p&&q)?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,6):[];
+  var prodHtml=p
+    ?'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--accent)66;border-radius:9px;padding:9px 12px;margin-bottom:10px">'
+      +'<span style="font-weight:800;font-size:13px">'+p.emoji+' '+esc(p.nombre)+'</span>'
+      +'<button onclick="window._prEdit.prodId=null;window._prEdit.tipo=\'unidad\';renderPromoForm();" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">cambiar</button></div>'
+    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;renderPromoForm();setTimeout(function(){var el=document.getElementById(\'pr-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:6px"/>'
+      +matches.map(function(m){return'<button onclick="window._prEdit.prodId='+m.id+';window._prEdit.busq=\'\';renderPromoForm();" style="display:flex;justify-content:space-between;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:4px;cursor:pointer;color:var(--text)"><span style="font-size:12px;font-weight:700">'+m.emoji+' '+esc(m.nombre)+'</span><span style="color:var(--muted);font-size:11px">'+fmt(m.precio)+(m.cubeta?' · 🪣'+fmt(m.cubeta):'')+'</span></button>';}).join('');
+  var tieneCubeta=p&&p.esCerveza&&p.cubeta;
+  var tipoHtml=p?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué precio aplica?</div><div style="display:flex;gap:8px;margin-bottom:10px">'
+    +'<button onclick="window._prEdit.tipo=\'unidad\';renderPromoForm();" style="flex:1;background:'+(e.tipo==='unidad'?'var(--accent)':'var(--bg)')+';color:'+(e.tipo==='unidad'?'#fff':'var(--muted)')+';border:1px solid '+(e.tipo==='unidad'?'var(--accent)':'var(--border)')+';border-radius:9px;padding:9px 0;font-weight:800;font-size:12px;cursor:pointer">Unidad ('+fmt(p.precio)+')</button>'
+    +(tieneCubeta?'<button onclick="window._prEdit.tipo=\'cubeta\';renderPromoForm();" style="flex:1;background:'+(e.tipo==='cubeta'?'#22c55e':'var(--bg)')+';color:'+(e.tipo==='cubeta'?'#fff':'var(--muted)')+';border:1px solid '+(e.tipo==='cubeta'?'#22c55e':'var(--border)')+';border-radius:9px;padding:9px 0;font-weight:800;font-size:12px;cursor:pointer">🪣 Cubetazo ('+fmt(p.cubeta)+')</button>':'')
+  +'</div>':'';
+  var diasHtml='<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Días de la promo</div><div style="display:flex;gap:5px;margin-bottom:10px">'
+    +DIAS_SEMANA.map(function(d){
+      var sel=e.dias.indexOf(d.n)>=0;
+      return'<button onclick="var i=window._prEdit.dias.indexOf('+d.n+');if(i>=0)window._prEdit.dias.splice(i,1);else window._prEdit.dias.push('+d.n+');renderPromoForm();" style="flex:1;background:'+(sel?'#f5a623':'var(--bg)')+';color:'+(sel?'#1a1a22':'var(--muted)')+';border:1px solid '+(sel?'#f5a623':'var(--border)')+';border-radius:8px;padding:9px 0;font-weight:900;font-size:12px;cursor:pointer">'+d.l+'</button>';
+    }).join('')+'</div>';
+  var horas='';for(var h=0;h<24;h++){['00','30'].forEach(function(mm){var v=('0'+h).slice(-2)+':'+mm;horas+='<option value="'+v+'">'+v+'</option>';});}
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:10px">'+(e.id?'✏️ Editar promoción':'🏷️ Nueva promoción')+'</div>'
+    +prodHtml+tipoHtml
+    +(p?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio de promoción</div>'
+      +'<input class="inp money" id="pr-valor" type="text" inputmode="numeric" value="'+(e.valor?moneyFmt(e.valor):'')+'" placeholder="Ej: 30.000" style="margin-bottom:10px"/>'
+      +diasHtml
+      +'<div style="display:flex;gap:8px;margin-bottom:4px">'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Desde (hora)</div><select class="inp" id="pr-hini"><option value="">Todo el día</option>'+horas.replace('value="'+e.horaIni+'"','value="'+e.horaIni+'" selected')+'</select></div>'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Hasta (hora)</div><select class="inp" id="pr-hfin"><option value="">Todo el día</option>'+horas.replace('value="'+e.horaFin+'"','value="'+e.horaFin+'" selected')+'</select></div>'
+      +'</div>'
+      +'<div style="color:var(--muted);font-size:10px;margin-bottom:12px">💡 Si "Hasta" es menor que "Desde" (ej: 20:00 → 02:00), la promo cubre la noche y cruza la medianoche.</div>'
+      +'<button class="btn btn-green btn-full" onclick="guardarPromo()">💾 Guardar promoción</button>':'')
+    +'<button class="btn btn-full" onclick="renderPromosModal()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">← Volver</button>');
+}
+function guardarPromo(){
+  var e=window._prEdit;
+  if(!e.prodId){alert('Elige el producto.');return;}
+  var valor=moneyVal('pr-valor')||0;
+  if(valor<=0){alert('Escribe el precio de la promoción.');return;}
+  if(!e.dias.length){alert('Elige al menos un día.');return;}
+  var hini=(document.getElementById('pr-hini')||{}).value||'';
+  var hfin=(document.getElementById('pr-hfin')||{}).value||'';
+  if((hini&&!hfin)||(!hini&&hfin)){alert('Define las dos horas, o deja ambas en "Todo el día".');return;}
+  var pr={id:e.id||('pr_'+Date.now()),prodId:e.prodId,tipo:e.tipo||'unidad',valor:valor,dias:e.dias.slice(),horaIni:hini,horaFin:hfin,on:true};
+  var i=promos.findIndex(function(x){return x.id===pr.id;});
+  if(i>=0){pr.on=promos[i].on!==false;promos[i]=pr;}else promos.push(pr);
+  var ob={};promos.forEach(function(x){ob[x.id]=x;});fbSet('promos',ob);
+  showToast('🏷️ Promoción guardada','#22c55e');
+  renderPromosModal();
+}
+function togglePromo(id){
+  var pr=promos.find(function(x){return x.id===id;});if(!pr)return;
+  pr.on=(pr.on===false);
+  var ob={};promos.forEach(function(x){ob[x.id]=x;});fbSet('promos',ob);
+  renderPromosModal();
+}
+function eliminarPromo(id){
+  if(!confirm('¿Eliminar esta promoción?'))return;
+  promos=promos.filter(function(x){return x.id!==id;});
+  var ob={};promos.forEach(function(x){ob[x.id]=x;});fbSet('promos',promos.length?ob:null);
+  renderPromosModal();
+}
+
 /* ═══ Saldo actual por medio de pago (misma fórmula de la pestaña Caja) ═══ */
 function saldoActualFP(fpId){
   var porFP=0;
@@ -8558,6 +8706,7 @@ function renderAdmin(){
     +userRows
     +'<button class="btn btn-sm btn-green btn-full" style="margin-top:12px" onclick="nuevoUsuario()">+ Agregar usuario</button>'
     +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)" onclick="abrirSesiones()">👥 Ver inicios de sesión</button>'
+    +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:#f5a62318;border:1px solid #f5a62344;color:#f5a623" onclick="abrirPromos()">🏷️ Promociones por día y hora'+(promos.filter(function(x){return x.on!==false;}).length?' ('+promos.filter(function(x){return x.on!==false;}).length+')':'')+'</button>'
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
