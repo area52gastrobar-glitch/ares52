@@ -8510,6 +8510,19 @@ function renderAdmin(){
   +'</div>';
 
   // Comprobantes de pago digital
+  // ═══ Card de Promociones ═══
+  var activasPr=promos.filter(function(x){return x.on!==false;});
+  var vigsPr=activasPr.filter(function(pr){return promoVigente(pr.prodId,pr.tipo||'unidad')===pr;});
+  var promoSection='<div class="card" style="grid-column:1/-1;border:1px solid #f5a62344">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
+      +'<div><div style="color:#f5a623;font-weight:800;font-size:15px">🏷️ Promociones</div>'
+      +'<div style="color:var(--muted);font-size:12px;margin-top:3px">'
+        +(activasPr.length?activasPr.length+' activa'+(activasPr.length!==1?'s':'')+(vigsPr.length?' · <b style="color:#22c55e">'+vigsPr.length+' vigente'+(vigsPr.length!==1?'s':'')+' AHORA</b>':''):'Precios especiales por días y horas. Ej: jueves y viernes cubetazo de Miller a $30.000.')
+      +'</div></div>'
+      +'<button onclick="abrirPromos()" style="background:#f5a623;color:#1a1a22;border:none;border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">🏷️ Gestionar</button>'
+    +'</div>'
+  +'</div>';
+
   var compSection='<div class="card" style="grid-column:1/-1;border:1px solid #38bdf844">'
     +'<div style="color:#38bdf8;font-weight:800;font-size:15px;margin-bottom:4px">📷 Comprobantes de pagos digitales</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Al cobrar con Bre-B, Nequi, Daviplata o tarjeta, se exige foto del comprobante del cliente. Se guarda amarrada a la venta y se ve en Caja → Conciliación. Las fotos se borran solas a los 45 días.</div>'
@@ -8706,10 +8719,10 @@ function renderAdmin(){
     +userRows
     +'<button class="btn btn-sm btn-green btn-full" style="margin-top:12px" onclick="nuevoUsuario()">+ Agregar usuario</button>'
     +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)" onclick="abrirSesiones()">👥 Ver inicios de sesión</button>'
-    +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:#f5a62318;border:1px solid #f5a62344;color:#f5a623" onclick="abrirPromos()">🏷️ Promociones por día y hora'+(promos.filter(function(x){return x.on!==false;}).length?' ('+promos.filter(function(x){return x.on!==false;}).length+')':'')+'</button>'
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
+    +promoSection
     +compSection
     +backupSection
     +ticketSection
