@@ -590,9 +590,10 @@ function iniciarSync(){
   fbOn('pedidos',function(v){
     pedidos=v||{};
     Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=Object.values(pedidos[k]||{});});
+    _sndChequearPedidos();
     renderSoloPedido();updateHeader();actualizarColorMesas();
   });
-  fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
+  fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('ingredientes',function(v){if(v){ingredientes=Object.values(v);ingredientes.forEach(function(i){if(i.stock==null||isNaN(parseInt(i.stock)))i.stock=0;else i.stock=parseInt(i.stock);});}if(tabActual==='inventario'||tabActual==='cocina')render();});
@@ -1059,6 +1060,14 @@ function renderMesas(){
       +z.emoji+' '+z.label+' <span style="font-size:10px;opacity:.6">('+ocp+')</span></button>';
   }).join('');
 
+  // Botón de venta rápida (con aviso si hay una a medias)
+  var vrKey='vr_'+(usuarioActivo?usuarioActivo.id:'');
+  var vrPend=(pedidos[vrKey]||[]).length;
+  var sndBtn='<button onclick="toggleSonidos()" title="Sonidos de mesas" style="background:'+(_sndOn?'#22c55e22':'var(--card)')+';border:1px solid '+(_sndOn?'#22c55e66':'var(--border)')+';color:'+(_sndOn?'#22c55e':'var(--muted)')+';border-radius:8px;padding:6px 12px;font-size:15px;cursor:pointer">'+(_sndOn?'🔔':'🔕')+'</button>';
+  var ventaRapidaBtn='<button onclick="ventaRapida()" style="width:100%;margin-bottom:10px;background:linear-gradient(135deg,#f5a62322,#8B5CF622);border:1px solid #f5a62366;border-radius:12px;padding:12px;font-weight:800;font-size:14px;color:#f5a623;cursor:pointer">⚡ Venta rápida — sin mesa, pagan de una'
+    +(vrPend?' <span style="background:#ef4444;color:#fff;border-radius:99px;padding:2px 9px;font-size:11px;margin-left:6px">'+vrPend+' pendiente</span>':'')
+    +'</button>';
+
   var formasZona=formasData[zonaKey(zonaActual)]||[];
   var formaNodes=formasZona.map(function(fo,fi){
     var editable=modoEdicion;
@@ -1158,13 +1167,13 @@ function renderMesas(){
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+cards+'</div>'
       +'</div>';
     }).join('');
-    return vistaToggle
+    return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vistaToggle
       +'<div class="'+(mesaActiva?'grid2':'grid1')+'">'
       +'<div>'+listaHtml+'</div>'
       +panelPedido+'</div>';
   }
 
-  return vistaToggle+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
+  return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vistaToggle+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
     +'<div class="flex">'+zonaBtns+'</div>'
     +ctrlBtns+'</div>'
     +(modoEdicion?'<div class="alert-box alert-gold mb12">💡 Arrastra para mover · Doble clic para editar nombre, forma o eliminar</div>':'')
@@ -1602,6 +1611,84 @@ function clickMesa(id){
 }
 function dblMesa(id){if(!modoEdicion)return;abrirEditorMesa(id);}
 function cerrarPanel(){mesaActiva=null;_busqPed='';render();}
+/* ═══ SONIDOS DEL BAR (por dispositivo): mesa nueva, mesa pagada, todo cobrado ═══ */
+var _sndOn=false;
+try{_sndOn=localStorage.getItem('_a52_sonidos')==='1';}catch(e){}
+var _sndCtx=null;
+var _sndPrevOcup=null;   // ids de mesas ocupadas en el snapshot anterior
+var _sndPrevVMax=null;   // ts de la venta más reciente conocida
+function _sndAudio(){
+  if(!_sndCtx){
+    try{_sndCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return null;}
+  }
+  if(_sndCtx&&_sndCtx.state==='suspended'){try{_sndCtx.resume();}catch(e){}}
+  return _sndCtx;
+}
+// seq: [[freq, duracionMs, delayMs], ...]
+function _beep(seq){
+  if(!_sndOn)return;
+  var ctx=_sndAudio();if(!ctx)return;
+  seq.forEach(function(n){
+    var t0=ctx.currentTime+(n[2]||0)/1000;
+    var osc=ctx.createOscillator();var g=ctx.createGain();
+    osc.type='sine';osc.frequency.value=n[0];
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(0.25,t0+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+n[1]/1000);
+    osc.connect(g);g.connect(ctx.destination);
+    osc.start(t0);osc.stop(t0+n[1]/1000+0.05);
+  });
+}
+function sonidoMesaNueva(){_beep([[660,150,0],[880,220,140]]);}                    // din-don ascendente
+function sonidoMesaPagada(){_beep([[880,90,0],[1175,90,100],[1568,180,200]]);}     // arpegio caja registradora
+function sonidoTodoCobrado(){_beep([[988,160,0],[784,160,180],[659,160,360],[523,420,540]]);} // melodía de cierre
+function toggleSonidos(){
+  _sndOn=!_sndOn;
+  try{localStorage.setItem('_a52_sonidos',_sndOn?'1':'0');}catch(e){}
+  if(_sndOn){_sndAudio();_beep([[880,120,0],[1175,160,120]]);}  // beep de prueba (desbloquea el audio con el toque)
+  showToast(_sndOn?'🔔 Sonidos ACTIVADOS en este equipo<br><span style="font-size:12px;opacity:.85">Mesa nueva · mesa pagada · todo cobrado</span>':'🔕 Sonidos desactivados en este equipo',_sndOn?'#22c55e':'#64748b');
+  render();
+}
+function _mesasOcupadasIds(){
+  return mesas.filter(function(m){return (pedidos[m.id]&&pedidos[m.id].length)||(pedidos[String(m.id)]&&pedidos[String(m.id)].length);}).map(function(m){return String(m.id);});
+}
+// Llamado desde el sync de pedidos: detecta mesas que pasan de vacías a ocupadas
+function _sndChequearPedidos(){
+  var ocup=_mesasOcupadasIds();
+  if(_sndPrevOcup!==null){
+    var nuevas=ocup.filter(function(id){return _sndPrevOcup.indexOf(id)<0;});
+    if(nuevas.length)sonidoMesaNueva();
+  }
+  _sndPrevOcup=ocup;
+}
+// Llamado desde el sync de ventas: detecta cobros nuevos y el momento "sin mesas por cobrar"
+function _sndChequearVentas(){
+  var max=ventas.reduce(function(a,v){return Math.max(a,v.ts||0);},0);
+  if(_sndPrevVMax!==null&&max>_sndPrevVMax){
+    var nuevas=ventas.filter(function(v){return v.ts>_sndPrevVMax&&!v.esPagoCredito;});
+    if(nuevas.length){
+      sonidoMesaPagada();
+      // Si tras el cobro no queda ninguna mesa ocupada: melodía de "todo cobrado"
+      setTimeout(function(){
+        if(_mesasOcupadasIds().length===0)sonidoTodoCobrado();
+      },700);
+    }
+  }
+  _sndPrevVMax=max;
+}
+
+/* ═══ Venta rápida: cliente sin mesa que paga de una (barra / para llevar) ═══ */
+function ventaRapida(){
+  if(!usuarioActivo)return;
+  var vid='vr_'+usuarioActivo.id;
+  mesaActiva={id:vid,num:'',nombre:'⚡ Venta rápida',zona:zonaActual,rapida:true};
+  catFiltroPed='Todos';_busqPed='';_pedSubAbierta={};
+  render();
+  setTimeout(function(){
+    var pp=document.getElementById('panel-pedido');
+    if(pp)pp.scrollIntoView({behavior:'smooth',block:'start'});
+  },150);
+}
 
 function abrirTrasladoMesa(){
   if(!mesaActiva)return;
@@ -6401,7 +6488,14 @@ function histTodasVentas(){
 function renderCocina(){
   // Collect all pending comida items across all mesas
   var pendientes=[];
-  mesas.forEach(function(m){
+  var _mesasCocina=mesas.slice();
+  Object.keys(pedidos).forEach(function(k){
+    if(String(k).indexOf('vr_')===0&&(pedidos[k]||[]).length){
+      var u=usuarios.find(function(x){return 'vr_'+x.id===k;});
+      _mesasCocina.push({id:k,num:'',nombre:'⚡ Rápida'+(u?' · '+u.nombre:''),zona:''});
+    }
+  });
+  _mesasCocina.forEach(function(m){
     var rawP=pedidos[m.id]||pedidos[String(m.id)]||[];
     var ped=Array.isArray(rawP)?rawP:Object.values(rawP);
     ped.forEach(function(it,idx){
