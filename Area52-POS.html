@@ -5646,7 +5646,10 @@ function renderCaja(){
           +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(p.ts)+(p.tipo==='dinero'&&f?' · entró a '+f.emoji+' '+f.label:'')+((p.devuelto||0)>0?' · devuelto '+fmt(p.devuelto):'')+'</div></div>'
           +'<span style="color:#f5a623;font-weight:900;font-size:14px;white-space:nowrap">'+fmt(pend)+'</span>'
         +'</div>'
-        +'<button onclick="abrirDevolucionPrestamo(\''+p.id+'\')" style="width:100%;margin-top:6px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💸 Devolver</button>'
+        +'<div style="display:flex;gap:6px;margin-top:6px">'
+          +'<button onclick="abrirDevolucionPrestamo(\''+p.id+'\')" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💸 Devolver</button>'
+          +'<button onclick="abrirEditarPrestamo(\''+p.id+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">✏️</button>'
+        +'</div>'
       +'</div>';
     }).join('')
     +(pendientesPS.length===0?'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin préstamos pendientes</div>':'')
@@ -6911,9 +6914,10 @@ function abrirDevolucionPrestamo(pid){
   if(!p)return;
   var pend=p.monto-(p.devuelto||0);
   var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+' (disp: '+fmt(saldoActualFP(f.id))+')</option>';}).join('');
-  var dev=(p.devoluciones||[]).map(function(d){
+  var dev=(p.devoluciones||[]).map(function(d,di){
     var f=FPAGO.find(function(x){return x.id===d.fp;});
-    return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:2px 0"><span>'+(f?f.emoji+' '+f.label:d.fp)+' · '+fmtFechaCorta(d.ts)+'</span><span style="font-weight:700">'+fmt(d.monto)+'</span></div>';
+    return'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:2px 0;gap:6px"><span style="flex:1">'+(f?f.emoji+' '+f.label:d.fp)+' · '+fmtFechaCorta(d.ts)+'</span><span style="font-weight:700">'+fmt(d.monto)+'</span>'
+      +'<button onclick="eliminarDevolucionPrestamo(\''+p.id+'\','+di+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:5px;padding:1px 7px;font-size:10px;cursor:pointer">✕</button></div>';
   }).join('');
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💸 Devolver préstamo</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-bottom:10px">'+esc(p.socio)+' · '+esc(p.concepto)+'<br>Prestó '+fmt(p.monto)+' · pendiente <b style="color:#f5a623">'+fmt(pend)+'</b></div>'
@@ -6944,6 +6948,85 @@ function confirmarDevolucionPrestamo(pid){
   closeModal1();
   showToast('💸 Devolución registrada<br><span style="font-size:12px;opacity:.85">'+esc(p.socio)+' · '+fmt(monto)+' desde '+(f?f.emoji+' '+f.label:fp)+(p.devuelto>=p.monto?' · ✓ Saldado':'')+'</span>','#22c55e');
   render();
+}
+
+/* ═══ Corregir / eliminar préstamos de socios ═══ */
+function abrirEditarPrestamo(pid){
+  var p=prestamosSocios.find(function(x){return x.id===pid;});
+  if(!p)return;
+  window._peSocio=p.socio;
+  var socioBtn=function(n){var sel=window._peSocio===n;
+    return'<button onclick="window._peSocio=\''+n+'\';document.getElementById(\'pe-socio-c\').style.opacity=\''+'\'+(n===\'CARLOS\'?1:.99);abrirEditarPrestamoRe(\''+pid+'\')" style="flex:1;background:'+(sel?'var(--accent)':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:10px;padding:10px 0;font-weight:800;font-size:13px;cursor:pointer">'+n+'</button>';};
+  var f=FPAGO.find(function(x){return x.id===p.fp;});
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">✏️ Corregir préstamo</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">'+(p.tipo==='compra'?'🛒 Compra':'💵 Dinero'+(f?' → '+f.emoji+' '+f.label:''))+' · registrado '+fmtFechaCorta(p.ts)+((p.devuelto||0)>0?' · ya devuelto '+fmt(p.devuelto):'')+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Quién prestó?</div>'
+    +'<div id="pe-socio-c" style="display:flex;gap:8px;margin-bottom:10px">'+socioBtn('CARLOS')+socioBtn('JAVIER')+'</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto del préstamo</div>'
+    +'<input class="inp money" id="pe-monto" type="text" inputmode="numeric" value="'+moneyFmt(p.monto)+'"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto</div>'
+    +'<input class="inp" id="pe-concepto" value="'+esc(p.concepto||'')+'"/></div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarEditarPrestamo(\''+pid+'\')">💾 Guardar corrección</button>'
+    +'<button class="btn btn-full" onclick="eliminarPrestamo(\''+pid+'\')" style="background:#ef444418;border:1px solid #ef444444;color:#ef4444;margin-top:8px">🗑️ Eliminar préstamo (revierte la caja)</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function abrirEditarPrestamoRe(pid){abrirEditarPrestamo(pid);}
+function guardarEditarPrestamo(pid){
+  var p=prestamosSocios.find(function(x){return x.id===pid;});
+  if(!p)return;
+  var monto=moneyVal('pe-monto')||0;
+  var concepto=((document.getElementById('pe-concepto')||{}).value||'').trim();
+  if(monto<=0){alert('Escribe el monto.');return;}
+  if(monto<(p.devuelto||0)){alert('El monto no puede ser menor que lo ya devuelto ('+fmt(p.devuelto||0)+'). Elimina primero las devoluciones si toca corregirlas.');return;}
+  if(!concepto){alert('Escribe el concepto.');return;}
+  // Si el préstamo fue de DINERO y cambió el monto: ajustar la caja por la diferencia
+  if(p.tipo==='dinero'&&monto!==p.monto){
+    var dif=monto-p.monto;
+    cajaHoy['ini_'+(p.fp||'efectivo')]=(cajaHoy['ini_'+(p.fp||'efectivo')]||0)+dif;
+    fbSet('cajaHoy',cajaHoy);
+  }
+  p.monto=monto;
+  p.concepto=concepto;
+  p.socio=window._peSocio||p.socio;
+  var ob={};prestamosSocios.forEach(function(x){ob[x.id]=x;});fbSet('prestamosSocios',ob);
+  closeModal1();
+  showToast('✏️ Préstamo corregido<br><span style="font-size:12px;opacity:.85">'+esc(p.socio)+' · '+fmt(p.monto)+'</span>','#38bdf8');
+  render();
+}
+function eliminarPrestamo(pid){
+  var p=prestamosSocios.find(function(x){return x.id===pid;});
+  if(!p)return;
+  var msj='¿Eliminar este préstamo de '+p.socio+' por '+fmt(p.monto).replace(/\u00A0/g,' ')+'?';
+  if(p.tipo==='dinero')msj+='\n• El dinero que entró a la caja se retira del saldo.';
+  if((p.devuelto||0)>0)msj+='\n• Las devoluciones hechas ('+fmt(p.devuelto).replace(/\u00A0/g,' ')+') vuelven a la caja.';
+  if(!confirm(msj))return;
+  // Revertir: el ingreso del préstamo sale de la caja
+  if(p.tipo==='dinero'){
+    cajaHoy['ini_'+(p.fp||'efectivo')]=(cajaHoy['ini_'+(p.fp||'efectivo')]||0)-p.monto;
+  }
+  // Revertir devoluciones: ese dinero regresa al medio del que salió
+  (p.devoluciones||[]).forEach(function(d){
+    cajaHoy['ini_'+(d.fp||'efectivo')]=(cajaHoy['ini_'+(d.fp||'efectivo')]||0)+(d.monto||0);
+  });
+  fbSet('cajaHoy',cajaHoy);
+  prestamosSocios=prestamosSocios.filter(function(x){return x.id!==pid;});
+  var ob={};prestamosSocios.forEach(function(x){ob[x.id]=x;});fbSet('prestamosSocios',prestamosSocios.length?ob:null);
+  closeModal1();
+  showToast('🗑️ Préstamo eliminado · caja revertida','#ef4444');
+  render();
+}
+function eliminarDevolucionPrestamo(pid,idx){
+  var p=prestamosSocios.find(function(x){return x.id===pid;});
+  if(!p||!p.devoluciones||!p.devoluciones[idx])return;
+  var d=p.devoluciones[idx];
+  if(!confirm('¿Eliminar esta devolución de '+fmt(d.monto).replace(/\u00A0/g,' ')+'? El dinero vuelve a la caja y el préstamo vuelve a deber ese monto.'))return;
+  cajaHoy['ini_'+(d.fp||'efectivo')]=(cajaHoy['ini_'+(d.fp||'efectivo')]||0)+(d.monto||0);
+  fbSet('cajaHoy',cajaHoy);
+  p.devuelto=Math.max(0,(p.devuelto||0)-(d.monto||0));
+  p.devoluciones.splice(idx,1);
+  var ob={};prestamosSocios.forEach(function(x){ob[x.id]=x;});fbSet('prestamosSocios',ob);
+  showToast('↩️ Devolución eliminada · dinero de vuelta en caja','#f5a623');
+  abrirDevolucionPrestamo(pid);
 }
 
 function abrirTrasladoTarjeta(){
