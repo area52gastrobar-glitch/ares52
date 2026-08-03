@@ -5708,6 +5708,14 @@ function renderCaja(){
       +'</div>';
     }).join('')
     +(pendientesPS.length===0?'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin préstamos pendientes</div>':'')
+    +(function(){
+      // Botón de pago global por socio (cuando tiene algo pendiente)
+      var porSocio={};
+      pendientesPS.forEach(function(p){porSocio[p.socio]=(porSocio[p.socio]||0)+(p.monto-(p.devuelto||0));});
+      return Object.keys(porSocio).map(function(so){
+        return'<button onclick="abrirDevolucionTotal(\''+esc(so)+'\')" style="width:100%;margin-top:6px;background:#22c55e;color:#fff;border:none;border-radius:9px;padding:10px;font-weight:800;font-size:13px;cursor:pointer">💸 Devolver TODO a '+esc(so)+' · '+fmt(porSocio[so])+'</button>';
+      }).join('');
+    })()
     +'<button onclick="abrirPrestamoSocio()" style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">+ Registrar préstamo de socio</button>'
     +(saldadosPS.length?'<button data-act="toggle-sec" data-sec="prestamosHist" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;text-align:left">'+(_secOpen.prestamosHist?'▼':'▶')+' Saldados ('+saldadosPS.length+')</button>'
       +(_secOpen.prestamosHist?saldadosPS.map(function(p){
@@ -7002,6 +7010,58 @@ function confirmarDevolucionPrestamo(pid){
   var f=FPAGO.find(function(x){return x.id===fp;});
   closeModal1();
   showToast('💸 Devolución registrada<br><span style="font-size:12px;opacity:.85">'+esc(p.socio)+' · '+fmt(monto)+' desde '+(f?f.emoji+' '+f.label:fp)+(p.devuelto>=p.monto?' · ✓ Saldado':'')+'</span>','#22c55e');
+  render();
+}
+
+/* ═══ Devolver TODO lo pendiente a un socio de una sola vez ═══ */
+function abrirDevolucionTotal(socio){
+  var pend=prestamosSocios.filter(function(p){return p.socio===socio&&(p.monto-(p.devuelto||0))>0;}).sort(function(a,b){return a.ts-b.ts;});
+  if(!pend.length)return;
+  var total=pend.reduce(function(a,p){return a+(p.monto-(p.devuelto||0));},0);
+  var fpOpts=FPAGO.map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+' (disp: '+fmt(saldoActualFP(f.id))+')</option>';}).join('');
+  var filas=pend.map(function(p){
+    return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0;border-bottom:1px solid var(--border)"><span>'+(p.tipo==='compra'?'🛒':'💵')+' '+esc(p.concepto||'')+' <span style="font-size:9px">'+fmtFechaCorta(p.ts)+'</span></span><span style="font-weight:700">'+fmt(p.monto-(p.devuelto||0))+'</span></div>';
+  }).join('');
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💸 Devolver todo a '+esc(socio)+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">'+pend.length+' préstamo'+(pend.length!==1?'s':'')+' pendiente'+(pend.length!==1?'s':'')+':</div>'
+    +'<div style="background:var(--bg);border-radius:9px;padding:8px 11px;margin-bottom:8px">'+filas
+      +'<div style="display:flex;justify-content:space-between;font-size:13px;padding-top:6px"><span style="font-weight:800">TOTAL</span><span style="font-weight:900;color:#f5a623">'+fmt(total)+'</span></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto a devolver (puedes bajar el valor: se abona del préstamo más viejo al más nuevo)</div>'
+    +'<input class="inp money" id="dt-monto" type="text" inputmode="numeric" value="'+moneyFmt(total)+'"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿De qué medio sale?</div>'
+    +'<select class="inp" id="dt-fp">'+fpOpts+'</select></div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarDevolucionTotal(\''+esc(socio)+'\')">💸 Devolver de una sola vez</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function confirmarDevolucionTotal(socio){
+  var pend=prestamosSocios.filter(function(p){return p.socio===socio&&(p.monto-(p.devuelto||0))>0;}).sort(function(a,b){return a.ts-b.ts;});
+  if(!pend.length)return;
+  var totalPend=pend.reduce(function(a,p){return a+(p.monto-(p.devuelto||0));},0);
+  var monto=moneyVal('dt-monto')||0;
+  var fp=(document.getElementById('dt-fp')||{}).value||'efectivo';
+  if(monto<=0){alert('Escribe el monto.');return;}
+  if(monto>totalPend){alert('No puedes devolver más de lo pendiente ('+fmt(totalPend).replace(/\u00A0/g,' ')+').');return;}
+  var disp=saldoActualFP(fp);
+  if(monto>disp){alert('Saldo insuficiente en ese medio (disponible: '+fmt(disp).replace(/\u00A0/g,' ')+').');return;}
+  // Repartir del préstamo más viejo al más nuevo
+  var resta=monto;var cubiertos=0;
+  pend.forEach(function(p){
+    if(resta<=0)return;
+    var deuda=p.monto-(p.devuelto||0);
+    var abono=Math.min(deuda,resta);
+    p.devuelto=(p.devuelto||0)+abono;
+    p.devoluciones=p.devoluciones||[];
+    p.devoluciones.push({ts:Date.now(),monto:abono,fp:fp,uidNombre:usuarioActivo.nombre,nota:'Pago global'});
+    resta-=abono;
+    if(p.devuelto>=p.monto)cubiertos++;
+  });
+  cajaHoy['ini_'+fp]=(cajaHoy['ini_'+fp]||0)-monto;
+  fbSet('cajaHoy',cajaHoy);
+  var ob={};prestamosSocios.forEach(function(x){ob[x.id]=x;});fbSet('prestamosSocios',ob);
+  var f=FPAGO.find(function(x){return x.id===fp;});
+  closeModal1();
+  showToast('💸 '+fmt(monto)+' devueltos a '+esc(socio)+'<br><span style="font-size:12px;opacity:.85">'+(monto>=totalPend?'✓ Todo saldado ('+pend.length+' préstamo'+(pend.length!==1?'s':'')+')':cubiertos+' saldado'+(cubiertos!==1?'s':'')+' · queda pendiente '+fmt(totalPend-monto))+' · desde '+(f?f.emoji+' '+f.label:fp)+'</span>','#22c55e');
   render();
 }
 
