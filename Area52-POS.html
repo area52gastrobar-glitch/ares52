@@ -427,6 +427,13 @@ var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en 
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
+var invCfg={soloAdmin:true};  // 🔐 quién puede ajustar cantidades del inventario
+function puedeAjustarInv(){
+  if(!usuarioActivo)return false;
+  if(usuarioActivo.rol==='admin')return true;
+  if(usuarioActivo.rol==='subadmin')return invCfg.soloAdmin===false;
+  return false;
+}
 var promos=[];  // promociones por día/hora [{id,prodId,tipo:'unidad'|'cubeta',valor,dias:[0-6],horaIni:'HH:MM',horaFin:'HH:MM',on}]
 var prestamosSocios=[];  // préstamos de socios al negocio [{id,ts,socio,tipo:'dinero'|'compra',monto,fp,concepto,devuelto,devoluciones[],uid,uidNombre}]
 var consumoEmpleados=[];  // [{id,ts,empId,empNombre,prodNombre,cantidad,stockDetalle,uid,uidNombre}] consumo interno del personal (sin valor, solo inventario)
@@ -674,6 +681,10 @@ function iniciarSync(){
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
     consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
+  fbOn('invCfg',function(v){
+    if(v)invCfg=v;
+    if(tabActual==='inventario'||tabActual==='admin')render();
   });
   fbOn('promos',function(v){
     promos=v?(Array.isArray(v)?v:Object.values(v)):[];
@@ -2081,6 +2092,14 @@ function logKardex(tipo,id,nombre,delta,motivo,saldo){
 var _kardexCache=[];var _kardexFiltro='';
 /* ═══════════ CONSUMO DE PERSONAL (sin valor: solo descuenta inventario) ═══════════ */
 /* ═══ Disponibilidad de productos sin control de cantidad ═══ */
+function toggleInvLock(){
+  invCfg.soloAdmin=(invCfg.soloAdmin===false);
+  fbSet('invCfg',invCfg);
+  showToast(invCfg.soloAdmin!==false
+    ?'🔒 Inventario BLOQUEADO<br><span style="font-size:12px;opacity:.85">Solo tú (admin) puedes ajustar cantidades</span>'
+    :'🔓 Inventario abierto para admin y subadmin','#ef4444');
+  render();
+}
 function toggleDisponible(pid){
   var p=menu.find(function(m){return m.id===pid;});
   if(!p)return;
@@ -2105,7 +2124,7 @@ function renderConsumoEmpModal(){
   var prodBtns=matches.map(function(p){
     return'<button onclick="elegirProdConsumoEmp('+p.id+')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
       +'<span style="font-size:13px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+'</span>'
-      +'<span style="color:'+((parseInt(p.stock)||0)>0?'var(--muted)':'#ef4444')+';font-size:11px;font-weight:700">stock: '+(parseInt(p.stock)||0)+'</span>'
+      +'<span style="color:'+(p.sinStock?(p.disponible!==false?'#22c55e':'#ef4444'):((parseInt(p.stock)||0)>0?'var(--muted)':'#ef4444'))+';font-size:11px;font-weight:700">'+(p.sinStock?(p.disponible!==false?'✅ disponible':'🚫 agotado'):'stock: '+(parseInt(p.stock)||0))+'</span>'
     +'</button>';
   }).join('');
   // Resumen del mes por empleado
@@ -2149,7 +2168,7 @@ function elegirProdConsumoEmp(pid){
   modal2('<div style="text-align:center;margin-bottom:12px">'
       +'<div style="font-size:26px">'+p.emoji+'</div>'
       +'<div style="font-weight:800;font-size:15px">'+esc(p.nombre)+'</div>'
-      +'<div style="color:var(--muted);font-size:11px;margin-top:2px">Stock: '+(parseInt(p.stock)||0)+' · ¿cuántas consumió?</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+(p.sinStock?'Sin control de cantidad':'Stock: '+(parseInt(p.stock)||0))+' · ¿cuántas consumió?</div>'
     +'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'+btns+'</div>'
     +'<div style="display:flex;gap:8px">'
@@ -2163,7 +2182,7 @@ function confirmarConsumoEmp(pid,qty){
   var p=menu.find(function(m){return m.id===pid;});if(!p)return;
   var emp=empleados.find(function(e){return e.id===window._ceEmp;});
   if(!emp){alert('👆 Elige quién consume.');return;}
-  if(!ventaSinStock&&(parseInt(p.stock)||0)<qty){
+  if(!p.sinStock&&!ventaSinStock&&(parseInt(p.stock)||0)<qty){
     if(!confirm('Stock insuficiente ('+(parseInt(p.stock)||0)+' und). ¿Registrar de todas formas? El stock quedará en negativo.'))return;
   }
   // Detalle para poder devolver si se elimina el registro
@@ -3403,13 +3422,13 @@ function verIngresosInv(){
 
 /* ═══════════════ INVENTARIO ═══════════════ */
 function renderInventario(){
-  var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
+  var esAdmin=puedeAjustarInv();  // 🔐 respeta el candado de inventario
   // Edición directa del inventario (precios, ±, borrar) SOLO admin. Los demás solo usan "➕ Ingresar inventario".
   var esCajero=esAdmin;
   var invTab=_invTab||'carta';
 
   // ── Alerts ────────────────────────────────────────────────────────────────
-  var bajos=menu.filter(function(m){return m.stock<=5;});
+  var bajos=menu.filter(function(m){return !m.sinStock&&m.stock<=5;});
   var bajosIng=ingredientes.filter(function(i){return i.stock<=5;});
   var totalBajos=bajos.length+bajosIng.length;
   var alertHtml=totalBajos?'<div class="alert-box alert-red mb12" style="padding:0;overflow:hidden">'
@@ -3462,7 +3481,9 @@ function renderInventario(){
           +(esCajero
             ?'<button data-act="ing-minus" data-iid="'+ing.id+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">−</button>'
             :'')
-          +'<button data-act="ing-edit-stock" data-iid="'+ing.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(ing.stock<=5?'#ef4444':ing.stock<=20?'#f5a623':'var(--text)')+';background:none;border:none;cursor:'+(esCajero?'pointer':'default')+';padding:0">'+ing.stock+'</button>'
+          +(esCajero
+            ?'<button data-act="ing-edit-stock" data-iid="'+ing.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(ing.stock<=5?'#ef4444':ing.stock<=20?'#f5a623':'var(--text)')+';background:none;border:none;cursor:pointer;padding:0">'+ing.stock+'</button>'
+            :'<span style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(ing.stock<=5?'#ef4444':ing.stock<=20?'#f5a623':'var(--text)')+'">'+ing.stock+'</span>')
           +(esCajero
             ?'<button data-act="ing-plus" data-iid="'+ing.id+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">+</button>'
             :'')
@@ -3502,7 +3523,9 @@ function renderInventario(){
         +(canEdit
           ?'<button data-act="inv-minus" data-pid="'+p.id+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">−</button>'
           :'')
-        +'<button data-act="inv-edit-stock" data-pid="'+p.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';font-weight:'+(p.stock<0?'900':'800')+';background:'+(p.stock<0?'#ef444415':'none')+';border:none;cursor:'+(canEdit?'pointer':'default')+';padding:2px 6px;border-radius:4px">'+(canEdit?'<u>':'')+p.stock+(canEdit?'</u>':'')+'</button>'
+        +(canEdit
+          ?'<button data-act="inv-edit-stock" data-pid="'+p.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';font-weight:'+(p.stock<0?'900':'800')+';background:'+(p.stock<0?'#ef444415':'none')+';border:none;cursor:pointer;padding:2px 6px;border-radius:4px"><u>'+p.stock+'</u></button>'
+          :'<span style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';padding:2px 6px">'+p.stock+'</span>')
         +(canEdit
           ?'<button data-act="inv-plus" data-pid="'+p.id+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">+</button>'
           :'')
@@ -3520,14 +3543,14 @@ function renderInventario(){
     } else {
       rows=subs.map(function(s){
         var lista=prods.filter(function(m){return (m.subcat||'')===s;});
-        var tot=lista.reduce(function(a,p){return a+(parseInt(p.stock)||0);},0);
+        var tot=lista.reduce(function(a,p){return a+(p.sinStock?0:(parseInt(p.stock)||0));},0);
         return (s?'<div style="display:flex;justify-content:space-between;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin:8px 0 2px;padding-top:6px;border-top:1px solid var(--border)"><span>'+esc(s)+'</span><span>'+lista.length+' · '+tot+' und</span></div>':'')
           +lista.map(_invRow).join('');
       }).join('');
     }
     var catKey='inv_'+cat;
     var abierto=(catKey in _mesesOpen)?_mesesOpen[catKey]:false;  // cerradas por defecto
-    var totalCat=prods.reduce(function(a,p){return a+(parseInt(p.stock)||0);},0);
+    var totalCat=prods.reduce(function(a,p){return a+(p.sinStock?0:(parseInt(p.stock)||0));},0);
     return'<div class="card mb8">'
       +'<button data-act="toggle-mes" data-mes="'+catKey+'" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;cursor:pointer;padding:0">'
         +'<span style="color:var(--accent);font-weight:800;font-size:13px;letter-spacing:1px;text-transform:uppercase">'+(abierto?'▼':'▶')+' '+cat+'</span>'
@@ -4579,7 +4602,7 @@ function renderCombos(){
       +cats.map(function(cat){
         var prods=menu.filter(function(m){return m.cat===cat;});
         return'<optgroup label="'+esc(cat)+'">'+prods.map(function(p){
-          return'<option value="prod:'+p.id+'">'+p.emoji+' '+esc(p.nombre)+' (stock: '+p.stock+')</option>';
+          return'<option value="prod:'+p.id+'">'+p.emoji+' '+esc(p.nombre)+(p.sinStock?'':' (stock: '+p.stock+')')+'</option>';
         }).join('')+'</optgroup>';
       }).join('')
       +(ingredientes.length?'<optgroup label="🧂 Ingredientes cocina">'+ingredientes.map(function(i){
@@ -7118,7 +7141,7 @@ function renderRappi(){
         return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left">'
           +'<div style="font-size:18px">'+p.emoji+'</div>'
           +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</div>'
-          +'<div style="font-size:10px;color:var(--muted)">Stock: '+(parseInt(p.stock)||0)+' · '+fmt(p.precio)+'</div>'
+          +'<div style="font-size:10px;color:var(--muted)">'+(p.sinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+(parseInt(p.stock)||0))+' · '+fmt(p.precio)+'</div>'
         +'</button>';
       }).join('')+'</div>';
     }
@@ -8625,6 +8648,15 @@ function renderAdmin(){
   +'</div>';
 
   // Comprobantes de pago digital
+  // ═══ Card candado de inventario ═══
+  var invLockSection='<div class="card mb12" style="grid-column:1/-1;border:1px solid #ef444444">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<div><div style="color:#ef4444;font-weight:800;font-size:15px">🔐 Ajustes de inventario</div>'
+      +'<div style="color:var(--muted);font-size:12px;margin-top:3px">Controla quién puede cambiar cantidades (+/−, editar stock, ingresos de mercancía). El consumo de personal y marcar productos agotados siguen abiertos porque quedan registrados.</div></div>'
+      +'<button onclick="toggleInvLock()" style="background:'+(invCfg.soloAdmin!==false?'#ef4444':'#f5a623')+';color:#fff;border:none;border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(invCfg.soloAdmin!==false?'🔒 SOLO ADMIN':'🔓 Admin y subadmin')+'</button>'
+    +'</div>'
+  +'</div>';
+
   // ═══ Card de Promociones ═══
   var activasPr=promos.filter(function(x){return x.on!==false;});
   var vigsPr=activasPr.filter(function(pr){return promoVigente(pr.prodId,pr.tipo||'unidad')===pr;});
@@ -8837,6 +8869,7 @@ function renderAdmin(){
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
+    +invLockSection
     +promoSection
     +compSection
     +backupSection
@@ -9291,6 +9324,7 @@ document.addEventListener('click',function(e){
   // Inventario cart product +/-/merc
   var ip=e.target.closest('[data-act="inv-plus"],[data-act="inv-minus"],[data-act="inv-merc"],[data-act="inv-edit-stock"]');
   if(ip){
+    if(!puedeAjustarInv()){alert('🔒 Los ajustes de inventario están bloqueados. Solo el administrador puede modificar cantidades.');return;}
     var act=ip.getAttribute('data-act');
     var pid=parseInt(ip.getAttribute('data-pid'));
     var p=menu.find(function(m){return m.id===pid;});
@@ -9303,6 +9337,7 @@ document.addEventListener('click',function(e){
   }
   // Ingredientes actions
   var ii2=e.target.closest('[data-act="ing-merc"],[data-act="ing-edit-stock"]');
+  if(ii2&&!puedeAjustarInv()){alert('🔒 Los ajustes de inventario están bloqueados. Solo el administrador puede modificar cantidades.');return;}
   if(ii2){
     var act2=ii2.getAttribute('data-act');
     var iid2=ii2.getAttribute('data-iid');
@@ -9312,6 +9347,7 @@ document.addEventListener('click',function(e){
   }
   // Ingredientes +/-/edit
   var ii=e.target.closest('[data-act="ing-plus"],[data-act="ing-minus"],[data-act="ing-edit"]');
+  if(ii&&!puedeAjustarInv()){alert('🔒 Los ajustes de inventario están bloqueados. Solo el administrador puede modificar cantidades.');return;}
   if(ii){
     var act2=ii.getAttribute('data-act');
     var iid=ii.getAttribute('data-iid');
