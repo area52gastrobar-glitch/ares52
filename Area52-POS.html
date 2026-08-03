@@ -1262,18 +1262,29 @@ function renderPanelPedido(){
   }).join('');
 
   function _cartaCard(p){
+    // Productos sin control de cantidad: solo importa si están disponibles
+    if(p.sinStock){
+      var dispo=p.disponible!==false;
+      var agoSS=!dispo;
+      var okNS=dispo,okCS=dispo;
+      return _cartaCardHTML(p,agoSS,okNS,okCS,true);
+    }
     var ago=!ventaSinStock&&p.stock<=0;
     var enUso=(ped.filter(function(it){return it.pid===p.id;})).reduce(function(a,it){return a+(it.cubeta?it.qty*5:it.qty);},0);
     // Si "vender sin stock" está activo, siempre se puede agregar
     var okN=ventaSinStock||(!ago&&(p.stock-enUso)>=1);
     var okC=ventaSinStock||(!ago&&(p.stock-enUso)>=5);
-    return'<div class="carta-item" style="opacity:'+(p.stock<=0&&!ventaSinStock?0.4:1)+'">'
+    return _cartaCardHTML(p,ago&&!ventaSinStock,okN,okC,false);
+  }
+  function _cartaCardHTML(p,mostrarAgotado,okN,okC,esSinStock){
+    return'<div class="carta-item" style="opacity:'+(mostrarAgotado?0.4:1)+'">'
       +'<div class="flex-between"><span style="font-size:18px">'+p.emoji+'</span>'
-      +(p.stock<=0&&!ventaSinStock?'<span class="tag" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;font-size:10px">AGOTADO</span>'
+      +(mostrarAgotado?'<span class="tag" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;font-size:10px">AGOTADO</span>'
+           :esSinStock?'<span class="tag" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;font-size:10px">✅</span>'
            :p.stock<=0&&ventaSinStock?'<span class="tag" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;font-size:10px">S/L</span>'
            :p.stock<=5?'<span class="tag" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;font-size:10px">↓'+p.stock+'</span>':'')+'</div>'
       +'<div style="color:var(--text);font-size:12px;font-weight:700;margin:3px 0 1px;line-height:1.2">'+esc(p.nombre)+'</div>'
-      +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">Stock: '+p.stock+' '+p.und+'</div>'
+      +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">'+(esSinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+p.stock+' '+p.und)+'</div>'
       +'<div style="display:flex;gap:4px">'
       +(function(){
         var prU=(p.variantes&&p.variantes.length)?null:promoVigente(p.id,'unidad');
@@ -2048,6 +2059,8 @@ function cambiarStock(tipo,id,delta,motivo){
   if(!delta)return;
   var col=(tipo==='p')?menu:ingredientes;
   var it=col.find(function(x){return String(x.id)===String(id);});
+  // Productos "sin control de cantidad" (solo disponible/agotado): no manejan stock
+  if(tipo==='p'&&it&&it.sinStock)return;
   if(it){var a=parseInt(it.stock);if(isNaN(a))a=0;it.stock=a+delta;}
   var d=getDb();
   if(d){
@@ -2067,6 +2080,17 @@ function logKardex(tipo,id,nombre,delta,motivo,saldo){
 // Visor del kardex: carga bajo demanda los últimos movimientos
 var _kardexCache=[];var _kardexFiltro='';
 /* ═══════════ CONSUMO DE PERSONAL (sin valor: solo descuenta inventario) ═══════════ */
+/* ═══ Disponibilidad de productos sin control de cantidad ═══ */
+function toggleDisponible(pid){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  p.disponible=(p.disponible===false);
+  var d=getDb();
+  if(d)d.ref('menu/'+p.id+'/disponible').set(p.disponible);
+  else fbSet('menu',menu);
+  showToast(p.disponible?'✅ '+esc(p.nombre)+' DISPONIBLE':'🚫 '+esc(p.nombre)+' marcado AGOTADO',p.disponible?'#22c55e':'#ef4444');
+  render();
+}
 function abrirConsumoEmpleados(){
   window._ceEmp=window._ceEmp||'';window._ceBusq='';
   renderConsumoEmpModal();
@@ -3470,7 +3494,11 @@ function renderInventario(){
         +'<div style="font-weight:700;font-size:13px">'+esc(p.nombre)+'</div>'
         +'<div style="color:var(--accent);font-size:11px">'+fmt(p.precio)+(p.esCerveza&&p.cubeta?' · Cubetazo: '+fmt(p.cubeta):'')+(p.esComida?' · 👨‍🍳':'')+'</div>'
       +'</div>'
-      +'<div style="display:flex;align-items:center;gap:6px">'
+      +(p.sinStock
+        ?'<div style="display:flex;align-items:center;gap:6px">'
+          +'<button onclick="toggleDisponible('+p.id+')" style="background:'+(p.disponible!==false?'#22c55e18':'#ef444418')+';color:'+(p.disponible!==false?'#22c55e':'#ef4444')+';border:1px solid '+(p.disponible!==false?'#22c55e33':'#ef444433')+';border-radius:7px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer">'+(p.disponible!==false?'✅ Disponible':'🚫 Agotado')+'</button>'
+        +'</div>'
+        :'<div style="display:flex;align-items:center;gap:6px">'
         +(canEdit
           ?'<button data-act="inv-minus" data-pid="'+p.id+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">−</button>'
           :'')
@@ -3479,7 +3507,7 @@ function renderInventario(){
           ?'<button data-act="inv-plus" data-pid="'+p.id+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">+</button>'
           :'')
         +(canEdit?'<button data-act="inv-merc" data-pid="'+p.id+'" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">📦 Llegó</button>':'')
-      +'</div>'
+      +'</div>')
       +'</div>';
   }
   var catSections=cats.map(function(cat){
@@ -3685,6 +3713,9 @@ function renderCarta(){
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-comida" '+(p.esComida?'checked':'')+'/> '
         +'👨‍🍳 Va a pantalla de cocina</label>'
+      +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
+        +'<input type="checkbox" id="f-sinstock" '+(p.sinStock?'checked':'')+'/> '
+        +'✨ Sin control de cantidad — solo Disponible / Agotado <span style="color:var(--muted);font-size:11px">(cócteles, preparados...)</span></label>'
       +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Personal $22.000 · Mediana $32.000)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: Personal)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
         +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:3px">🪣 Precio CUBETAZO ×5 (COP)</div>'
         +'<input class="inp money" id="f-cubeta" type="text" value="'+moneyFmt(p.cubeta||'')+'" placeholder="Ej: 20.000" inputmode="numeric"/>'
@@ -4469,6 +4500,7 @@ function guardarProd(){
   var _subSel=(document.getElementById('f-subcat-sel')||{}).value||'';
   var subcat=(_subSel==='__new__')?(((document.getElementById('f-subcat-new')||{}).value||'').trim()):_subSel;
   var stock=parseInt((document.getElementById('f-stock')||{}).value)||0;
+  var _sinStockF=!!((document.getElementById('f-sinstock')||{}).checked);
   var und=(document.getElementById('f-und')||{}).value||'und';
   var cerv=!!((document.getElementById('f-cerveza')||{}).checked);
   var esComida=!!((document.getElementById('f-comida')||{}).checked);
@@ -4489,10 +4521,10 @@ function guardarProd(){
   if(!cat){alert('Escribe la categoría.');return;}
   if(editandoProd==='nuevo'){
     var maxId=0;menu.forEach(function(m){if(m.id>maxId)maxId=m.id;});
-    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[]});
+    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[],sinStock:_sinStockF,disponible:true});
     _recetaTemp=[];
   } else {
-    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und});break;}}
+    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
   }
   editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();
 }
@@ -9046,7 +9078,7 @@ function imprimirPrecuenta(){
 /* ═══ Imprimir inventario actual (solo lo que queda, sin ceros) ═══ */
 function imprimirInventario(){
   // Solo productos/ingredientes con unidades restantes (stock > 0)
-  var conStock=menu.filter(function(p){return (parseInt(p.stock)||0)>0;});
+  var conStock=menu.filter(function(p){return !p.sinStock&&(parseInt(p.stock)||0)>0;});
   var ingsStock=ingredientes.filter(function(x){return (parseInt(x.stock)||0)>0;});
   if(!conStock.length&&!ingsStock.length){alert('No hay productos con unidades en inventario.');return;}
   // Agrupar por categoría
