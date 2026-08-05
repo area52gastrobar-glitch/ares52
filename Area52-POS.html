@@ -7964,13 +7964,28 @@ function abrirEditarEmpleado(empId){
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
     +'<input class="inp money" id="emp-pago" type="text" inputmode="numeric" value="'+moneyFmt(e.pagoDiario||'')+'"/></div>'
     +'<button class="btn btn-green btn-full" onclick="guardarEmpleado(\''+empId+'\')">Guardar cambios</button>'
-    +'<button class="btn btn-full" onclick="eliminarEmpleado(\''+empId+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;margin-top:8px">🗑️ Eliminar empleado</button>');
+    +'<button class="btn btn-full" onclick="eliminarEmpleado(\''+empId+'\')" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;margin-top:8px">🚫 Sacar de nómina (conserva historial)</button>'
+    +'<button class="btn btn-full" onclick="borrarEmpleadoDefinitivo(\''+empId+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;margin-top:8px">🗑️ Borrar definitivamente</button>');
 }
 function eliminarEmpleado(empId){
-  if(!confirm('¿Eliminar este empleado? Sus movimientos quedan en el historial.'))return;
-  var e=empleados.find(function(x){return x.id===empId;});
-  if(e)e.activo=false;
+  if(!confirm('¿Sacar a este empleado de la nómina? Deja de aparecer en las listas, pero su historial de pagos y consumos se conserva.'))return;
+  var e=empleados.find(function(x){return String(x.id)===String(empId);});
+  if(!e){alert('No encontré el empleado. Intenta de nuevo.');return;}
+  e.activo=false;
   var ob={};empleados.forEach(function(x){ob[x.id]=x;});fbSet('empleados',ob);
+  showToast('🚫 '+esc(e.nombre)+' fuera de nómina<br><span style="font-size:12px;opacity:.85">Su historial se conserva</span>','#f5a623');
+  closeModal1();render();
+}
+function borrarEmpleadoDefinitivo(empId){
+  var e=empleados.find(function(x){return String(x.id)===String(empId);});
+  if(!e){alert('No encontré el empleado.');return;}
+  var movs=movEmpleados.filter(function(m){return String(m.empId)===String(empId);}).length;
+  var consumos=consumoEmpleados.filter(function(c){return String(c.empId)===String(empId);}).length;
+  if(!confirm('🗑️ ¿BORRAR DEFINITIVAMENTE a '+e.nombre+'?\n\nEsto no se puede deshacer.'+((movs||consumos)?'\nSus '+movs+' movimiento(s) de nómina y '+consumos+' consumo(s) quedarán como registros sueltos.':'')))return;
+  empleados=empleados.filter(function(x){return String(x.id)!==String(empId);});
+  var ob={};empleados.forEach(function(x){ob[x.id]=x;});
+  fbSet('empleados',empleados.length?ob:null);
+  showToast('🗑️ '+esc(e.nombre)+' borrado definitivamente','#ef4444');
   closeModal1();render();
 }
 
@@ -7981,7 +7996,7 @@ function guardarEmpleado(empId){
   var variable=!!((document.getElementById('emp-variable')||{}).checked);
   if(!nombre){alert('Escribe el nombre.');return;}
   if(empId){
-    var e=empleados.find(function(x){return x.id===empId;});
+    var e=empleados.find(function(x){return String(x.id)===String(empId);});
     if(e){e.nombre=nombre;e.cargo=cargo;e.pagoDiario=pago;e.pagoVariable=variable;}
     var ob={};empleados.forEach(function(x){ob[x.id]=x;});fbSet('empleados',ob);
   } else {
