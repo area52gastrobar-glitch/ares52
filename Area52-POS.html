@@ -3353,6 +3353,7 @@ function borrarProveedor(id){
 }
 
 function abrirIngresoInventario(){
+  if(!puedeAjustarInv()){alert('🔒 Los ingresos de inventario están bloqueados. Solo el administrador puede modificar cantidades.');return;}
   if(!proveedores.length){
     alert('Primero crea al menos un proveedor. Pídele al administrador que agregue proveedores en 🏭 Proveedores.');
     return;
@@ -3381,6 +3382,7 @@ function abrirIngresoInventario(){
 }
 
 function guardarIngresoInventario(){
+  if(!puedeAjustarInv()){alert('🔒 Los ingresos de inventario están bloqueados. Solo el administrador puede modificar cantidades.');return;}
   var prodVal=(document.getElementById('ing-prod')||{}).value||'';
   var cant=parseInt((document.getElementById('ing-cant')||{}).value)||0;
   var provId=(document.getElementById('ing-prov')||{}).value||'';
@@ -3454,7 +3456,7 @@ function renderInventario(){
 
   // ── Tab pills ──────────────────────────────────────────────────────────────
   var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
-    +'<button onclick="abrirIngresoInventario()" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer">➕ Ingresar inventario</button>'
+    +(puedeAjustarInv()?'<button onclick="abrirIngresoInventario()" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer">➕ Ingresar inventario</button>':'')
     +(esAdmin?'<button onclick="abrirProveedores()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🏭 Proveedores</button>':'')
     +(esAdmin?'<button onclick="verIngresosInv()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Ingresos</button>':'')
     +(esAdmin?'<button onclick="abrirKardex()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📒 Kardex</button>':'')
@@ -3947,6 +3949,7 @@ function quitarDescuento(){
 }
 
 function abrirEditStockModal(id, esIng){
+  if(!puedeAjustarInv()){alert('🔒 Los ajustes de inventario están bloqueados. Solo el administrador puede modificar cantidades.');return;}
   var item=esIng?ingredientes.find(function(x){return x.id===id;}):menu.find(function(m){return m.id===parseInt(id);});
   if(!item)return;
   modal2('<div style="text-align:center;margin-bottom:16px">'
