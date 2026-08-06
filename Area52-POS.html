@@ -2103,6 +2103,14 @@ function logKardex(tipo,id,nombre,delta,motivo,saldo){
 // Visor del kardex: carga bajo demanda los últimos movimientos
 var _kardexCache=[];var _kardexFiltro='';
 /* ═══════════ CONSUMO DE PERSONAL (sin valor: solo descuenta inventario) ═══════════ */
+/* ═══ Valor de un consumo de empleado (para descuento de nómina) ═══ */
+function valorConsumo(c){
+  if(c.valorTotal)return c.valorTotal;
+  // Registros viejos sin valor guardado: usar el precio actual del producto
+  var p=menu.find(function(m){return String(m.id)===String(c.prodId);});
+  return p?(p.precio||0)*(c.cantidad||1):0;
+}
+
 /* ═══ Disponibilidad de productos sin control de cantidad ═══ */
 function toggleInvLock(){
   invCfg.soloAdmin=(invCfg.soloAdmin===false);
@@ -2141,13 +2149,14 @@ function renderConsumoEmpModal(){
   }).join('');
   // Resumen del mes por empleado
   var iniMes=new Date();iniMes.setDate(1);iniMes.setHours(0,0,0,0);
-  var mesPorEmp={};
+  var mesPorEmp={};var mesValorEmp={};
   consumoEmpleados.forEach(function(c){
     if(c.ts<iniMes.getTime())return;
     mesPorEmp[c.empNombre]=(mesPorEmp[c.empNombre]||0)+(c.cantidad||1);
+    mesValorEmp[c.empNombre]=(mesValorEmp[c.empNombre]||0)+valorConsumo(c);
   });
-  var chips=Object.keys(mesPorEmp).sort(function(a,b){return mesPorEmp[b]-mesPorEmp[a];}).map(function(n){
-    return'<span style="background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700">'+esc(n)+': <b style="color:var(--gold)">'+mesPorEmp[n]+'</b> und</span>';
+  var chips=Object.keys(mesPorEmp).sort(function(a,b){return (mesValorEmp[b]||0)-(mesValorEmp[a]||0);}).map(function(n){
+    return'<span style="background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700">'+esc(n)+': <b style="color:var(--gold)">'+mesPorEmp[n]+'</b> und · <b style="color:#f5a623">'+fmt(mesValorEmp[n]||0)+'</b></span>';
   }).join(' ');
   // Últimos registros
   var esAdm=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin');
@@ -2155,6 +2164,7 @@ function renderConsumoEmpModal(){
     return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1;min-width:0"><span style="font-weight:700">'+esc(c.empNombre||'?')+'</span> · '+(c.cantidad||1)+'× '+esc(c.prodNombre||'?')
         +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(c.ts)+(c.uidNombre?' · anotó '+esc(c.uidNombre):'')+'</div></div>'
+      +'<span style="color:#f5a623;font-weight:800;font-size:12px;white-space:nowrap">'+fmt(valorConsumo(c))+'</span>'
       +(esAdm?'<button onclick="eliminarConsumoEmp(\''+c.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer">✕</button>':'')
     +'</div>';
   }).join('');
@@ -2208,13 +2218,13 @@ function confirmarConsumoEmp(pid,qty){
   stockDetalle.forEach(function(d){
     cambiarStock(d.t,d.id,-d.cant,'🥤 Consumo empleado: '+emp.nombre);
   });
-  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:p.nombre,cantidad:qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:p.nombre,cantidad:qty,valorUnit:p.precio||0,valorTotal:(p.precio||0)*qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   consumoEmpleados.push(reg);
   var r=ref('consumoEmpleados');
   if(r)r.push(reg);else fbSet('consumoEmpleados',consumoEmpleados);
   closeModal2();
   window._ceBusq='';
-  showToast('🥤 '+qty+'× '+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">Descontado del inventario · sin valor en caja</span>','#38bdf8');
+  showToast('🥤 '+qty+'× '+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">💰 Se le descontará '+fmt((p.precio||0)*qty)+' · fuera de caja</span>','#38bdf8');
   renderConsumoEmpModal();
 }
 function eliminarConsumoEmp(cid){
@@ -7967,10 +7977,17 @@ function renderEmpleados(){
       return'<div data-act="emp-vermov" data-id="'+m.id+'" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#9fe8b0;padding:5px 0;cursor:pointer;border-bottom:1px solid #22c55e22"><span>✅ Pagado · '+fmtTime(m.ts)+' <span style="opacity:.5">ⓘ</span></span><span style="color:#22c55e;font-weight:700;white-space:nowrap">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
     }).join('');
 
+    // 🥤 Consumos del mes (para verificar el descuento al pagar)
+    var _iniMesC=new Date();_iniMesC.setDate(1);_iniMesC.setHours(0,0,0,0);
+    var _consMes=consumoEmpleados.filter(function(c){return String(c.empId)===String(e.id)&&c.ts>=_iniMesC.getTime();});
+    var _consMesUnd=_consMes.reduce(function(a,c){return a+(c.cantidad||1);},0);
+    var _consMesVal=_consMes.reduce(function(a,c){return a+valorConsumo(c);},0);
     return'<div class="card" style="margin-bottom:10px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
         +'<div><div style="font-weight:800;font-size:15px">👷 '+esc(e.nombre)+'</div>'
-        +'<div style="color:var(--muted);font-size:12px">'+esc(e.cargo||'Sin cargo')+'</div></div>'
+        +'<div style="color:var(--muted);font-size:12px">'+esc(e.cargo||'Sin cargo')+'</div>'
+        +(_consMesUnd>0?'<div style="color:#f5a623;font-size:11px;font-weight:800;margin-top:3px">🥤 Consumos del mes: '+fmt(_consMesVal)+' <span style="color:var(--muted);font-weight:600">('+_consMesUnd+' und — a descontar)</span></div>':'')
+        +'</div>'
         +'<button data-act="emp-edit" data-emp="'+e.id+'" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer">⚙️ Pago: '+fmt(diario)+'/día</button>'
       +'</div>'
       // Días trabajados
