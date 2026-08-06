@@ -426,6 +426,7 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var pelotasMesa={};  // 🐸 pelotas de bolirrana prestadas por mesa {mesaId:{qty,ts,uidNombre}}
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
 var invCfg={soloAdmin:true};  // 🔐 quién puede ajustar cantidades del inventario
 function puedeAjustarInv(){
@@ -681,6 +682,10 @@ function iniciarSync(){
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
     consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
+  fbOn('pelotasMesa',function(v){
+    pelotasMesa=v||{};
+    if(tabActual==='mesas')render();
   });
   fbOn('invCfg',function(v){
     if(v)invCfg=v;
@@ -1146,6 +1151,7 @@ function renderMesas(){
       +(m.nombre||('Mesa '+m.num))+'</div>'
       +'<div style="color:var(--muted);font-size:10px">👤'+m.cap+'</div>'
       +(its>0?'<div style="color:'+c+';font-size:10px;font-weight:700">'+its+' itm</div>':'')
+      +(pelotasMesa[m.id]?'<div style="position:absolute;top:-7px;right:-7px;background:#22c55e;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:900;box-shadow:0 0 6px #22c55e88">🐸'+pelotasMesa[m.id].qty+'</div>':'')
       +'</div>';
   }).join('');
 
@@ -1205,7 +1211,7 @@ function renderMesas(){
         var activa=mesaActiva&&mesaActiva.id===m.id;
         return'<button onclick="clickMesa('+m.id+')" style="text-align:left;background:'+c+'14;border:2px solid '+(activa?c:c+'44')+';border-radius:11px;padding:10px 12px;cursor:pointer;position:relative">'
           +'<div style="font-weight:800;font-size:14px;color:#fff">'+esc(m.nombre||('Mesa '+m.num))+'</div>'
-          +'<div style="color:var(--muted);font-size:11px">👤 '+m.cap+(its>0?' · '+its+' ítems':'')+'</div>'
+          +'<div style="color:var(--muted);font-size:11px">👤 '+m.cap+(its>0?' · '+its+' ítems':'')+(pelotasMesa[m.id]?' · <span style="color:#22c55e;font-weight:800">🐸'+pelotasMesa[m.id].qty+'</span>':'')+'</div>'
           +(its>0?'<div style="color:'+c+';font-weight:800;font-size:13px;margin-top:2px">'+fmt(tot)+'</div>':'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-top:2px">Libre</div>')
         +'</button>';
       }).join('');
@@ -1412,6 +1418,11 @@ function renderPanelPedido(){
       +'<button class="btn btn-sm btn-full" onclick="abrirAbonoMesa()" '+(ped.length?'':'disabled')+' style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;font-size:11px">💵 Abonar</button>'
       +'<button class="btn btn-sm btn-full" onclick="abrirDividirCuenta()" '+(ped.length?'':'disabled')+' style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;font-size:11px">🧾 Dividir</button>'
       +'</div>'
+      +(function(){var _pl=pelotasMesa[mesaActiva.id];
+        return _pl
+          ?'<button class="btn btn-sm btn-full" onclick="abrirPelotasMesa()" style="margin-top:7px;background:#22c55e;color:#fff;border:none;font-weight:800">🐸 '+_pl.qty+' pelotas prestadas · tocar para recibir</button>'
+          :'<button class="btn btn-sm btn-full" onclick="prestarPelotas()" style="margin-top:7px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">🐸 Prestar pelotas bolirrana</button>';
+      })()
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+' style="margin-top:7px">💳 Cobrar todo</button>'
       +'</div>';
 
@@ -2675,7 +2686,95 @@ function quitarAbonoMesa(idx){
   }
 }
 
+/* ═══ 🐸 PELOTAS DE BOLIRRANA ═══ */
+function prestarPelotas(){
+  if(!mesaActiva)return;
+  if(pelotasMesa[mesaActiva.id]){abrirPelotasMesa();return;}
+  window._pelQty=6;
+  renderPrestarPelotas();
+}
+function renderPrestarPelotas(){
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🐸 Prestar pelotas de la bolirrana</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:14px">'+esc(mesaActiva.nombre||('Mesa '+mesaActiva.num))+' · quedan cargadas a la mesa: no se puede cobrar la cuenta hasta que las devuelvan (o se cobren las perdidas).</div>'
+    +'<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:16px">'
+      +'<button onclick="window._pelQty=Math.max(1,window._pelQty-1);renderPrestarPelotas()" style="background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:10px;width:44px;height:44px;font-size:22px;cursor:pointer">−</button>'
+      +'<div style="font-size:34px;font-weight:900;min-width:60px;text-align:center">'+window._pelQty+'</div>'
+      +'<button onclick="window._pelQty=window._pelQty+1;renderPrestarPelotas()" style="background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:10px;width:44px;height:44px;font-size:22px;cursor:pointer">+</button>'
+    +'</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPrestarPelotas()">🐸 Entregar '+window._pelQty+' pelota'+(window._pelQty!==1?'s':'')+'</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function confirmarPrestarPelotas(){
+  var reg={qty:window._pelQty||6,ts:Date.now(),uidNombre:usuarioActivo.nombre};
+  pelotasMesa[mesaActiva.id]=reg;
+  fbSet('pelotasMesa/'+mesaActiva.id,reg);
+  closeModal1();
+  showToast('🐸 '+reg.qty+' pelotas prestadas a '+esc(mesaActiva.nombre||('Mesa '+mesaActiva.num))+'<br><span style="font-size:12px;opacity:.85">La mesa no se podrá cobrar hasta recibirlas</span>','#22c55e');
+  render();
+}
+function abrirPelotasMesa(){
+  var reg=pelotasMesa[mesaActiva.id];if(!reg)return;
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🐸 '+reg.qty+' pelota'+(reg.qty!==1?'s':'')+' prestada'+(reg.qty!==1?'s':'')+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:14px">Entregadas por '+esc(reg.uidNombre||'')+' · '+fmtTime(reg.ts)+'</div>'
+    +'<button class="btn btn-green btn-full" onclick="recibirPelotas()">✅ Recibí las '+reg.qty+' pelotas</button>'
+    +'<button class="btn btn-full" onclick="abrirCobroPelotasPerdidas()" style="background:#ef444418;border:1px solid #ef444444;color:#ef4444;margin-top:8px">💸 Faltan pelotas — cobrarlas</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cerrar</button>');
+}
+function recibirPelotas(){
+  if(!mesaActiva||!pelotasMesa[mesaActiva.id])return;
+  delete pelotasMesa[mesaActiva.id];
+  fbSet('pelotasMesa/'+mesaActiva.id,null);
+  closeModal1();
+  showToast('✅ Pelotas recibidas · mesa al día','#22c55e');
+  render();
+}
+function abrirCobroPelotasPerdidas(){
+  var reg=pelotasMesa[mesaActiva.id];if(!reg)return;
+  window._pelPerdQty=1;window._pelPerdMax=reg.qty;
+  renderCobroPelotasPerdidas();
+}
+function renderCobroPelotasPerdidas(){
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💸 Cobrar pelotas perdidas</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Se agregan al pedido de la mesa como un producto más y entran a la cuenta.</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Cuántas faltan?</div>'
+    +'<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:12px">'
+      +'<button onclick="window._pelPerdQty=Math.max(1,window._pelPerdQty-1);renderCobroPelotasPerdidas()" style="background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:10px;width:40px;height:40px;font-size:20px;cursor:pointer">−</button>'
+      +'<div style="font-size:28px;font-weight:900;min-width:50px;text-align:center">'+window._pelPerdQty+'</div>'
+      +'<button onclick="window._pelPerdQty=Math.min(window._pelPerdMax,window._pelPerdQty+1);renderCobroPelotasPerdidas()" style="background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:10px;width:40px;height:40px;font-size:20px;cursor:pointer">+</button>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio por pelota</div>'
+    +'<input class="inp money" id="pel-precio" type="text" inputmode="numeric" placeholder="Ej: 5.000" style="margin-bottom:14px"/>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarCobroPelotasPerdidas()">💸 Cargar a la cuenta</button>'
+    +'<button class="btn btn-full" onclick="abrirPelotasMesa()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">← Volver</button>');
+}
+function confirmarCobroPelotasPerdidas(){
+  var precio=moneyVal('pel-precio')||0;
+  if(precio<=0){alert('Escribe el precio por pelota.');return;}
+  var qty=window._pelPerdQty||1;
+  var id=mesaActiva.id;
+  if(!pedidos[id])pedidos[id]=[];
+  pedidos[id].push({isCustom:true,customNombre:'🐸 Pelota bolirrana perdida',customPrecio:precio,qty:qty,
+    uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)});
+  fbSet('pedidos/'+id,pedidos[id]);
+  // Pelotas resueltas: las que faltan quedan cobradas, las demás se dan por recibidas
+  delete pelotasMesa[id];
+  fbSet('pelotasMesa/'+id,null);
+  closeModal1();
+  showToast('💸 '+qty+' pelota'+(qty!==1?'s':'')+' perdida'+(qty!==1?'s':'')+' cargada'+(qty!==1?'s':'')+' a la cuenta ('+fmt(precio*qty)+')<br><span style="font-size:12px;opacity:.85">La mesa ya puede cobrarse</span>','#f5a623');
+  render();
+}
+
 function abrirCobro(){
+  // 🐸 Bloqueo: si la mesa tiene pelotas prestadas, primero hay que resolverlas
+  if(mesaActiva&&pelotasMesa[mesaActiva.id]){
+    var _rp=pelotasMesa[mesaActiva.id];
+    modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🐸 ¡Esta mesa tiene '+_rp.qty+' pelota'+(_rp.qty!==1?'s':'')+' de la bolirrana!</div>'
+      +'<div style="color:var(--muted);font-size:12px;margin-bottom:14px">No se puede cobrar la cuenta hasta que las devuelvan o se cobren las perdidas.<br><span style="font-size:10px;opacity:.8">Entregadas por '+esc(_rp.uidNombre||'')+' · '+fmtTime(_rp.ts)+'</span></div>'
+      +'<button class="btn btn-green btn-full" onclick="recibirPelotas();abrirCobro();">✅ Ya devolvieron las '+_rp.qty+' pelotas — cobrar</button>'
+      +'<button class="btn btn-full" onclick="abrirCobroPelotasPerdidas()" style="background:#ef444418;border:1px solid #ef444444;color:#ef4444;margin-top:8px">💸 Faltan pelotas — cobrarlas</button>'
+      +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+    return;
+  }
   if(!mesaActiva)return;
   window._compTemp=null;  // limpiar comprobante de un cobro anterior cancelado
   window._cobroVerificado=false;  // exigir verificación de forma de pago en cada cobro
@@ -3461,7 +3560,7 @@ function renderInventario(){
     +(esAdmin?'<button onclick="verIngresosInv()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Ingresos</button>':'')
     +(esAdmin?'<button onclick="abrirKardex()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📒 Kardex</button>':'')
     +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
-    +'<button onclick="imprimirInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
+    +'<button onclick="elegirImpresionInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
@@ -6768,6 +6867,7 @@ function confirmarCredito(total){
   delete pedidos[mesa.id];
   if(descuentos[mesa.id])delete descuentos[mesa.id];
   if(abonosMesa[mesa.id]){delete abonosMesa[mesa.id];fbSet('abonosMesa',abonosMesa);}
+  if(pelotasMesa[mesa.id]){delete pelotasMesa[mesa.id];fbSet('pelotasMesa/'+mesa.id,null);}
   mesaActiva=null;
   closeModal2();closeModal1();
   showToast('📒 Fiado registrado<br><span style="font-size:12px;opacity:.85">'+esc(clienteNombre)+' · debe '+fmt(total-abonado)+(abonado>0?' (abonó '+fmt(abonado)+')':'')+'</span>','#f5a623');
@@ -9187,10 +9287,38 @@ function imprimirPrecuenta(){
 }
 
 /* ═══ Imprimir inventario actual (solo lo que queda, sin ceros) ═══ */
-function imprimirInventario(){
+function elegirImpresionInventario(){
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🖨️ Imprimir inventario</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:14px">¿Qué quieres revisar?</div>'
+    +'<button class="btn btn-full" onclick="closeModal1();imprimirInventario(true)" style="background:#f5a623;color:#1a1a22;border:none;font-weight:800">🔥 Solo lo que rota<br><span style="font-size:11px;font-weight:600;opacity:.8">Productos vendidos en los últimos 30 días</span></button>'
+    +'<button class="btn btn-full" onclick="closeModal1();imprimirInventario(false)" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">📦 Inventario completo<br><span style="font-size:11px;font-weight:600;opacity:.7">Todos los productos e insumos con unidades</span></button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);margin-top:8px">Cancelar</button>');
+}
+function _pidsQueRotan(dias){
+  // Productos con al menos una venta en los últimos N días (incluye cubetazos y variantes)
+  var corte=Date.now()-dias*86400000;
+  var set={};
+  ventas.forEach(function(v){
+    if((v.ts||0)<corte)return;
+    (v.items||[]).forEach(function(it){
+      if(it.pid)set[it.pid]=true;
+      // Cubetazos mixtos y combos con lista interna de productos
+      (it.items||[]).forEach(function(sub){if(sub.pid)set[sub.pid]=true;});
+      (it.comboItems||[]).forEach(function(sub){if(sub.pid)set[sub.pid]=true;});
+    });
+  });
+  return set;
+}
+function imprimirInventario(soloRotan){
   // Solo productos/ingredientes con unidades restantes (stock > 0)
   var conStock=menu.filter(function(p){return !p.sinStock&&(parseInt(p.stock)||0)>0;});
   var ingsStock=ingredientes.filter(function(x){return (parseInt(x.stock)||0)>0;});
+  if(soloRotan){
+    var rota=_pidsQueRotan(30);
+    conStock=conStock.filter(function(p){return rota[p.id];});
+    ingsStock=[];  // el conteo de rotación es de productos de la carta
+    if(!conStock.length){alert('Ningún producto con stock se ha vendido en los últimos 30 días.');return;}
+  }
   if(!conStock.length&&!ingsStock.length){alert('No hay productos con unidades en inventario.');return;}
   // Agrupar por categoría
   var porCat={};
@@ -9232,7 +9360,7 @@ function imprimirInventario(){
     +'.pie{text-align:center;font-size:'+(fs-3)+'px;margin-top:8px;color:#777}'
     +'</style></head><body>');
   w.document.write('<div style="text-align:center;font-size:26px">🛸</div><div class="t">AREA 52</div><div class="s">GASTRO BAR</div><hr/>'
-    +'<p style="font-weight:900">INVENTARIO ACTUAL</p>'
+    +'<p style="font-weight:900">'+(soloRotan?'INVENTARIO — SOLO ROTACION (vendidos ult. 30 dias)':'INVENTARIO ACTUAL')+'</p>'
     +'<p>'+new Date().toLocaleString('es-CO')+'</p>'
     +'<p>Imprimió: '+esc(usuarioActivo?usuarioActivo.nombre:'')+'</p><hr/>'
     +'<table>'+cuerpo+'</table><hr/>'
