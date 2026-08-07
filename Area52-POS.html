@@ -6135,7 +6135,7 @@ function renderCaja(){
   var conciliacion='<div class="card mb12">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
       +'<button data-act="toggle-sec" data-sec="concil" style="background:none;border:none;color:var(--text);cursor:pointer;font-weight:700;font-size:14px;padding:0">'+(_secOpen.concil?'▼':'▶')+' 🧾 Conciliación pagos digitales ('+digRows.length+')</button>'
-      +(esAdmin?'<button onclick="abrirConcilBanco()" style="background:#38bdf8;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap">🏦 Subir extracto</button>':'')
+      +(esAdmin?'<button onclick="abrirConcilBanco()" style="background:#38bdf8;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap">🏦 Conciliación / SMS</button>':'')
     +'</div>'
     +'<div style="margin-top:6px"></div>'
     +(!_secOpen.concil?'':(digRows.length
