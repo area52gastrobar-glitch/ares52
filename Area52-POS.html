@@ -5492,6 +5492,40 @@ function abrirConcilBanco(){
     +'</div>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
 }
+/* ═══ 🗣️ VOZ DE PAGOS: anuncia por el altavoz los pagos contrastados ═══ */
+var _vozOn=false;
+try{_vozOn=localStorage.getItem('_a52_vozPagos')==='1';}catch(e){}
+function toggleVozPagos(){
+  if(typeof speechSynthesis==='undefined'){alert('Este navegador no soporta voz.');return;}
+  _vozOn=!_vozOn;
+  try{localStorage.setItem('_a52_vozPagos',_vozOn?'1':'0');}catch(e){}
+  if(_vozOn){
+    hablar('Voz de pagos activa');
+    showToast('🗣️ Voz de pagos ACTIVA en este equipo<br><span style="font-size:12px;opacity:.85">Anunciará por el altavoz cada pago que llegue por SMS</span>','#22c55e');
+  }else{
+    try{speechSynthesis.cancel();}catch(e){}
+    showToast('🔇 Voz de pagos apagada en este equipo','#6b7280');
+  }
+  render();
+}
+function hablar(txt){
+  if(!_vozOn||typeof speechSynthesis==='undefined')return;
+  if(!usuarioActivo||(usuarioActivo.rol!=='admin'&&usuarioActivo.rol!=='cajero'))return;
+  try{
+    var u=new SpeechSynthesisUtterance(txt);
+    u.lang='es-CO';u.rate=0.95;u.volume=1;
+    var voces=speechSynthesis.getVoices()||[];
+    var v=voces.find(function(x){return /es[-_](CO|MX|US|419)/i.test(x.lang);})||voces.find(function(x){return /^es/i.test(x.lang);});
+    if(v)u.voice=v;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function _montoVoz(n){
+  n=parseInt(n)||0;
+  if(n>=1000&&n%1000===0)return (n/1000)+' mil';
+  return String(n);
+}
+
 /* ═══ 📡 SMS AUTOMÁTICOS desde el celular (via MacroDroid/Shortcuts → Firebase) ═══ */
 function _smsMatch(parsed,tolMin){
   // Busca un cobro/abono digital con el monto exacto y hora dentro de la tolerancia
@@ -5512,14 +5546,18 @@ function _smsAutoLlego(m){
   var hit=_smsMatch(parsed,1);
   if(hit){
     _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit.difMin+' min)','a52-sms-'+m._fbkey);
+    hablar('Se recibieron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+'. Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'').replace(/·.*$/,''));
   }else{
+    hablar('Llegaron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+'. Esperando el registro.');
     // Dar 2 minutos por si el cobro se registra justo después del SMS, y re-verificar
     setTimeout(function(){
       var hit2=_smsMatch(parsed,2);
       if(hit2){
         _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit2.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit2.difMin+' min)','a52-sms-'+m._fbkey);
+        hablar('Confirmado: los '+_montoVoz(parsed.monto)+' pesos quedaron cruzados con '+hit2.mov.ref.replace(/<[^>]*>/g,'').replace(/·.*$/,''));
       }else{
         _notifAdmin('⚠️ Llegó plata SIN registro','$'+(parsed.monto||0).toLocaleString('es-CO')+(parsed.de?' de '+parsed.de:'')+' · '+new Date(parsed.ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' — nadie registró ese cobro/abono','a52-sms-'+m._fbkey);
+        hablar('Atención. Llegaron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+' y nadie registró ese cobro.');
       }
     },120000);
   }
@@ -9354,7 +9392,10 @@ function renderAdmin(){
     +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
       +'<div><div style="color:#38bdf8;font-weight:800;font-size:15px">🔔 Notificaciones de administrador</div>'
       +'<div style="color:var(--muted);font-size:12px;margin-top:3px">Avisos en pantalla con la app minimizada: qué se pidió y qué se cobró. Solo para tu usuario admin, se activa por equipo. <b>Funciona mejor en computador; en iPhone el sistema pausa la app al minimizarla.</b></div></div>'
-      +'<button onclick="toggleNotifAdmin()" style="background:'+(_notifOn?'#38bdf8':'var(--card2)')+';color:'+(_notifOn?'#fff':'var(--muted)')+';border:1px solid '+(_notifOn?'#38bdf8':'var(--border)')+';border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(_notifOn?'🔔 ACTIVAS aquí':'🔕 Activar en este equipo')+'</button>'
+      +'<div style="display:flex;flex-direction:column;gap:6px">'
+        +'<button onclick="toggleNotifAdmin()" style="background:'+(_notifOn?'#38bdf8':'var(--card2)')+';color:'+(_notifOn?'#fff':'var(--muted)')+';border:1px solid '+(_notifOn?'#38bdf8':'var(--border)')+';border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(_notifOn?'🔔 ACTIVAS aquí':'🔕 Activar en este equipo')+'</button>'
+        +'<button onclick="toggleVozPagos()" style="background:'+(_vozOn?'#22c55e':'var(--card2)')+';color:'+(_vozOn?'#fff':'var(--muted)')+';border:1px solid '+(_vozOn?'#22c55e':'var(--border)')+';border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(_vozOn?'🗣️ VOZ activa aquí':'🔇 Activar voz de pagos')+'</button>'
+      +'</div>'
     +'</div>'
   +'</div>';
 
