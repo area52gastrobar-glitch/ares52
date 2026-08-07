@@ -427,6 +427,7 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var smsBanco=[];  // 📡 SMS del banco empujados desde el celular {texto,ts} → contraste automático
 var pelotasMesa={};  // 🐸 pelotas de bolirrana prestadas por mesa {mesaId:{qty,ts,uidNombre}}
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
 var invCfg={soloAdmin:true};  // 🔐 quién puede ajustar cantidades del inventario
@@ -684,6 +685,18 @@ function iniciarSync(){
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
     consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
+  fbOn('smsBanco',function(v){
+    var lista=v?Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;}):[];
+    lista.sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+    var esPrimera=(window._smsVistos==null);
+    if(esPrimera)window._smsVistos={};
+    smsBanco=lista;
+    lista.forEach(function(m){
+      if(window._smsVistos[m._fbkey])return;
+      window._smsVistos[m._fbkey]=true;
+      if(!esPrimera)_smsAutoLlego(m);   // solo notifica los que llegan estando la app abierta
+    });
   });
   fbOn('pelotasMesa',function(v){
     pelotasMesa=v||{};
@@ -5387,7 +5400,182 @@ function abrirConcilBanco(){
     +'<input type="file" id="concil-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="procesarArchivoBanco(this)"/>'
     +'<button onclick="document.getElementById(\'concil-file\').click()" style="width:100%;background:#38bdf818;color:#38bdf8;border:2px dashed #38bdf855;border-radius:12px;padding:22px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px">📄 Elegir archivo del extracto</button>'
     +'<div id="concil-result"></div>'
+    +'<div style="border-top:1px solid var(--border);margin:12px 0;padding-top:12px">'
+      +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:3px">📱 Contraste con mensajes del banco (hora exacta)</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:8px">Pega los SMS de Bancolombia (o sube un .txt con ellos). El sistema saca monto, fecha y hora de cada mensaje y los cruza al minuto contra los cobros digitales y los abonos registrados.</div>'
+      +'<input type="file" id="sms-file" accept=".txt,.csv,text/plain" style="display:none" onchange="procesarArchivoSms(this)"/>'
+      +'<button onclick="document.getElementById(\'sms-file\').click()" style="width:100%;background:#a855f718;color:#a855f7;border:2px dashed #a855f755;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:6px">📎 Subir archivo de mensajes (.txt)</button>'
+      +'<textarea id="sms-texto" placeholder="...o pega aquí los mensajes (pueden ir varios seguidos)" style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px;font-size:11px;box-sizing:border-box;margin-bottom:6px"></textarea>'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+        +'<span style="color:var(--muted);font-size:11px">Diferencia máxima de hora:</span>'
+        +'<select class="inp" id="sms-tol" onchange="analizarSmsBanco()" style="flex:1;padding:7px"><option value="1" selected>±1 minuto</option><option value="3">±3 minutos</option><option value="10">±10 minutos</option></select>'
+      +'</div>'
+      +'<button class="btn btn-full" onclick="analizarSmsBanco()" style="background:#a855f7;color:#fff;border:none;font-weight:800">🔍 Contrastar mensajes</button>'
+      +'<div style="display:flex;gap:6px;margin-top:6px">'
+        +'<button onclick="cargarSmsAutomaticos()" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">📡 Usar los automáticos del celular'+(smsBanco.length?' ('+smsBanco.length+')':'')+'</button>'
+        +'<button onclick="verComoConectarCelular()" style="flex:1;background:var(--card2);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer">⚙️ ¿Cómo conectar el celular?</button>'
+      +'</div>'
+      +'<div id="sms-result" style="margin-top:10px"></div>'
+    +'</div>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+/* ═══ 📡 SMS AUTOMÁTICOS desde el celular (via MacroDroid/Shortcuts → Firebase) ═══ */
+function _smsMatch(parsed,tolMin){
+  // Busca un cobro/abono digital con el monto exacto y hora dentro de la tolerancia
+  var diasSet={};diasSet[_concilDia(new Date(parsed.ts))]=true;
+  var movs=_movsDigitales(diasSet);
+  var TOL=(tolMin||1)*60000;
+  var mejor=null,mejorDif=Infinity;
+  movs.forEach(function(mv){
+    if(mv.monto!==parsed.monto)return;
+    var dif=Math.abs(mv.ts-parsed.ts);
+    if(dif<=TOL&&dif<mejorDif){mejor=mv;mejorDif=dif;}
+  });
+  return mejor?{mov:mejor,difMin:Math.round(mejorDif/60000)}:null;
+}
+function _smsAutoLlego(m){
+  var parsed=parsearSmsBanco(m.texto||'')[0];
+  if(!parsed)return;
+  var hit=_smsMatch(parsed,1);
+  if(hit){
+    _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit.difMin+' min)','a52-sms-'+m._fbkey);
+  }else{
+    // Dar 2 minutos por si el cobro se registra justo después del SMS, y re-verificar
+    setTimeout(function(){
+      var hit2=_smsMatch(parsed,2);
+      if(hit2){
+        _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit2.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit2.difMin+' min)','a52-sms-'+m._fbkey);
+      }else{
+        _notifAdmin('⚠️ Llegó plata SIN registro','$'+(parsed.monto||0).toLocaleString('es-CO')+(parsed.de?' de '+parsed.de:'')+' · '+new Date(parsed.ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' — nadie registró ese cobro/abono','a52-sms-'+m._fbkey);
+      }
+    },120000);
+  }
+}
+function cargarSmsAutomaticos(){
+  var ta=document.getElementById('sms-texto');
+  if(!ta)return;
+  if(!smsBanco.length){alert('No han llegado mensajes automáticos del celular todavía.');return;}
+  ta.value=smsBanco.map(function(m){return m.texto||'';}).filter(Boolean).join('\n');
+  analizarSmsBanco();
+}
+function verComoConectarCelular(){
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">📡 Conectar el celular de los SMS</div>'
+    +'<div style="font-size:12px;color:var(--text);line-height:1.5">'
+    +'<b>Android (MacroDroid, gratis):</b><br>'
+    +'1. Instala <b>MacroDroid</b> y crea una macro.<br>'
+    +'2. <b>Disparador:</b> SMS recibido → remitente <i>contiene</i> "Bancolombia" (o el número corto del banco).<br>'
+    +'3. <b>Acción:</b> Petición HTTP → método <b>POST</b> → URL:<br>'
+    +'<code style="font-size:10px;word-break:break-all;background:var(--bg);padding:4px;border-radius:5px;display:block;margin:4px 0">https://area52bar-a36aa-default-rtdb.firebaseio.com/smsBanco.json</code>'
+    +'Tipo de contenido: <b>application/json</b> · Cuerpo:<br>'
+    +'<code style="font-size:10px;background:var(--bg);padding:4px;border-radius:5px;display:block;margin:4px 0">{"texto":"[sms_message]","ts":{{unix_timestamp}}000}</code>'
+    +'(en MacroDroid la variable del texto es <b>[sms_message]</b>)<br>'
+    +'4. Guarda y listo: cada SMS del banco entra solo al sistema.<br><br>'
+    +'<b>iPhone (Atajos):</b> Automatización → "Cuando reciba un mensaje" que contenga "Bancolombia" → acción "Obtener contenido de URL" con la misma URL, método POST, JSON: {"texto":"Mensaje","ts":0}. Desactiva "Preguntar antes de ejecutar".<br><br>'
+    +'<span style="color:var(--muted);font-size:11px">⚠️ Ese celular queda escribiendo en la base del bar: que sea un equipo tuyo de confianza. El sistema toma la fecha/hora que viene DENTRO del mensaje del banco, así que no importa si el push llega con retraso.</span>'
+    +'</div>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:10px">Entendido</button>');
+}
+
+/* ═══ 📱 Contraste con SMS del banco (monto + fecha + HORA) ═══ */
+function procesarArchivoSms(inp){
+  var f=inp.files&&inp.files[0];if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var ta=document.getElementById('sms-texto');
+    if(ta)ta.value=(ta.value?ta.value+'\n':'')+String(rd.result||'');
+    analizarSmsBanco();
+  };
+  rd.readAsText(f);
+  inp.value='';
+}
+function _smsMonto(str){
+  // '$500.00' → 500 · '$32,000.00' → 32000 · '$32.000' → 32000 · '$1.234.567,89' → 1234567
+  var t=String(str||'').replace(/[^0-9.,]/g,'');
+  if(/[.,]\d{2}$/.test(t))t=t.slice(0,-3);   // quitar decimales
+  return parseInt(t.replace(/[^0-9]/g,''),10)||0;
+}
+function parsearSmsBanco(texto){
+  // Separa mensajes (cada uno inicia con 'Bancolombia'; tolera Nequi u otros con el mismo patrón)
+  var trozos=String(texto||'').split(/(?=Bancolombia[:\s])/i).map(function(t){return t.trim();}).filter(Boolean);
+  var out=[];
+  trozos.forEach(function(t){
+    var mMonto=t.match(/por\s*\$\s*([\d.,]+)/i);
+    var mFecha=t.match(/el\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+a\s+las?\s+(\d{1,2}):(\d{2})/i);
+    if(!mMonto||!mFecha)return;
+    var monto=_smsMonto(mMonto[1]);
+    var y=mFecha[3].length===2?2000+parseInt(mFecha[3]):parseInt(mFecha[3]);
+    var ts=new Date(y,parseInt(mFecha[2])-1,parseInt(mFecha[1]),parseInt(mFecha[4]),parseInt(mFecha[5])).getTime();
+    var mDe=t.match(/de\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ .]+?)\s+por\s*\$/);
+    var mCta=t.match(/cuenta\s*\*?(\d{3,6})/i);
+    out.push({monto:monto,ts:ts,de:mDe?mDe[1].trim():'',cta:mCta?mCta[1]:'',txt:t.slice(0,140)});
+  });
+  return out;
+}
+function _movsDigitales(diasSet){
+  // Movimientos de plata digital del sistema en los días dados: pagos de ventas + abonos (con su hora real)
+  var digital=function(fp){return fp&&fp!=='efectivo';};
+  var movs=[];
+  ventas.forEach(function(v){
+    if(v.esPagoCredito!==true&&v.esPagoCredito!==undefined){}
+    var abs=v.abonos?(Array.isArray(v.abonos)?v.abonos:Object.values(v.abonos)):[];
+    var absTot=0;
+    abs.forEach(function(ab){
+      absTot+=(ab.monto||0);
+      if(!digital(ab.fp))return;
+      var d=_concilDia(new Date(ab.ts||v.ts));
+      if(!diasSet[d])return;
+      movs.push({ts:ab.ts||v.ts,monto:ab.monto||0,fp:ab.fp,ref:'Abono ('+esc(ab.nombre||'')+') · '+esc(v.mesa||''),vts:v.ts});
+    });
+    var pagos=v.pagos&&v.pagos.length?v.pagos:[{fp:v.fp,monto:(v.total||0)-absTot}];
+    pagos.forEach(function(pg){
+      var fp=pg.fp||pg[0];var monto=(pg.monto!=null?pg.monto:pg[1])||0;
+      if(!digital(fp)||monto<=0)return;
+      var d=_concilDia(new Date(v.ts));
+      if(!diasSet[d])return;
+      movs.push({ts:v.ts,monto:monto,fp:fp,ref:esc(v.mesa||'Venta')+(v.uidNombre?' · cobró '+esc(v.uidNombre):''),vts:v.ts});
+    });
+  });
+  return movs;
+}
+function analizarSmsBanco(){
+  var texto=(document.getElementById('sms-texto')||{}).value||'';
+  var sms=parsearSmsBanco(texto);
+  var res=document.getElementById('sms-result');
+  if(!res)return;
+  if(!sms.length){res.innerHTML='<div style="color:#f5a623;font-size:11px">No encontré mensajes válidos. Cada SMS debe traer "por $..." y "el dd/mm/aa a las hh:mm".</div>';return;}
+  // Solo se contrastan los DÍAS que aparecen en los mensajes
+  var diasSet={};sms.forEach(function(m){diasSet[_concilDia(new Date(m.ts))]=true;});
+  var movs=_movsDigitales(diasSet);
+  var TOL=(parseInt((document.getElementById('sms-tol')||{}).value)||1)*60000;
+  var usados={};
+  var ok=[],smsSin=[];
+  sms.forEach(function(m){
+    var mejor=-1,mejorDif=Infinity;
+    movs.forEach(function(mv,i){
+      if(usados[i])return;
+      if(mv.monto!==m.monto)return;
+      var dif=Math.abs(mv.ts-m.ts);
+      if(dif<=TOL&&dif<mejorDif){mejor=i;mejorDif=dif;}
+    });
+    if(mejor>=0){usados[mejor]=true;ok.push({sms:m,mov:movs[mejor],difMin:Math.round(mejorDif/60000)});}
+    else smsSin.push(m);
+  });
+  var sinSms=movs.filter(function(mv,i){return !usados[i];});
+  var fpN=function(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.emoji+' '+f.label:fp;};
+  var hhmm=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
+  var totSmsSin=smsSin.reduce(function(a,m){return a+m.monto;},0);
+  var totSinSms=sinSms.reduce(function(a,m){return a+m.monto;},0);
+  res.innerHTML=
+    '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
+      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
+    +'</div>'
+    +(ok.length?'<div style="font-weight:800;font-size:12px;color:#22c55e;margin-bottom:3px">✅ Cruzados al minuto</div>'
+      +ok.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#22c55e">'+fmt(x.sms.monto)+'</b> · SMS '+hhmm(x.sms.ts)+(x.sms.de?' de '+esc(x.sms.de):'')+' ↔ '+x.mov.ref+' ('+fpN(x.mov.fp)+') · Δ'+x.difMin+' min</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(smsSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Llegó plata al banco SIN registro en el sistema · '+fmt(totSmsSin)+'</div>'
+      +smsSin.map(function(m){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' — ¿cobro o abono que no se registró?</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
+      +sinSms.map(function(mv){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' ('+fpN(mv.fp)+') — ¿la plata nunca llegó?</div>';}).join(''):'')
+    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Solo se revisan los días que traen los mensajes. Ojo: si el celular no recibe TODOS los SMS del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
 }
 function _concilDia(d){
   // Normaliza cualquier formato de fecha a 'YYYY-MM-DD'
@@ -9388,6 +9576,18 @@ function imprimirPrecuenta(){
 function abrirCuadreInventario(){
   if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede hacer el cuadre.');return;}
   window._cfVals={};window._cfDin={};window._cfBusq='';
+  window._cfAjInv=true;window._cfAjCaja=false;
+  renderCuadreInv();
+}
+function _ultimoArqueoReciente(){
+  // Arqueo de las últimas 12 horas, para jalar el conteo de billetes al cuadre
+  var corte=Date.now()-12*3600000;
+  var recientes=(arqueos||[]).filter(function(a){return a.ts>=corte;}).sort(function(a,b){return b.ts-a.ts;});
+  return recientes[0]||null;
+}
+function usarArqueoEnCuadre(){
+  var a=_ultimoArqueoReciente();if(!a)return;
+  window._cfDin['efectivo']=moneyFmt(a.total);
   renderCuadreInv();
 }
 function _cfDif(){
@@ -9431,6 +9631,7 @@ function renderCuadreInv(){
         +(dif===null?'—':dif<0?dif+' · '+fmt((-dif)*(p.precio||0)):dif>0?'+'+dif:'✓')+'</span>'
     +'</div>';
   }).join('');
+  var _arq=_ultimoArqueoReciente();
   var din=FPAGO.map(function(f){
     var sis=saldoActualFP(f.id);
     var v=(window._cfDin[f.id]!=null)?window._cfDin[f.id]:'';
@@ -9438,7 +9639,9 @@ function renderCuadreInv(){
     var dif=(fis!=null)?fis-sis:null;
     return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1"><span style="font-size:12px;font-weight:700">'+f.emoji+' '+f.label+'</span>'
-      +'<span style="color:var(--muted);font-size:10px"> · sistema: '+fmt(sis)+'</span></div>'
+      +'<span style="color:var(--muted);font-size:10px"> · sistema: '+fmt(sis)+'</span>'
+      +(f.id==='efectivo'&&_arq?'<button onclick="usarArqueoEnCuadre()" style="display:block;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800;cursor:pointer;margin-top:2px">🧮 Usar arqueo de '+fmtTime(_arq.ts)+': '+fmt(_arq.total)+'</button>':'')
+      +'</div>'
       +'<input type="text" inputmode="numeric" placeholder="contado" value="'+v+'" oninput="this.value=moneyFmt(this.value);window._cfDin[\''+f.id+'\']=this.value;_cfUpd()" style="width:92px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:right;font-weight:800;font-size:12px"/>'
       +'<span id="cf-dif-d-'+f.id+'" style="width:82px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'+(dif===null?'—':dif===0?'✓':(dif>0?'+':'−')+fmt(Math.abs(dif)))+'</span>'
     +'</div>';
@@ -9451,8 +9654,10 @@ function renderCuadreInv(){
     +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">💵 Dinero por medio de pago</div>'
     +'<div style="background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+din+'</div>'
     +'<div id="cf-resumen" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:12px">'+_cfResumenHTML()+'</div>'
-    +'<button class="btn btn-green btn-full" onclick="guardarCuadreInv(true)">✅ Guardar cuadre y AJUSTAR inventario al conteo</button>'
-    +'<button class="btn btn-full" onclick="guardarCuadreInv(false)" style="background:#38bdf818;border:1px solid #38bdf844;color:#38bdf8;margin-top:8px">📝 Solo guardar el registro (no ajustar stock)</button>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;margin-bottom:6px"><input type="checkbox" '+(window._cfAjInv?'checked':'')+' onchange="window._cfAjInv=this.checked"/> 📦 Ajustar el <b>inventario</b> al conteo (kardex con motivo)</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;margin-bottom:12px"><input type="checkbox" '+(window._cfAjCaja?'checked':'')+' onchange="window._cfAjCaja=this.checked"/> 💵 Ajustar la <b>caja</b> al conteo (los saldos quedan en lo contado)</label>'
+    +'<button class="btn btn-green btn-full" onclick="guardarCuadreInv()">💾 Guardar cuadre</button>'
+    +'<button class="btn btn-full" onclick="imprimirCuadre()" style="background:#a855f718;border:1px solid #a855f744;color:#a855f7;margin-top:8px">🖨️ Imprimir comparativo</button>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
 }
 function _cfResumenHTML(){
@@ -9486,9 +9691,10 @@ function _cfUpd(){
     el.innerHTML=dif===0?'✓':(dif>0?'+':'−')+fmt(Math.abs(dif));
   });
 }
-function guardarCuadreInv(ajustar){
+function guardarCuadreInv(){
   var r=_cfDif();
   if(!r.faltItems.length&&!r.sobrItems.length&&!r.dinDet.length){alert('No digitaste ningún conteo.');return;}
+  var ajInv=!!window._cfAjInv;var ajCaja=!!window._cfAjCaja;
   var items=[];
   Object.keys(window._cfVals||{}).forEach(function(pid){
     var v=window._cfVals[pid];
@@ -9501,16 +9707,73 @@ function guardarCuadreInv(ajustar){
   var reg={id:'cf_'+Date.now(),ts:Date.now(),uidNombre:usuarioActivo.nombre,
     items:items,
     dinero:r.dinDet.map(function(d){return{fp:d.f.id,label:d.f.label,sis:d.sis,fis:d.fis,dif:d.dif};}),
-    faltInv:r.totalFaltInv,faltDin:r.dinFalt,total:r.totalFaltInv+r.dinFalt,ajustado:!!ajustar};
+    faltInv:r.totalFaltInv,faltDin:r.dinFalt,total:r.totalFaltInv+r.dinFalt,ajustado:ajInv,ajustadoCaja:ajCaja};
   fbPush('conteosInv',reg);
-  if(ajustar){
+  if(ajInv){
     items.forEach(function(it){
       cambiarStock('p',it.pid,it.dif,'📋 Cuadre físico ('+(it.dif<0?'faltante':'sobrante')+')');
     });
   }
+  if(ajCaja){
+    var tocada=false;
+    r.dinDet.forEach(function(d){
+      if(d.dif!==0){cajaHoy['ini_'+d.f.id]=(cajaHoy['ini_'+d.f.id]||0)+d.dif;tocada=true;}
+    });
+    if(tocada)fbSet('cajaHoy',cajaHoy);
+  }
+  window._cfReg=reg;
   closeModal1();
-  showToast((ajustar?'📋 Cuadre guardado y stock ajustado':'📝 Cuadre guardado (sin ajustar)')+'<br><span style="font-size:12px;opacity:.85">Faltante total: '+fmt(reg.total)+' ('+fmt(reg.faltInv)+' productos + '+fmt(reg.faltDin)+' dinero)</span>',reg.total>0?'#ef4444':'#22c55e');
+  showToast('📋 Cuadre guardado'+(ajInv?' · stock ajustado':'')+(ajCaja?' · caja ajustada':'')+'<br><span style="font-size:12px;opacity:.85">Faltante total: '+fmt(reg.total)+' ('+fmt(reg.faltInv)+' productos + '+fmt(reg.faltDin)+' dinero)</span>',reg.total>0?'#ef4444':'#22c55e');
+  imprimirCuadre(reg);
   render();
+}
+/* 🖨️ Comparativo imprimible: SOLO lo digitado en el conteo */
+function imprimirCuadre(reg){
+  var items,dinero,faltInv,faltDin,ts,quien;
+  if(reg&&reg.items){
+    items=reg.items;dinero=reg.dinero;faltInv=reg.faltInv;faltDin=reg.faltDin;ts=reg.ts;quien=reg.uidNombre;
+  }else{
+    var r=_cfDif();
+    if(!r.faltItems.length&&!r.sobrItems.length&&!r.dinDet.length){alert('No digitaste ningún conteo para imprimir.');return;}
+    items=[];
+    Object.keys(window._cfVals||{}).forEach(function(pid){
+      var v=window._cfVals[pid];if(v===''||v==null)return;
+      var p=menu.find(function(m){return String(m.id)===String(pid);});
+      if(!p||p.sinStock)return;
+      var fis=parseInt(v)||0;var sis=parseInt(p.stock)||0;var dif=fis-sis;
+      if(dif!==0)items.push({nombre:p.nombre,sis:sis,fis:fis,dif:dif,valor:dif<0?(-dif)*(p.precio||0):0});
+    });
+    dinero=r.dinDet.map(function(d){return{label:d.f.label,sis:d.sis,fis:d.fis,dif:d.dif};});
+    faltInv=r.totalFaltInv;faltDin=r.dinFalt;ts=Date.now();quien=usuarioActivo.nombre;
+  }
+  var fmtP=function(n){return '$'+(n||0).toLocaleString('es-CO');};
+  var filasP=items.map(function(it){
+    return'<tr><td>'+esc(it.nombre)+'</td><td style="text-align:center">'+it.sis+'</td><td style="text-align:center">'+it.fis+'</td><td style="text-align:center;font-weight:bold">'+(it.dif>0?'+':'')+it.dif+'</td><td style="text-align:right">'+(it.dif<0?fmtP(it.valor):'—')+'</td></tr>';
+  }).join('');
+  var filasD=(dinero||[]).map(function(d){
+    return'<tr><td>'+esc(d.label)+'</td><td style="text-align:right">'+fmtP(d.sis)+'</td><td style="text-align:right">'+fmtP(d.fis)+'</td><td style="text-align:right;font-weight:bold">'+(d.dif===0?'✓':(d.dif>0?'+':'−')+fmtP(Math.abs(d.dif)))+'</td></tr>';
+  }).join('');
+  var w=window.open('','_blank');
+  if(!w){alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes.');return;}
+  w.document.write('<html><head><title>Cuadre físico</title><style>'
+    +'body{font-family:monospace;font-size:12px;margin:16px;color:#000}'
+    +'h2{margin:0 0 2px;font-size:15px}table{width:100%;border-collapse:collapse;margin:8px 0}'
+    +'th,td{border-bottom:1px solid #999;padding:3px 4px;font-size:11px;text-align:left}'
+    +'th{border-bottom:2px solid #000}.tot{font-size:13px;font-weight:bold}'
+    +'</style></head><body>'
+    +'<h2>AREA 52 — CUADRE FÍSICO</h2>'
+    +'<div>'+new Date(ts).toLocaleString('es-CO')+' · realizó: '+esc(quien||'')+'</div>'
+    +(items.length?'<h3 style="margin:10px 0 0">📦 Productos (solo diferencias)</h3>'
+      +'<table><tr><th>Producto</th><th style="text-align:center">Sistema</th><th style="text-align:center">Físico</th><th style="text-align:center">Dif</th><th style="text-align:right">Faltante $</th></tr>'+filasP+'</table>':'')
+    +((dinero||[]).length?'<h3 style="margin:10px 0 0">💵 Dinero</h3>'
+      +'<table><tr><th>Medio</th><th style="text-align:right">Sistema</th><th style="text-align:right">Contado</th><th style="text-align:right">Dif</th></tr>'+filasD+'</table>':'')
+    +'<div class="tot">Faltante en productos: '+fmtP(faltInv)+'</div>'
+    +'<div class="tot">Faltante en dinero: '+fmtP(faltDin)+'</div>'
+    +'<div class="tot" style="font-size:15px;border-top:2px solid #000;margin-top:4px;padding-top:4px">TOTAL FALTANTE: '+fmtP((faltInv||0)+(faltDin||0))+'</div>'
+    +'<br/><div>Firma: ________________________</div>'
+    +'</body></html>');
+  w.document.close();
+  setTimeout(function(){try{w.print();}catch(e){}},300);
 }
 
 function elegirImpresionInventario(){
