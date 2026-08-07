@@ -427,6 +427,7 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
+var novedades=[];  // 📝 novedades de mesas: descuentos, clientes que se volaron, cortesías...
 var smsBanco=[];  // 📡 SMS del banco empujados desde el celular {texto,ts} → contraste automático
 var pelotasMesa={};  // 🐸 pelotas de bolirrana prestadas por mesa {mesaId:{qty,ts,uidNombre}}
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
@@ -685,6 +686,11 @@ function iniciarSync(){
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
     consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+  });
+  fbOn('novedades',function(v){
+    novedades=v?Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;}):[];
+    novedades.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+    if(tabActual==='caja')render();
   });
   fbOn('smsBanco',function(v){
     var lista=v?Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;}):[];
@@ -1438,6 +1444,7 @@ function renderPanelPedido(){
           ?'<button class="btn btn-sm btn-full" onclick="abrirPelotasMesa()" style="margin-top:7px;background:#22c55e;color:#fff;border:none;font-weight:800">🐸 '+_pl.qty+' pelotas prestadas · tocar para recibir</button>'
           :'<button class="btn btn-sm btn-full" onclick="prestarPelotas()" style="margin-top:7px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">🐸 Prestar pelotas bolirrana</button>';
       })()
+      +'<button class="btn btn-sm btn-full" onclick="abrirNovedadMesa()" style="margin-top:7px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333">📝 Anotar novedad (descuento, se voló, cortesía...)</button>'
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+' style="margin-top:7px">💳 Cobrar todo</button>'
       +'</div>';
 
@@ -2776,6 +2783,61 @@ function quitarAbonoMesa(idx){
     fbSet('abonosMesa',abonosMesa);
     render();
   }
+}
+
+/* ═══ 📝 NOVEDADES DE MESA (para que el admin revise la caja con claridad) ═══ */
+var TIPOS_NOVEDAD=[
+  {id:'volo',emoji:'🏃',label:'Se voló sin pagar'},
+  {id:'cortesia',emoji:'🎁',label:'Cortesía / regalo'},
+  {id:'descuento',emoji:'🏷️',label:'Descuento'},
+  {id:'dano',emoji:'💔',label:'Daño / rotura'},
+  {id:'otra',emoji:'📝',label:'Otra'}
+];
+function abrirNovedadMesa(){
+  window._novTipo='';
+  renderNovedadForm();
+}
+function renderNovedadForm(){
+  var mesaTxt=mesaActiva?(mesaActiva.nombre||('Mesa '+mesaActiva.num)):'';
+  var chips=TIPOS_NOVEDAD.map(function(t){
+    var sel=window._novTipo===t.id;
+    return'<button onclick="window._novTipo=\''+t.id+'\';renderNovedadForm()" style="background:'+(sel?'#f5a623':'var(--bg)')+';color:'+(sel?'#1a1a22':'var(--muted)')+';border:1px solid '+(sel?'#f5a623':'var(--border)')+';border-radius:9px;padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer">'+t.emoji+' '+t.label+'</button>';
+  }).join('');
+  var vMonto=(document.getElementById('nov-monto')||{}).value||'';
+  var vNota=(document.getElementById('nov-nota')||{}).value||'';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📝 Novedad · '+esc(mesaTxt)+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Queda registrada con tu nombre y la hora, para que el administrador la vea al revisar la caja.</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px">¿Qué pasó?</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+chips+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto (si aplica: lo que se perdió, descontó o regaló)</div>'
+    +'<input class="inp money" id="nov-monto" type="text" inputmode="numeric" placeholder="Opcional" value="'+esc(vMonto)+'" style="margin-bottom:10px"/>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Detalle</div>'
+    +'<textarea id="nov-nota" placeholder="Ej: la mesa 4 se fue sin pagar 2 cubetazos, salieron por el patio..." style="width:100%;min-height:64px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px;font-size:12px;box-sizing:border-box;margin-bottom:14px">'+esc(vNota)+'</textarea>'
+    +'<button class="btn btn-green btn-full" onclick="guardarNovedad()">💾 Guardar novedad</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function guardarNovedad(){
+  var tipo=TIPOS_NOVEDAD.find(function(t){return t.id===window._novTipo;});
+  if(!tipo){alert('Elige qué pasó.');return;}
+  var nota=((document.getElementById('nov-nota')||{}).value||'').trim();
+  if(!nota){alert('Escribe el detalle de la novedad.');return;}
+  var monto=moneyVal('nov-monto')||0;
+  var reg={id:'nov_'+Date.now(),ts:Date.now(),
+    mesa:mesaActiva?(mesaActiva.nombre||('Mesa '+mesaActiva.num)):'',
+    tipo:tipo.id,tipoLabel:tipo.emoji+' '+tipo.label,
+    monto:monto,nota:nota,
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  fbPush('novedades',reg);
+  closeModal1();
+  showToast('📝 Novedad guardada<br><span style="font-size:12px;opacity:.85">'+tipo.emoji+' '+esc(reg.mesa)+(monto?' · '+fmt(monto):'')+' · el admin la verá en Caja</span>','#f5a623');
+}
+function eliminarNovedad(nid){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  var n=novedades.find(function(x){return x.id===nid;});
+  if(!n)return;
+  if(!confirm('¿Eliminar esta novedad? ('+(n.tipoLabel||'')+' '+(n.mesa||'')+')'))return;
+  if(n._fbkey)fbSet('novedades/'+n._fbkey,null);
+  showToast('🗑️ Novedad eliminada','#6b7280');
 }
 
 /* ═══ 🐸 PELOTAS DE BOLIRRANA ═══ */
@@ -5408,7 +5470,7 @@ function abrirConcilBanco(){
       +'<textarea id="sms-texto" placeholder="...o pega aquí los mensajes (pueden ir varios seguidos)" style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px;font-size:11px;box-sizing:border-box;margin-bottom:6px"></textarea>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<span style="color:var(--muted);font-size:11px">Diferencia máxima de hora:</span>'
-        +'<select class="inp" id="sms-tol" onchange="analizarSmsBanco()" style="flex:1;padding:7px"><option value="1" selected>±1 minuto</option><option value="3">±3 minutos</option><option value="10">±10 minutos</option></select>'
+        +'<select class="inp" id="sms-tol" onchange="analizarSmsBanco()" style="flex:1;padding:7px"><option value="1" selected>±1 minuto</option><option value="3">±3 minutos</option><option value="10">±10 minutos</option><option value="60">±60 minutos</option><option value="120">±120 minutos</option></select>'
       +'</div>'
       +'<button class="btn btn-full" onclick="analizarSmsBanco()" style="background:#a855f7;color:#fff;border:none;font-weight:800">🔍 Contrastar mensajes</button>'
       +'<div style="display:flex;gap:6px;margin-top:6px">'
@@ -5423,7 +5485,7 @@ function abrirConcilBanco(){
       +'<input type="file" id="df-file" accept=".csv,text/csv" style="display:none" onchange="procesarArchivoDatafono(this)"/>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<span style="color:var(--muted);font-size:11px">Diferencia máxima de hora:</span>'
-        +'<select class="inp" id="df-tol" onchange="analizarDatafono()" style="flex:1;padding:7px"><option value="1">±1 minuto</option><option value="3" selected>±3 minutos</option><option value="10">±10 minutos</option></select>'
+        +'<select class="inp" id="df-tol" onchange="analizarDatafono()" style="flex:1;padding:7px"><option value="1">±1 minuto</option><option value="3" selected>±3 minutos</option><option value="10">±10 minutos</option><option value="60">±60 minutos</option><option value="120">±120 minutos</option></select>'
       +'</div>'
       +'<button onclick="document.getElementById(\'df-file\').click()" style="width:100%;background:#f5a62318;color:#f5a623;border:2px dashed #f5a62355;border-radius:10px;padding:12px;font-size:12px;font-weight:800;cursor:pointer">💳 Elegir CSV del datáfono</button>'
       +'<div id="df-result" style="margin-top:10px"></div>'
@@ -5487,6 +5549,73 @@ function verComoConectarCelular(){
     +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:10px">Entendido</button>');
 }
 
+/* ═══ 🧩 Combinaciones: varios pagos que suman UN cobro (o al revés), por hora ═══ */
+function _mejorCombinacion(objetivo,anclaTs,candidatos,TOL,maxN){
+  // candidatos: [{i,ts,monto}] no usados. Busca subconjunto (2..maxN) que sume 'objetivo'
+  // con cada pago dentro de ±TOL de la hora del cobro (anclaTs). Devuelve el de menor Δmáx.
+  var pool=candidatos.filter(function(c){return Math.abs(c.ts-anclaTs)<=TOL&&c.monto<=objetivo;});
+  if(pool.length<2)return null;
+  pool.sort(function(a,b){return b.monto-a.monto;});
+  var mejor=null;
+  function dfs(inicio,suma,elegidos){
+    if(elegidos.length>maxN)return;
+    if(suma===objetivo&&elegidos.length>=2){
+      var dMax=elegidos.reduce(function(a,c){return Math.max(a,Math.abs(c.ts-anclaTs));},0);
+      if(!mejor||dMax<mejor.dMax)mejor={items:elegidos.slice(),dMax:dMax};
+      return;
+    }
+    if(suma>=objetivo)return;
+    for(var i=inicio;i<pool.length;i++){
+      elegidos.push(pool[i]);
+      dfs(i+1,suma+pool[i].monto,elegidos);
+      elegidos.pop();
+    }
+  }
+  dfs(0,0,[]);
+  return mejor;
+}
+function _cruceConGrupos(pagos,movs,TOL){
+  // pagos: vouchers/SMS [{ts,monto,...}] · movs: cobros del sistema [{ts,monto,ref,fp}]
+  // 1) 1 a 1 exacto · 2) varios pagos → un cobro · 3) un pago → varios cobros
+  var usadoP={},usadoM={};
+  var ok=[],grupos=[];
+  pagos.forEach(function(p,pi){
+    var mejor=-1,mejorDif=Infinity;
+    movs.forEach(function(mv,mi){
+      if(usadoM[mi])return;
+      if(mv.monto!==p.monto)return;
+      var dif=Math.abs(mv.ts-p.ts);
+      if(dif<=TOL&&dif<mejorDif){mejor=mi;mejorDif=dif;}
+    });
+    if(mejor>=0){usadoM[mejor]=true;usadoP[pi]=true;ok.push({pago:p,mov:movs[mejor],difMin:Math.round(mejorDif/60000)});}
+  });
+  // 2) varios pagos suman un cobro (anclado a la hora del cobro)
+  movs.forEach(function(mv,mi){
+    if(usadoM[mi])return;
+    var cand=pagos.map(function(p,pi){return{i:pi,ts:p.ts,monto:p.monto};}).filter(function(c){return !usadoP[c.i];});
+    var comb=_mejorCombinacion(mv.monto,mv.ts,cand,TOL,4);
+    if(comb){
+      comb.items.forEach(function(c){usadoP[c.i]=true;});
+      usadoM[mi]=true;
+      grupos.push({pagos:comb.items.map(function(c){return pagos[c.i];}),mov:mv,dMaxMin:Math.round(comb.dMax/60000),tipo:'pagos→cobro'});
+    }
+  });
+  // 3) un pago cubre varios cobros del sistema
+  pagos.forEach(function(p,pi){
+    if(usadoP[pi])return;
+    var cand=movs.map(function(mv,mi){return{i:mi,ts:mv.ts,monto:mv.monto};}).filter(function(c){return !usadoM[c.i];});
+    var comb=_mejorCombinacion(p.monto,p.ts,cand,TOL,4);
+    if(comb){
+      comb.items.forEach(function(c){usadoM[c.i]=true;});
+      usadoP[pi]=true;
+      grupos.push({pago:p,movs:comb.items.map(function(c){return movs[c.i];}),dMaxMin:Math.round(comb.dMax/60000),tipo:'cobro→pagos'});
+    }
+  });
+  return{ok:ok,grupos:grupos,
+    pagosSin:pagos.filter(function(p,pi){return !usadoP[pi];}),
+    movsSin:movs.filter(function(mv,mi){return !usadoM[mi];})};
+}
+
 /* ═══ 💳 Contraste con el LISTADO DEL DATÁFONO (tarjetas) ═══ */
 function procesarArchivoDatafono(inp){
   var f=inp.files&&inp.files[0];if(!f)return;
@@ -5540,19 +5669,11 @@ function analizarDatafono(){
   var diasSet={};validas.forEach(function(r){diasSet[_concilDia(new Date(r.ts))]=true;});
   var movs=_movsDigitales(diasSet).filter(function(mv){return mv.fp==='tarjeta';});
   var TOL=(parseInt((document.getElementById('df-tol')||{}).value)||3)*60000;
-  var usados={};var ok=[],vchSin=[];
-  validas.forEach(function(r){
-    var mejor=-1,mejorDif=Infinity;
-    movs.forEach(function(mv,i){
-      if(usados[i])return;
-      if(mv.monto!==r.monto)return;
-      var dif=Math.abs(mv.ts-r.ts);
-      if(dif<=TOL&&dif<mejorDif){mejor=i;mejorDif=dif;}
-    });
-    if(mejor>=0){usados[mejor]=true;ok.push({v:r,mov:movs[mejor],difMin:Math.round(mejorDif/60000)});}
-    else vchSin.push(r);
-  });
-  var sinVch=movs.filter(function(mv,i){return !usados[i];});
+  var cruce=_cruceConGrupos(validas,movs,TOL);
+  var ok=cruce.ok.map(function(x){return{v:x.pago,mov:x.mov,difMin:x.difMin};});
+  var grupos=cruce.grupos;
+  var vchSin=cruce.pagosSin;
+  var sinVch=cruce.movsSin;
   var hhmm=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
   var tj=function(r){return (r.franquicia||'')+(r.tarjeta?' '+r.tarjeta.slice(-4):'');};
   var totVchSin=vchSin.reduce(function(a,r){return a+r.monto;},0);
@@ -5560,12 +5681,17 @@ function analizarDatafono(){
   var totProp=validas.reduce(function(a,r){return a+(r.propina||0);},0);
   res.innerHTML=
     '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
-      +'💳 '+validas.length+' vouchers aprobados · ✅ '+ok.length+' cruzados · 📥 '+vchSin.length+' sin registro · 📤 '+sinVch.length+' sin voucher'
+      +'💳 '+validas.length+' vouchers aprobados · ✅ '+ok.length+' cruzados'+(grupos.length?' · 🧩 '+grupos.length+' agrupados':'')+' · 📥 '+vchSin.length+' sin registro · 📤 '+sinVch.length+' sin voucher'
       +(ignoradas?' · <span style="color:var(--muted)">'+ignoradas+' ignoradas (anuladas/rechazadas)</span>':'')
       +(totProp?'<br><span style="color:#22c55e;font-size:11px">💁 Propinas en el datáfono: '+fmt(totProp)+'</span>':'')
     +'</div>'
     +(ok.length?'<div style="font-weight:800;font-size:12px;color:#22c55e;margin-bottom:3px">✅ Cruzados</div>'
       +ok.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#22c55e">'+fmt(x.v.monto)+'</b> · '+hhmm(x.v.ts)+' '+esc(tj(x.v))+' ↔ '+x.mov.ref+' · Δ'+x.difMin+' min</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(grupos.length?'<div style="font-weight:800;font-size:12px;color:#38bdf8;margin-bottom:3px">🧩 Pagos divididos (varios ↔ uno, por hora del cobro)</div>'
+      +grupos.map(function(g){
+        if(g.tipo==='pagos→cobro')return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+g.pagos.map(function(p){return fmt(p.monto);}).join(' + ')+'</b> ('+g.pagos.length+' vouchers) ↔ '+g.mov.ref+' <b>'+fmt(g.mov.monto)+'</b> · Δmáx '+g.dMaxMin+' min</div>';
+        return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(g.pago.monto)+'</b> (1 voucher) ↔ '+g.movs.map(function(m){return m.ref+' '+fmt(m.monto);}).join(' + ')+' · Δmáx '+g.dMaxMin+' min</div>';
+      }).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(vchSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Pasaron tarjeta y NO está registrado en el sistema · '+fmt(totVchSin)+'</div>'
       +vchSin.map(function(r){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#ef4444">'+fmt(r.monto)+'</b> · '+hhmm(r.ts)+' · '+esc(tj(r))+' · recibo '+esc(r.recibo||'')+' — ¿cobro sin registrar?</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinVch.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado como tarjeta SIN voucher del datáfono · '+fmt(totSinVch)+'</div>'
@@ -5644,30 +5770,26 @@ function analizarSmsBanco(){
   var diasSet={};sms.forEach(function(m){diasSet[_concilDia(new Date(m.ts))]=true;});
   var movs=_movsDigitales(diasSet);
   var TOL=(parseInt((document.getElementById('sms-tol')||{}).value)||1)*60000;
-  var usados={};
-  var ok=[],smsSin=[];
-  sms.forEach(function(m){
-    var mejor=-1,mejorDif=Infinity;
-    movs.forEach(function(mv,i){
-      if(usados[i])return;
-      if(mv.monto!==m.monto)return;
-      var dif=Math.abs(mv.ts-m.ts);
-      if(dif<=TOL&&dif<mejorDif){mejor=i;mejorDif=dif;}
-    });
-    if(mejor>=0){usados[mejor]=true;ok.push({sms:m,mov:movs[mejor],difMin:Math.round(mejorDif/60000)});}
-    else smsSin.push(m);
-  });
-  var sinSms=movs.filter(function(mv,i){return !usados[i];});
+  var cruce=_cruceConGrupos(sms,movs,TOL);
+  var ok=cruce.ok.map(function(x){return{sms:x.pago,mov:x.mov,difMin:x.difMin};});
+  var gruposS=cruce.grupos;
+  var smsSin=cruce.pagosSin;
+  var sinSms=cruce.movsSin;
   var fpN=function(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.emoji+' '+f.label:fp;};
   var hhmm=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
   var totSmsSin=smsSin.reduce(function(a,m){return a+m.monto;},0);
   var totSinSms=sinSms.reduce(function(a,m){return a+m.monto;},0);
   res.innerHTML=
     '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
-      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
+      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados'+(gruposS.length?' · 🧩 '+gruposS.length+' agrupados':'')+' · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
     +'</div>'
     +(ok.length?'<div style="font-weight:800;font-size:12px;color:#22c55e;margin-bottom:3px">✅ Cruzados al minuto</div>'
       +ok.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#22c55e">'+fmt(x.sms.monto)+'</b> · SMS '+hhmm(x.sms.ts)+(x.sms.de?' de '+esc(x.sms.de):'')+' ↔ '+x.mov.ref+' ('+fpN(x.mov.fp)+') · Δ'+x.difMin+' min</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(gruposS.length?'<div style="font-weight:800;font-size:12px;color:#38bdf8;margin-bottom:3px">🧩 Pagos divididos (varios ↔ uno, por hora del cobro)</div>'
+      +gruposS.map(function(g){
+        if(g.tipo==='pagos→cobro')return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+g.pagos.map(function(p){return fmt(p.monto);}).join(' + ')+'</b> ('+g.pagos.length+' transferencias) ↔ '+g.mov.ref+' <b>'+fmt(g.mov.monto)+'</b> · Δmáx '+g.dMaxMin+' min</div>';
+        return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(g.pago.monto)+'</b> (1 transferencia) ↔ '+g.movs.map(function(m){return m.ref+' '+fmt(m.monto);}).join(' + ')+' · Δmáx '+g.dMaxMin+' min</div>';
+      }).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(smsSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Llegó plata al banco SIN registro en el sistema · '+fmt(totSmsSin)+'</div>'
       +smsSin.map(function(m){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' — ¿cobro o abono que no se registró?</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
@@ -6281,7 +6403,27 @@ function renderCaja(){
     +(arqRows||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin arqueos en este turno</div>')
   +'</div>';
 
-  return configCaja+kpis+conciliacion+gastosFPCard+arqueoCard+trasladoCard+prestamosCard+cierreBtn+histCierres;
+  // ═══ 📝 Novedades de mesas ═══
+  var corte48=Date.now()-48*3600000;
+  var novRec=novedades.filter(function(n){return n.ts>=corte48;});
+  var novViejas=novedades.filter(function(n){return n.ts<corte48;}).slice(0,30);
+  var totNovRec=novRec.reduce(function(a,n){return a+(n.monto||0);},0);
+  var novFila=function(n){
+    return'<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:12px;font-weight:800">'+(n.tipoLabel||'📝')+(n.mesa?' · '+esc(n.mesa):'')+(n.monto?' · <span style="color:#ef4444">'+fmt(n.monto)+'</span>':'')+'</div>'
+        +'<div style="font-size:11px;color:var(--text);margin-top:1px">'+esc(n.nota||'')+'</div>'
+        +'<div style="font-size:10px;color:var(--muted);margin-top:1px">'+fmtFechaCorta(n.ts)+' · anotó '+esc(n.uidNombre||'')+'</div>'
+      +'</div>'
+      +(usuarioActivo.rol==='admin'?'<button onclick="eliminarNovedad(\''+n.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer">✕</button>':'')
+    +'</div>';
+  };
+  var novedadesCard='<div class="card mb12" style="border:1px solid #f5a62344">'
+    +'<div class="section-title" style="color:#f5a623">📝 Novedades de mesas'+(novRec.length?' · '+novRec.length:'')+(totNovRec?' <span style="font-size:11px;color:#ef4444">('+fmt(totNovRec)+' en novedades)</span>':'')+'</div>'
+    +(novRec.length?novRec.map(novFila).join(''):'<div style="color:var(--dim);text-align:center;padding:8px;font-size:12px">Sin novedades en las últimas 48 horas.</div>')
+    +(novViejas.length?'<button data-act="toggle-sec" data-sec="novHist" style="width:100%;background:none;border:none;color:var(--muted);padding:8px 0 0;font-size:11px;font-weight:700;cursor:pointer">'+(_secOpen.novHist?'▲ Ocultar anteriores':'▼ Ver anteriores ('+novViejas.length+')')+'</button>'+(_secOpen.novHist?novViejas.map(novFila).join(''):''):'')
+  +'</div>';
+  return configCaja+kpis+novedadesCard+conciliacion+gastosFPCard+arqueoCard+trasladoCard+prestamosCard+cierreBtn+histCierres;
 }
 
 function guardarCajaInicial(){
