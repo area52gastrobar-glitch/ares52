@@ -9426,8 +9426,8 @@ function renderCuadreInv(){
     return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1;min-width:0"><span style="font-size:12px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+'</span>'
       +'<span style="color:var(--muted);font-size:10px"> · sistema: '+p.stock+'</span></div>'
-      +'<input type="number" inputmode="numeric" placeholder="'+p.stock+'" value="'+v+'" oninput="window._cfVals['+p.id+']=this.value" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:center;font-weight:800;font-size:13px"/>'
-      +'<span style="width:74px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'
+      +'<input type="number" inputmode="numeric" placeholder="'+p.stock+'" value="'+v+'" oninput="window._cfVals['+p.id+']=this.value;_cfUpd()" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:center;font-weight:800;font-size:13px"/>'
+      +'<span id="cf-dif-p-'+p.id+'" style="width:74px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'
         +(dif===null?'—':dif<0?dif+' · '+fmt((-dif)*(p.precio||0)):dif>0?'+'+dif:'✓')+'</span>'
     +'</div>';
   }).join('');
@@ -9439,12 +9439,10 @@ function renderCuadreInv(){
     return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1"><span style="font-size:12px;font-weight:700">'+f.emoji+' '+f.label+'</span>'
       +'<span style="color:var(--muted);font-size:10px"> · sistema: '+fmt(sis)+'</span></div>'
-      +'<input type="text" inputmode="numeric" placeholder="contado" value="'+v+'" oninput="this.value=moneyFmt(this.value);window._cfDin[\''+f.id+'\']=this.value" style="width:92px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:right;font-weight:800;font-size:12px"/>'
-      +'<span style="width:82px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'+(dif===null?'—':dif===0?'✓':(dif>0?'+':'−')+fmt(Math.abs(dif)))+'</span>'
+      +'<input type="text" inputmode="numeric" placeholder="contado" value="'+v+'" oninput="this.value=moneyFmt(this.value);window._cfDin[\''+f.id+'\']=this.value;_cfUpd()" style="width:92px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:right;font-weight:800;font-size:12px"/>'
+      +'<span id="cf-dif-d-'+f.id+'" style="width:82px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'+(dif===null?'—':dif===0?'✓':(dif>0?'+':'−')+fmt(Math.abs(dif)))+'</span>'
     +'</div>';
   }).join('');
-  var r=_cfDif();
-  var totalGeneral=r.totalFaltInv+r.dinFalt;
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📋 Cuadre físico de inventario y dinero</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Escribe solo lo que contaste (lo vacío no se toca). Los faltantes se valorizan a precio de venta.</div>'
     +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">📦 Productos</div>'
@@ -9452,15 +9450,41 @@ function renderCuadreInv(){
     +'<div style="max-height:260px;overflow-y:auto;background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+(filas||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:11px">Sin resultados</div>')+'</div>'
     +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">💵 Dinero por medio de pago</div>'
     +'<div style="background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+din+'</div>'
-    +'<div style="background:var(--bg);border:1px solid '+(totalGeneral>0?'#ef444466':'var(--border)')+';border-radius:10px;padding:10px 13px;margin-bottom:12px">'
-      +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>📦 Faltante en productos ('+r.faltItems.reduce(function(a,x){return a-x.dif;},0)+' und)</span><b style="color:#ef4444">'+fmt(r.totalFaltInv)+'</b></div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>💵 Faltante en dinero</span><b style="color:#ef4444">'+fmt(r.dinFalt)+'</b></div>'
-      +(r.sobrItems.length?'<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#f5a623"><span>Sobrantes</span><span>'+r.sobrItems.map(function(x){return'+'+x.dif+' '+esc(x.p.nombre);}).join(', ')+'</span></div>':'')
-      +'<div style="display:flex;justify-content:space-between;font-size:14px;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><b>TOTAL FALTANTE</b><b style="color:'+(totalGeneral>0?'#ef4444':'#22c55e')+';font-size:16px">'+fmt(totalGeneral)+'</b></div>'
-    +'</div>'
+    +'<div id="cf-resumen" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:12px">'+_cfResumenHTML()+'</div>'
     +'<button class="btn btn-green btn-full" onclick="guardarCuadreInv(true)">✅ Guardar cuadre y AJUSTAR inventario al conteo</button>'
     +'<button class="btn btn-full" onclick="guardarCuadreInv(false)" style="background:#38bdf818;border:1px solid #38bdf844;color:#38bdf8;margin-top:8px">📝 Solo guardar el registro (no ajustar stock)</button>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function _cfResumenHTML(){
+  var r=_cfDif();
+  var totalGeneral=r.totalFaltInv+r.dinFalt;
+  return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>📦 Faltante en productos ('+r.faltItems.reduce(function(a,x){return a-x.dif;},0)+' und)</span><b style="color:#ef4444">'+fmt(r.totalFaltInv)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>💵 Faltante en dinero</span><b style="color:#ef4444">'+fmt(r.dinFalt)+'</b></div>'
+    +(r.sobrItems.length?'<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#f5a623"><span>Sobrantes</span><span>'+r.sobrItems.map(function(x){return'+'+x.dif+' '+esc(x.p.nombre);}).join(', ')+'</span></div>':'')
+    +(r.dinDet.some(function(d){return d.dif>0;})?'<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#f5a623"><span>Dinero sobrante</span><span>'+r.dinDet.filter(function(d){return d.dif>0;}).map(function(d){return d.f.label+' +'+fmt(d.dif).replace(/\u00A0/g,' ');}).join(', ')+'</span></div>':'')
+    +'<div style="display:flex;justify-content:space-between;font-size:14px;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><b>TOTAL FALTANTE</b><b style="color:'+(totalGeneral>0?'#ef4444':'#22c55e')+';font-size:16px">'+fmt(totalGeneral)+'</b></div>';
+}
+function _cfUpd(){
+  // Actualiza en vivo el resumen y los indicadores de cada fila SIN redibujar el modal (no se pierde el foco)
+  var res=document.getElementById('cf-resumen');
+  if(res)res.innerHTML=_cfResumenHTML();
+  Object.keys(window._cfVals||{}).forEach(function(pid){
+    var el=document.getElementById('cf-dif-p-'+pid);if(!el)return;
+    var p=menu.find(function(m){return String(m.id)===String(pid);});if(!p)return;
+    var v=window._cfVals[pid];
+    if(v===''||v==null){el.style.color='var(--dim)';el.innerHTML='—';return;}
+    var dif=(parseInt(v)||0)-(parseInt(p.stock)||0);
+    el.style.color=dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e';
+    el.innerHTML=dif<0?dif+' · '+fmt((-dif)*(p.precio||0)):dif>0?'+'+dif:'✓';
+  });
+  FPAGO.forEach(function(f){
+    var el=document.getElementById('cf-dif-d-'+f.id);if(!el)return;
+    var v=(window._cfDin||{})[f.id];
+    if(v===''||v==null){el.style.color='var(--dim)';el.innerHTML='—';return;}
+    var dif=(parseInt(String(v).replace(/[^0-9]/g,''))||0)-saldoActualFP(f.id);
+    el.style.color=dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e';
+    el.innerHTML=dif===0?'✓':(dif>0?'+':'−')+fmt(Math.abs(dif));
+  });
 }
 function guardarCuadreInv(ajustar){
   var r=_cfDif();
