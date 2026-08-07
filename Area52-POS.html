@@ -635,6 +635,7 @@ function iniciarSync(){
     pedidos=v||{};
     Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=Object.values(pedidos[k]||{});});
     _sndChequearPedidos();
+    _notifChequearPedidos();
     renderSoloPedido();updateHeader();actualizarColorMesas();
   });
   fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
@@ -1730,6 +1731,69 @@ function _mesasOcupadasIds(){
   return mesas.filter(function(m){return (pedidos[m.id]&&pedidos[m.id].length)||(pedidos[String(m.id)]&&pedidos[String(m.id)].length);}).map(function(m){return String(m.id);});
 }
 // Llamado desde el sync de pedidos: detecta mesas que pasan de vacías a ocupadas
+/* ═══ 🔔 NOTIFICACIONES DE ADMINISTRADOR (por dispositivo) ═══ */
+var _notifOn=false;
+try{_notifOn=localStorage.getItem('_a52_notif')==='1';}catch(e){}
+function notifDisponible(){return typeof Notification!=='undefined';}
+function toggleNotifAdmin(){
+  if(!notifDisponible()){alert('Este navegador no soporta notificaciones.');return;}
+  if(_notifOn){
+    _notifOn=false;
+    try{localStorage.setItem('_a52_notif','0');}catch(e){}
+    showToast('🔕 Notificaciones de admin apagadas en este equipo','#6b7280');
+    render();return;
+  }
+  Notification.requestPermission().then(function(perm){
+    if(perm==='granted'){
+      _notifOn=true;
+      try{localStorage.setItem('_a52_notif','1');}catch(e){}
+      try{new Notification('🛸 AREA 52',{body:'Notificaciones de administrador activas en este equipo.',tag:'a52-test'});}catch(e){}
+      showToast('🔔 Notificaciones activas<br><span style="font-size:12px;opacity:.85">Te avisarán de pedidos y cobros con la app minimizada</span>','#22c55e');
+    }else{
+      alert('El navegador bloqueó las notificaciones. Revisa los permisos del sitio (candado junto a la dirección) y vuelve a intentar.');
+    }
+    render();
+  });
+}
+function _notifAdmin(titulo,cuerpo,tag){
+  if(!_notifOn||!notifDisponible())return;
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;   // SOLO administrador
+  if(typeof document!=='undefined'&&!document.hidden)return; // con la app visible ya se ve/oye en pantalla
+  if(Notification.permission!=='granted')return;
+  try{new Notification(titulo,{body:cuerpo,tag:tag||('a52-'+Date.now()),silent:false});}catch(e){}
+}
+// Detalle de ítems por mesa para poder decir QUÉ se pidió
+var _notifPrevItems=null;
+function _notifChequearPedidos(){
+  var ahora={};
+  Object.keys(pedidos||{}).forEach(function(mid){
+    (pedidos[mid]||[]).forEach(function(it){
+      ahora[mid+'|'+it.uidItem]={qty:it.qty||1,mid:mid,
+        nom:it.isCustom?(it.customNombre||'Otro'):it.isCombo?('Combo '+(it.comboNombre||'')):it.isCubetazoMix?(it.cubMixNombre||'Cubetazo mixto'):(function(){var p=menu.find(function(m){return m.id===it.pid;});return (p?p.emoji+' '+p.nombre:'Producto')+(it.cubeta?' 🪣':'');})()};
+    });
+  });
+  if(_notifPrevItems!==null){
+    var porMesa={};
+    Object.keys(ahora).forEach(function(k){
+      var prev=_notifPrevItems[k];
+      var dif=ahora[k].qty-(prev?prev.qty:0);
+      if(dif>0){
+        var mid=ahora[k].mid;
+        (porMesa[mid]=porMesa[mid]||[]).push(dif+'× '+ahora[k].nom);
+      }
+    });
+    Object.keys(porMesa).forEach(function(mid){
+      var mesa=_nombreMesaNotif(mid);
+      _notifAdmin('🍺 Pedido · '+mesa,porMesa[mid].join(', '),'a52-ped-'+mid);
+    });
+  }
+  _notifPrevItems=ahora;
+}
+function _nombreMesaNotif(mid){
+  if(String(mid).indexOf('vr_')===0)return '⚡ Venta rápida';
+  var m=(typeof mesas!=='undefined'?mesas:[]).find(function(mm){return String(mm.id)===String(mid);});
+  return m?(m.nombre||('Mesa '+m.num)):('Mesa '+mid);
+}
 function _sndChequearPedidos(){
   var ocup=_mesasOcupadasIds();
   if(_sndPrevOcup!==null){
@@ -1744,6 +1808,10 @@ function _sndChequearVentas(){
   if(_sndPrevVMax!==null&&max>_sndPrevVMax){
     var nuevas=ventas.filter(function(v){return v.ts>_sndPrevVMax&&!v.esPagoCredito;});
     if(nuevas.length){
+      nuevas.forEach(function(v){
+        var fpN=(FPAGO.find(function(f){return f.id===v.fp;})||{}).label||v.fp||'';
+        _notifAdmin('💰 Cobro · '+(v.mesa||'Venta'),fmt(v.total||0).replace(/\u00A0/g,' ')+' · '+fpN+(v.uidNombre?' · cobró '+v.uidNombre:''),'a52-cobro-'+(v._fbkey||v.ts));
+      });
       sonidoMesaPagada();
       // Si tras el cobro no queda ninguna mesa ocupada: melodía de "todo cobrado"
       setTimeout(function(){
@@ -8853,6 +8921,15 @@ function renderAdmin(){
     +'</div>'
   +'</div>';
 
+  // ═══ Card notificaciones de admin ═══
+  var notifSection='<div class="card mb12" style="grid-column:1/-1;border:1px solid #38bdf844">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<div><div style="color:#38bdf8;font-weight:800;font-size:15px">🔔 Notificaciones de administrador</div>'
+      +'<div style="color:var(--muted);font-size:12px;margin-top:3px">Avisos en pantalla con la app minimizada: qué se pidió y qué se cobró. Solo para tu usuario admin, se activa por equipo. <b>Funciona mejor en computador; en iPhone el sistema pausa la app al minimizarla.</b></div></div>'
+      +'<button onclick="toggleNotifAdmin()" style="background:'+(_notifOn?'#38bdf8':'var(--card2)')+';color:'+(_notifOn?'#fff':'var(--muted)')+';border:1px solid '+(_notifOn?'#38bdf8':'var(--border)')+';border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(_notifOn?'🔔 ACTIVAS aquí':'🔕 Activar en este equipo')+'</button>'
+    +'</div>'
+  +'</div>';
+
   // ═══ Card de Promociones ═══
   var activasPr=promos.filter(function(x){return x.on!==false;});
   var vigsPr=activasPr.filter(function(pr){return promoVigente(pr.prodId,pr.tipo||'unidad')===pr;});
@@ -9065,6 +9142,7 @@ function renderAdmin(){
     +'</div>'
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
+    +notifSection
     +invLockSection
     +promoSection
     +compSection
