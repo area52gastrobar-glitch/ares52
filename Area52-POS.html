@@ -3640,6 +3640,7 @@ function renderInventario(){
     +(esAdmin?'<button onclick="abrirKardex()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📒 Kardex</button>':'')
     +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
     +'<button onclick="elegirImpresionInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
+    +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirCuadreInventario()" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">📋 Cuadre físico</button>':'')
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
@@ -9383,6 +9384,111 @@ function imprimirPrecuenta(){
 }
 
 /* ═══ Imprimir inventario actual (solo lo que queda, sin ceros) ═══ */
+/* ═══ 📋 CUADRE FÍSICO: conteo de inventario + dinero, valoriza faltantes ═══ */
+function abrirCuadreInventario(){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede hacer el cuadre.');return;}
+  window._cfVals={};window._cfDin={};window._cfBusq='';
+  renderCuadreInv();
+}
+function _cfDif(){
+  // Calcula diferencias con lo digitado hasta ahora
+  var faltItems=[],sobrItems=[],totalFalt=0;
+  Object.keys(window._cfVals||{}).forEach(function(pid){
+    var v=window._cfVals[pid];
+    if(v===''||v==null)return;
+    var p=menu.find(function(m){return String(m.id)===String(pid);});
+    if(!p||p.sinStock)return;
+    var fis=parseInt(v)||0;
+    var dif=fis-(parseInt(p.stock)||0);
+    if(dif<0){var val=(-dif)*(p.precio||0);faltItems.push({p:p,dif:dif,valor:val});totalFalt+=val;}
+    else if(dif>0)sobrItems.push({p:p,dif:dif});
+  });
+  var dinFalt=0,dinDet=[];
+  FPAGO.forEach(function(f){
+    var v=window._cfDin[f.id];
+    if(v===''||v==null)return;
+    var fis=parseInt(String(v).replace(/[^0-9]/g,''))||0;
+    var sis=saldoActualFP(f.id);
+    var dif=fis-sis;
+    dinDet.push({f:f,sis:sis,fis:fis,dif:dif});
+    if(dif<0)dinFalt+=(-dif);
+  });
+  return{faltItems:faltItems,sobrItems:sobrItems,totalFaltInv:totalFalt,dinDet:dinDet,dinFalt:dinFalt};
+}
+function renderCuadreInv(){
+  var q=_normTxt((window._cfBusq||'').trim());
+  var lista=menu.filter(function(p){return !p.sinStock;})
+    .filter(function(p){return !q||_normTxt(p.nombre).indexOf(q)>=0;})
+    .sort(function(a,b){return (a.cat||'').localeCompare(b.cat||'')||a.nombre.localeCompare(b.nombre);});
+  var filas=lista.map(function(p){
+    var v=(window._cfVals[p.id]!=null)?window._cfVals[p.id]:'';
+    var dif=(v!==''&&v!=null)?((parseInt(v)||0)-(parseInt(p.stock)||0)):null;
+    return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0"><span style="font-size:12px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+'</span>'
+      +'<span style="color:var(--muted);font-size:10px"> · sistema: '+p.stock+'</span></div>'
+      +'<input type="number" inputmode="numeric" placeholder="'+p.stock+'" value="'+v+'" oninput="window._cfVals['+p.id+']=this.value" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:center;font-weight:800;font-size:13px"/>'
+      +'<span style="width:74px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'
+        +(dif===null?'—':dif<0?dif+' · '+fmt((-dif)*(p.precio||0)):dif>0?'+'+dif:'✓')+'</span>'
+    +'</div>';
+  }).join('');
+  var din=FPAGO.map(function(f){
+    var sis=saldoActualFP(f.id);
+    var v=(window._cfDin[f.id]!=null)?window._cfDin[f.id]:'';
+    var fis=(v!==''&&v!=null)?(parseInt(String(v).replace(/[^0-9]/g,''))||0):null;
+    var dif=(fis!=null)?fis-sis:null;
+    return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="flex:1"><span style="font-size:12px;font-weight:700">'+f.emoji+' '+f.label+'</span>'
+      +'<span style="color:var(--muted);font-size:10px"> · sistema: '+fmt(sis)+'</span></div>'
+      +'<input type="text" inputmode="numeric" placeholder="contado" value="'+v+'" oninput="this.value=moneyFmt(this.value);window._cfDin[\''+f.id+'\']=this.value" style="width:92px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;text-align:right;font-weight:800;font-size:12px"/>'
+      +'<span style="width:82px;text-align:right;font-size:11px;font-weight:800;color:'+(dif===null?'var(--dim)':dif<0?'#ef4444':dif>0?'#f5a623':'#22c55e')+'">'+(dif===null?'—':dif===0?'✓':(dif>0?'+':'−')+fmt(Math.abs(dif)))+'</span>'
+    +'</div>';
+  }).join('');
+  var r=_cfDif();
+  var totalGeneral=r.totalFaltInv+r.dinFalt;
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📋 Cuadre físico de inventario y dinero</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Escribe solo lo que contaste (lo vacío no se toca). Los faltantes se valorizan a precio de venta.</div>'
+    +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">📦 Productos</div>'
+    +'<input class="inp" placeholder="🔍 Filtrar producto..." value="'+esc(window._cfBusq||'')+'" oninput="window._cfBusq=this.value;renderCuadreInv()" style="margin-bottom:6px"/>'
+    +'<div style="max-height:260px;overflow-y:auto;background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+(filas||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:11px">Sin resultados</div>')+'</div>'
+    +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">💵 Dinero por medio de pago</div>'
+    +'<div style="background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+din+'</div>'
+    +'<div style="background:var(--bg);border:1px solid '+(totalGeneral>0?'#ef444466':'var(--border)')+';border-radius:10px;padding:10px 13px;margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>📦 Faltante en productos ('+r.faltItems.reduce(function(a,x){return a-x.dif;},0)+' und)</span><b style="color:#ef4444">'+fmt(r.totalFaltInv)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>💵 Faltante en dinero</span><b style="color:#ef4444">'+fmt(r.dinFalt)+'</b></div>'
+      +(r.sobrItems.length?'<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#f5a623"><span>Sobrantes</span><span>'+r.sobrItems.map(function(x){return'+'+x.dif+' '+esc(x.p.nombre);}).join(', ')+'</span></div>':'')
+      +'<div style="display:flex;justify-content:space-between;font-size:14px;padding-top:6px;border-top:1px solid var(--border);margin-top:4px"><b>TOTAL FALTANTE</b><b style="color:'+(totalGeneral>0?'#ef4444':'#22c55e')+';font-size:16px">'+fmt(totalGeneral)+'</b></div>'
+    +'</div>'
+    +'<button class="btn btn-green btn-full" onclick="guardarCuadreInv(true)">✅ Guardar cuadre y AJUSTAR inventario al conteo</button>'
+    +'<button class="btn btn-full" onclick="guardarCuadreInv(false)" style="background:#38bdf818;border:1px solid #38bdf844;color:#38bdf8;margin-top:8px">📝 Solo guardar el registro (no ajustar stock)</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function guardarCuadreInv(ajustar){
+  var r=_cfDif();
+  if(!r.faltItems.length&&!r.sobrItems.length&&!r.dinDet.length){alert('No digitaste ningún conteo.');return;}
+  var items=[];
+  Object.keys(window._cfVals||{}).forEach(function(pid){
+    var v=window._cfVals[pid];
+    if(v===''||v==null)return;
+    var p=menu.find(function(m){return String(m.id)===String(pid);});
+    if(!p||p.sinStock)return;
+    var fis=parseInt(v)||0;var sis=parseInt(p.stock)||0;var dif=fis-sis;
+    if(dif!==0)items.push({pid:p.id,nombre:p.nombre,sis:sis,fis:fis,dif:dif,valor:dif<0?(-dif)*(p.precio||0):0});
+  });
+  var reg={id:'cf_'+Date.now(),ts:Date.now(),uidNombre:usuarioActivo.nombre,
+    items:items,
+    dinero:r.dinDet.map(function(d){return{fp:d.f.id,label:d.f.label,sis:d.sis,fis:d.fis,dif:d.dif};}),
+    faltInv:r.totalFaltInv,faltDin:r.dinFalt,total:r.totalFaltInv+r.dinFalt,ajustado:!!ajustar};
+  fbPush('conteosInv',reg);
+  if(ajustar){
+    items.forEach(function(it){
+      cambiarStock('p',it.pid,it.dif,'📋 Cuadre físico ('+(it.dif<0?'faltante':'sobrante')+')');
+    });
+  }
+  closeModal1();
+  showToast((ajustar?'📋 Cuadre guardado y stock ajustado':'📝 Cuadre guardado (sin ajustar)')+'<br><span style="font-size:12px;opacity:.85">Faltante total: '+fmt(reg.total)+' ('+fmt(reg.faltInv)+' productos + '+fmt(reg.faltDin)+' dinero)</span>',reg.total>0?'#ef4444':'#22c55e');
+  render();
+}
+
 function elegirImpresionInventario(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🖨️ Imprimir inventario</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:14px">¿Qué quieres revisar?</div>'
