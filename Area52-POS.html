@@ -1288,10 +1288,10 @@ function renderPanelPedido(){
       return _cartaCardHTML(p,agoSS,okNS,okCS,true);
     }
     var ago=!ventaSinStock&&p.stock<=0;
-    var enUso=(ped.filter(function(it){return it.pid===p.id;})).reduce(function(a,it){return a+(it.cubeta?it.qty*5:it.qty);},0);
-    // Si "vender sin stock" está activo, siempre se puede agregar
-    var okN=ventaSinStock||(!ago&&(p.stock-enUso)>=1);
-    var okC=ventaSinStock||(!ago&&(p.stock-enUso)>=5);
+    // El stock YA descuenta lo pedido en mesas (descuento en tiempo real al agregar):
+    // el número es la nevera física, así que la disponibilidad es directa.
+    var okN=ventaSinStock||(!ago&&p.stock>=1);
+    var okC=ventaSinStock||(!ago&&p.stock>=5);
     return _cartaCardHTML(p,ago&&!ventaSinStock,okN,okC,false);
   }
   function _cartaCardHTML(p,mostrarAgotado,okN,okC,esSinStock){
