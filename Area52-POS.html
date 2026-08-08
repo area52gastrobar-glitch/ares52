@@ -2441,14 +2441,15 @@ function ajustarStockItem(item,delta,motivo){
   }
   var p=menu.find(function(m){return Number(m.id)===Number(item.pid);});
   if(!p)return;
-  var c2=item.cubeta?Math.abs(delta)*5:Math.abs(delta);
+  var mult=item.cubeta?5:(parseInt(item.varianteUnd)||1);  // ej: Alitas x24 descuenta 24 alas del stock
+  var c2=Math.abs(delta)*mult;
   var s=delta<0?-1:1;
-  cambiarStock('p',p.id,c2*s,mot+(item.cubeta?' (cubetazo)':''));
-  // Receta
+  cambiarStock('p',p.id,c2*s,mot+(item.cubeta?' (cubetazo)':(mult>1?' ('+(item.varianteNombre||'')+' ×'+mult+')':'')));
+  // Receta (escala igual por las unidades de la variante)
   if(p.receta&&p.receta.length){
     p.receta.forEach(function(ri){
       var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
-      cambiarStock(enMenu?'p':'i',ri.pid,ri.cantidad*Math.abs(delta)*s,mot+' (receta de '+p.nombre+')');
+      cambiarStock(enMenu?'p':'i',ri.pid,ri.cantidad*Math.abs(delta)*mult*s,mot+' (receta de '+p.nombre+')');
     });
   }
 }
@@ -2518,6 +2519,11 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   // (si la promo termina con la mesa abierta, lo ya pedido conserva su precio)
   var _promo=(!varianteNombre)?promoVigente(pid,cubeta?'cubeta':'unidad'):null;
   var _pPromo=_promo?(_promo.valor||0):0;
+  var _vUnd=1;
+  if(varianteNombre&&p&&p.variantes){
+    var _vv=p.variantes.find(function(v){return v.nombre===varianteNombre;});
+    if(_vv&&_vv.und)_vUnd=parseInt(_vv.und)||1;
+  }
   var idx=pedidos[id].findIndex(function(it){
     return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
   });
@@ -2526,12 +2532,13 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
     pid:pid,cubeta:cubeta,qty:cantidad,
     varianteNombre:varianteNombre||'',
     variantePrecio:variantePrecio||0,
+    varianteUnd:_vUnd,
     precioPromo:_pPromo,
     uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36),
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
   // Descontar stock en tiempo real
-  ajustarStockItem({pid:pid,cubeta:cubeta,isCustom:false,isCombo:false},-cantidad);
+  ajustarStockItem({pid:pid,cubeta:cubeta,varianteNombre:varianteNombre,varianteUnd:_vUnd,isCustom:false,isCombo:false},-cantidad);
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
   var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
@@ -2555,14 +2562,22 @@ function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
     return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'');
   });
   var precio=variantePrecio||(p?p.precio:0);
+  var _vUndL=1;
+  if(varianteNombre&&p&&p.variantes){
+    var _vvL=p.variantes.find(function(v){return v.nombre===varianteNombre;});
+    if(_vvL&&_vvL.und)_vUndL=parseInt(_vvL.und)||1;
+  }
   if(idx>=0)pedidos[id][idx].qty++;
   else pedidos[id].push({
     pid:pid,cubeta:cubeta,qty:1,
     varianteNombre:varianteNombre||'',
     variantePrecio:variantePrecio||0,
+    varianteUnd:_vUndL,
     uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36),
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
+  // Descontar stock en tiempo real (igual que agregarItemQty)
+  ajustarStockItem({pid:pid,cubeta:cubeta,varianteNombre:varianteNombre,varianteUnd:_vUndL,isCustom:false,isCombo:false},-1);
   // Toast feedback
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
@@ -2709,7 +2724,7 @@ function abrirSelectorVariante(pid){
     return'<button data-act="pick-variante" data-pid="'+pid+'" data-nom="'+esc(v.nombre)+'" data-pre="'+v.precio+'" '
       +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;'
       +'text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px">'
-      +'<span style="font-weight:700;font-size:14px">'+esc(v.nombre)+'</span>'
+      +'<span style="font-weight:700;font-size:14px">'+esc(v.nombre)+((v.und||1)>1?' <span style="color:var(--muted);font-size:11px;font-weight:600">('+v.und+' und)</span>':'')+'</span>'
       +'<span style="color:var(--accent);font-weight:700;font-size:15px">'+fmt(v.precio)+'</span>'
       +'</button>';
   }).join('');
@@ -3995,7 +4010,7 @@ function renderCarta(){
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-sinstock" '+(p.sinStock?'checked':'')+'/> '
         +'✨ Sin control de cantidad — solo Disponible / Agotado <span style="color:var(--muted);font-size:11px">(cócteles, preparados...)</span></label>'
-      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Personal $22.000 · Mediana $32.000)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: Personal)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
+      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Alitas x8 · x16 · x24. "Und" = cuántas descuenta del stock)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: x8)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="'+(v.und||1)+'" style="width:52px;text-align:center" data-vund="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
         +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:3px">🪣 Precio CUBETAZO ×5 (COP)</div>'
         +'<input class="inp money" id="f-cubeta" type="text" value="'+moneyFmt(p.cubeta||'')+'" placeholder="Ej: 20.000" inputmode="numeric"/>'
       +'</div>'
@@ -4514,8 +4529,9 @@ function agregarVariante(){
   var row=document.createElement('div');
   row.style.cssText='display:flex;gap:6px;margin-bottom:6px';
   row.id='vrow-'+vi;
-  row.innerHTML='<input class="inp inp-sm" placeholder="Nombre (ej: Mediana)" style="flex:2" data-vnom="'+vi+'"/>'
+  row.innerHTML='<input class="inp inp-sm" placeholder="Nombre (ej: x16)" style="flex:2" data-vnom="'+vi+'"/>'
     +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" style="flex:1" data-vpre="'+vi+'"/>'
+    +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="1" style="width:52px;text-align:center" data-vund="'+vi+'"/>'
     +'<button onclick="this.parentElement.remove()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>';
   list.appendChild(row);
   row.querySelector('[data-vnom]').focus();
@@ -4792,7 +4808,9 @@ function guardarProd(){
     var nom=el.value.trim();
     var preEl=document.querySelector('[data-vpre="'+vi+'"]');
     var pre=preEl?parseInt(String(preEl.value).replace(/[^0-9]/g,''))||0:0;
-    if(nom&&pre>0) variantes.push({nombre:nom,precio:pre});
+    var undEl=document.querySelector('[data-vund="'+vi+'"]');
+    var vund=undEl?Math.max(1,parseInt(undEl.value)||1):1;
+    if(nom&&pre>0) variantes.push({nombre:nom,precio:pre,und:vund});
   });
   var cubeta=cerv?(moneyVal('f-cubeta')||null):null;
   var emoji=(document.getElementById('f-emoji')||{}).value||'🍺';
