@@ -685,7 +685,9 @@ function iniciarSync(){
   fbOn('cajaHoy',function(v){if(v)cajaHoy=v;if(tabActual==='caja')render();});
   fbOn('turnoInicio',function(v){if(v)turnoInicio=v;if(tabActual==='caja'||tabActual==='ventas')render();});
   fbOn('consumoEmpleados',function(v){
-    consumoEmpleados=v?(Array.isArray(v)?v:Object.values(v)):[];
+    if(!v){consumoEmpleados=[];return;}
+    if(Array.isArray(v)){consumoEmpleados=v;return;}
+    consumoEmpleados=Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;});
   });
   fbOn('novedades',function(v){
     novedades=v?Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;}):[];
@@ -2239,7 +2241,7 @@ function renderConsumoEmpModal(){
   var iniMes=new Date();iniMes.setDate(1);iniMes.setHours(0,0,0,0);
   var mesPorEmp={};var mesValorEmp={};
   consumoEmpleados.forEach(function(c){
-    if(c.ts<iniMes.getTime())return;
+    if(c.descontado)return;   // los ya descontados del pago no cuentan
     mesPorEmp[c.empNombre]=(mesPorEmp[c.empNombre]||0)+(c.cantidad||1);
     mesValorEmp[c.empNombre]=(mesValorEmp[c.empNombre]||0)+valorConsumo(c);
   });
@@ -2252,7 +2254,7 @@ function renderConsumoEmpModal(){
     return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1;min-width:0"><span style="font-weight:700">'+esc(c.empNombre||'?')+'</span> · '+(c.cantidad||1)+'× '+esc(c.prodNombre||'?')
         +'<div style="color:var(--muted);font-size:10px;margin-top:1px">🕐 '+fmtFechaCorta(c.ts)+(c.uidNombre?' · anotó '+esc(c.uidNombre):'')+'</div></div>'
-      +'<span style="color:#f5a623;font-weight:800;font-size:12px;white-space:nowrap">'+fmt(valorConsumo(c))+'</span>'
+      +'<span style="text-align:right;white-space:nowrap"><span style="color:#f5a623;font-weight:800;font-size:12px">'+fmt(valorConsumo(c))+'</span>'+(c.descontado?'<br><span style="color:#22c55e;font-size:9px;font-weight:800">✔ descontado '+fmtFechaCorta(c.descontado.ts)+'</span>':'')+'</span>'
       +(esAdm?'<button onclick="eliminarConsumoEmp(\''+c.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer">✕</button>':'')
     +'</div>';
   }).join('');
@@ -2314,6 +2316,27 @@ function confirmarConsumoEmp(pid,qty){
   window._ceBusq='';
   showToast('🥤 '+qty+'× '+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">💰 Se le descontará '+fmt((p.precio||0)*qty)+' · fuera de caja</span>','#38bdf8');
   renderConsumoEmpModal();
+}
+function descontarConsumosEmp(empId){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede descontar consumos.');return;}
+  var pend=consumoEmpleados.filter(function(c){return String(c.empId)===String(empId)&&!c.descontado;});
+  if(!pend.length){alert('Este empleado no tiene consumos pendientes por descontar.');return;}
+  var tot=pend.reduce(function(a,c){return a+valorConsumo(c);},0);
+  var und=pend.reduce(function(a,c){return a+(c.cantidad||1);},0);
+  var nom=pend[0].empNombre||'';
+  if(!confirm('¿Marcar como DESCONTADOS los consumos de '+nom+'?\n\n'+und+' und · '+fmt(tot).replace(/\u00A0/g,' ')+'\n\nÚsalo cuando ya se los descontaste del pago. El contador queda en cero y el historial se conserva.'))return;
+  var marca={ts:Date.now(),uidNombre:usuarioActivo.nombre};
+  pend.forEach(function(c){
+    c.descontado=marca;
+    if(c._fbkey)fbSet('consumoEmpleados/'+c._fbkey+'/descontado',marca);
+  });
+  // Respaldo para registros viejos sin clave de Firebase: reescribir la colección completa
+  if(pend.some(function(c){return !c._fbkey;})){
+    var ob={};consumoEmpleados.forEach(function(c,i){ob[c._fbkey||('ce'+i)]=c;});
+    fbSet('consumoEmpleados',ob);
+  }
+  showToast('✅ Consumos de '+esc(nom)+' descontados<br><span style="font-size:12px;opacity:.85">'+und+' und · '+fmt(tot)+' · contador en cero</span>','#22c55e');
+  render();
 }
 function eliminarConsumoEmp(cid){
   var c=consumoEmpleados.find(function(x){return x.id===cid;});
@@ -8531,14 +8554,15 @@ function renderEmpleados(){
 
     // 🥤 Consumos del mes (para verificar el descuento al pagar)
     var _iniMesC=new Date();_iniMesC.setDate(1);_iniMesC.setHours(0,0,0,0);
-    var _consMes=consumoEmpleados.filter(function(c){return String(c.empId)===String(e.id)&&c.ts>=_iniMesC.getTime();});
+    var _consMes=consumoEmpleados.filter(function(c){return String(c.empId)===String(e.id)&&!c.descontado;});
     var _consMesUnd=_consMes.reduce(function(a,c){return a+(c.cantidad||1);},0);
     var _consMesVal=_consMes.reduce(function(a,c){return a+valorConsumo(c);},0);
     return'<div class="card" style="margin-bottom:10px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
         +'<div><div style="font-weight:800;font-size:15px">👷 '+esc(e.nombre)+'</div>'
         +'<div style="color:var(--muted);font-size:12px">'+esc(e.cargo||'Sin cargo')+'</div>'
-        +(_consMesUnd>0?'<div style="color:#f5a623;font-size:11px;font-weight:800;margin-top:3px">🥤 Consumos del mes: '+fmt(_consMesVal)+' <span style="color:var(--muted);font-weight:600">('+_consMesUnd+' und — a descontar)</span></div>':'')
+        +(_consMesUnd>0?'<div style="color:#f5a623;font-size:11px;font-weight:800;margin-top:3px">🥤 Consumos pendientes: '+fmt(_consMesVal)+' <span style="color:var(--muted);font-weight:600">('+_consMesUnd+' und — a descontar)</span>'
+          +(usuarioActivo.rol==='admin'?' <button onclick="descontarConsumosEmp(\''+e.id+'\')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800;cursor:pointer;margin-left:4px">✅ Descontar</button>':'')+'</div>':'')
         +'</div>'
         +'<button data-act="emp-edit" data-emp="'+e.id+'" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer">⚙️ Pago: '+fmt(diario)+'/día</button>'
       +'</div>'
@@ -8631,8 +8655,9 @@ function abrirEditarEmpleado(empId){
     +'<input class="inp" id="emp-nombre" value="'+esc(e.nombre)+'"/></div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cargo</div>'
     +'<input class="inp" id="emp-cargo" value="'+esc(e.cargo||'')+'"/></div>'
-    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Pago por día (COP)</div>'
     +'<input class="inp money" id="emp-pago" type="text" inputmode="numeric" value="'+moneyFmt(e.pagoDiario||'')+'"/></div>'
+    +'<label style="display:flex;align-items:center;gap:8px;padding:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;cursor:pointer"><input type="checkbox" id="emp-variable" '+(e.pagoVariable?'checked':'')+'/> <span style="font-size:13px">Pago variable por día (elijo el valor al marcar cada día)</span></label>'
     +'<button class="btn btn-green btn-full" onclick="guardarEmpleado(\''+empId+'\')">Guardar cambios</button>'
     +'<button class="btn btn-full" onclick="eliminarEmpleado(\''+empId+'\')" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;margin-top:8px">🚫 Sacar de nómina (conserva historial)</button>'
     +'<button class="btn btn-full" onclick="borrarEmpleadoDefinitivo(\''+empId+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;margin-top:8px">🗑️ Borrar definitivamente</button>');
