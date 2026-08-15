@@ -13,39 +13,51 @@
 <link rel="apple-touch-icon" href="icon.png"/>
 <link rel="icon" type="image/png" href="icon.png"/>
 <script>
-// ═══ Auto-detección de versiones nuevas ═══
-// Compara el ETag/Last-Modified del archivo en el servidor contra el cargado.
-// Si cambió: en la pantalla de login recarga solo; con sesión abierta muestra
-// un aviso con botón (nunca interrumpe una operación en curso).
+// ═══ Auto-detección de versiones nuevas (por CONTENIDO, no por ETag) ═══
+// El ETag de GitHub Pages cambia entre nodos del CDN aunque el archivo sea el
+// mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
+// encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
+// el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
+var APP_BUILD='2026-08-08';
 (function(){
-  var tagInicial=null;var avisado=false;
-  function leerTag(cb){
-    fetch(location.href.split('#')[0],{method:'HEAD',cache:'no-store'}).then(function(r){
-      cb((r.headers.get('etag')||'')+'|'+(r.headers.get('last-modified')||''));
+  var avisadoBuild=null;
+  function leerBuildRemoto(cb){
+    var url=location.href.split('#')[0].split('?')[0]+'?chk='+Date.now();
+    fetch(url,{cache:'no-store',headers:{'Range':'bytes=0-6000'}}).then(function(r){return r.text();}).then(function(t){
+      var m=t.match(/APP_BUILD='([^']+)'/);
+      cb(m?m[1]:null);
     }).catch(function(){cb(null);});
   }
   function chequear(){
-    leerTag(function(tag){
-      if(!tag||tag==='|')return;
-      if(tagInicial===null){tagInicial=tag;return;}
-      if(tag!==tagInicial&&!avisado){
-        var logueado=window._usuarioActivoGlobal;
-        if(!logueado){location.reload();return;}  // en login: actualizar de una, sin molestar
-        avisado=true;
-        var b=document.createElement('div');
-        b.id='banner-update';
-        b.style.cssText='position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#8B5CF6;color:#fff;border-radius:14px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:inherit';
-        b.innerHTML='<span style="font-size:13px;font-weight:700">🛸 Hay una versión nueva de la app</span>'
-          +'<button onclick="location.reload()" style="background:#fff;color:#8B5CF6;border:none;border-radius:9px;padding:9px 16px;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap">🔄 Actualizar</button>';
-        document.body.appendChild(b);
+    leerBuildRemoto(function(remoto){
+      if(!remoto||remoto===APP_BUILD)return;         // mismo archivo: silencio total
+      if(avisadoBuild===remoto)return;               // ya avisado para esa versión
+      var destino=location.href.split('#')[0].split('?')[0]+'?v='+encodeURIComponent(remoto);
+      var logueado=window._usuarioActivoGlobal;
+      if(!logueado){
+        // En login: recargar solo, pero UNA vez por versión (evita bucles si el caché insiste)
+        var ya='';try{ya=localStorage.getItem('_a52_autoReloadBuild')||'';}catch(e){}
+        if(ya===remoto)return;
+        try{localStorage.setItem('_a52_autoReloadBuild',remoto);}catch(e){}
+        location.href=destino;return;
       }
+      avisadoBuild=remoto;
+      var viejo=document.getElementById('banner-update');if(viejo)viejo.remove();
+      var b=document.createElement('div');
+      b.id='banner-update';
+      b.style.cssText='position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#8B5CF6;color:#fff;border-radius:14px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:inherit';
+      b.innerHTML='<span style="font-size:13px;font-weight:700">🛸 Hay una versión nueva de la app</span>'
+        +'<button onclick="location.href=\''+destino+'\'" style="background:#fff;color:#8B5CF6;border:none;border-radius:9px;padding:9px 16px;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap">🔄 Actualizar</button>';
+      document.body.appendChild(b);
     });
   }
   window.addEventListener('load',function(){
-    chequear();  // guarda el tag inicial
-    setInterval(chequear,10*60*1000);  // cada 10 minutos
+    var st=document.getElementById('ver-stamp');
+    if(st)st.textContent='v'+APP_BUILD;
+    setTimeout(chequear,20000);                 // primer chequeo a los 20s
+    setInterval(chequear,10*60*1000);           // luego cada 10 minutos
     document.addEventListener('visibilitychange',function(){
-      if(document.visibilityState==='visible')chequear();  // al volver a abrir la app
+      if(document.visibilityState==='visible')chequear();
     });
   });
 })();
@@ -251,7 +263,7 @@ select.inp{cursor:pointer}
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <div id="ver-stamp" style="position:fixed;bottom:8px;right:12px;color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.5px">v2026-08-06</div>
+    <div id="ver-stamp" style="position:fixed;bottom:8px;right:12px;color:#6b7280;font-size:10px;font-weight:700;letter-spacing:.5px"></div>
     <div style="text-align:center;margin-bottom:22px">
       <svg width="52" height="34" viewBox="0 0 48 32" style="margin-bottom:6px">
         <ellipse cx="24" cy="22" rx="22" ry="7" fill="#a855f7" opacity="0.35"/>
