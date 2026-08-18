@@ -5770,11 +5770,13 @@ function analizarDatafono(){
   var totVchSin=vchSin.reduce(function(a,r){return a+r.monto;},0);
   var totSinVch=sinVch.reduce(function(a,m){return a+m.monto;},0);
   var totProp=validas.reduce(function(a,r){return a+(r.propina||0);},0);
+  window._dfInforme={ok:ok,grupos:grupos,vchSin:vchSin,sinVch:sinVch,validas:validas,ignoradas:ignoradas,tolMin:TOL/60000,hhmm:hhmm,tj:tj};
   res.innerHTML=
     '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
       +'💳 '+validas.length+' vouchers aprobados · ✅ '+ok.length+' cruzados'+(grupos.length?' · 🧩 '+grupos.length+' agrupados':'')+' · 📥 '+vchSin.length+' sin registro · 📤 '+sinVch.length+' sin voucher'
       +(ignoradas?' · <span style="color:var(--muted)">'+ignoradas+' ignoradas (anuladas/rechazadas)</span>':'')
       +(totProp?'<br><span style="color:#22c55e;font-size:11px">💁 Propinas en el datáfono: '+fmt(totProp)+'</span>':'')
+      +'<button onclick="exportarDatafonoCsv()" style="display:block;width:100%;margin-top:8px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">📊 Exportar informe a Excel</button>'
     +'</div>'
     +(ok.length?'<div style="font-weight:800;font-size:12px;color:#22c55e;margin-bottom:3px">✅ Cruzados</div>'
       +ok.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#22c55e">'+fmt(x.v.monto)+'</b> · '+hhmm(x.v.ts)+' '+esc(tj(x.v))+' ↔ '+x.mov.ref+' · Δ'+x.difMin+' min</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
@@ -5784,10 +5786,100 @@ function analizarDatafono(){
         return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(g.pago.monto)+'</b> (1 voucher) ↔ '+g.movs.map(function(m){return m.ref+' '+fmt(m.monto);}).join(' + ')+' · Δmáx '+g.dMaxMin+' min</div>';
       }).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(vchSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Pasaron tarjeta y NO está registrado en el sistema · '+fmt(totVchSin)+'</div>'
-      +vchSin.map(function(r){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#ef4444">'+fmt(r.monto)+'</b> · '+hhmm(r.ts)+' · '+esc(tj(r))+' · recibo '+esc(r.recibo||'')+' — ¿cobro sin registrar?</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
+      +vchSin.map(function(r,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<div onclick="verMovsCercaDf('+i+')" style="cursor:pointer"><b style="color:#ef4444">'+fmt(r.monto)+'</b> · '+hhmm(r.ts)+' · '+esc(tj(r))+' · recibo '+esc(r.recibo||'')+' <span style="color:var(--muted)">▸ ver qué se cobró a esa hora</span></div>'
+        +'<div id="df-exp-v'+i+'" style="display:none"></div>'
+      +'</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinVch.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado como tarjeta SIN voucher del datáfono · '+fmt(totSinVch)+'</div>'
-      +sinVch.map(function(mv){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' — ¿de verdad pasó por el datáfono?</div>';}).join(''):'')
+      +sinVch.map(function(mv,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<div onclick="verDetalleMovDf('+i+')" style="cursor:pointer"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' <span style="color:var(--muted)">▸ ver movimiento de la mesa</span></div>'
+        +'<div id="df-exp-m'+i+'" style="display:none"></div>'
+      +'</div>';}).join(''):'')
     +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Cruce por monto exacto y hora (±'+(TOL/60000)+' min) contra cobros y abonos con TARJETA. Solo los días del archivo. Las anulaciones y rechazadas no entran al cruce.</div>';
+}
+
+/* ═══ 🔎 Detalles desplegables + exportación del contraste de datáfono ═══ */
+function _lineaVentaCerca(v,anclaTs){
+  var d=new Date(v.ts);
+  var hh=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  var difMin=Math.round(Math.abs(v.ts-anclaTs)/60000);
+  var fps=(v.pagos&&v.pagos.length?v.pagos:[{fp:v.fp,monto:v.total}]).map(function(pg){
+    var f=FPAGO.find(function(x){return x.id===(pg.fp||'');});
+    return (f?f.emoji:'')+' '+fmt(pg.monto||0).replace(/\u00A0/g,' ');
+  }).join(' + ');
+  return '<div style="padding:2px 0;font-size:10.5px;color:var(--text)">'+hh+' · <b>'+esc(v.mesa||'')+'</b> · '+fmt(v.total||0)+' ('+fps+')'+(v.uidNombre?' · cobró '+esc(v.uidNombre):'')+' · Δ'+difMin+' min</div>';
+}
+function verMovsCercaDf(i){
+  var box=document.getElementById('df-exp-v'+i);
+  if(!box)return;
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  var r=(window._dfInforme&&window._dfInforme.vchSin[i]);
+  if(!r)return;
+  var VENT=60*60000;
+  var cercanas=ventas.filter(function(v){return Math.abs(v.ts-r.ts)<=VENT;})
+    .sort(function(a,b){return Math.abs(a.ts-r.ts)-Math.abs(b.ts-r.ts);}).slice(0,8);
+  box.innerHTML='<div style="background:var(--bg);border-radius:8px;padding:7px 10px;margin-top:4px">'
+    +'<div style="color:var(--muted);font-size:10px;margin-bottom:3px">Cobros del sistema ±60 min de ese voucher (cualquier medio de pago):</div>'
+    +(cercanas.length?cercanas.map(function(v){return _lineaVentaCerca(v,r.ts);}).join(''):'<div style="color:var(--dim);font-size:10.5px">No hubo cobros en esa franja.</div>')
+    +'<div style="color:var(--muted);font-size:9.5px;margin-top:4px">💡 Si ves un cobro por el mismo valor en otro medio (efectivo, Nequi...), probablemente lo registraron con el medio equivocado.</div>'
+  +'</div>';
+  box.style.display='block';
+}
+function verDetalleMovDf(i){
+  var box=document.getElementById('df-exp-m'+i);
+  if(!box)return;
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  var mv=(window._dfInforme&&window._dfInforme.sinVch[i]);
+  if(!mv)return;
+  var v=ventas.find(function(x){return x.ts===mv.vts;});
+  var html='<div style="background:var(--bg);border-radius:8px;padding:7px 10px;margin-top:4px">';
+  if(!v){html+='<div style="color:var(--dim);font-size:10.5px">No encontré la venta (¿abono suelto?).</div>';}
+  else{
+    var d=new Date(v.ts);
+    html+='<div style="font-size:10.5px;margin-bottom:3px"><b>'+esc(v.mesa||'')+'</b> · '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+(v.uidNombre?' · cobró '+esc(v.uidNombre):'')+' · total '+fmt(v.total||0)+'</div>';
+    var pagos=(v.pagos&&v.pagos.length?v.pagos:[{fp:v.fp,monto:v.total}]);
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:3px">Pagos: '+pagos.map(function(pg){var f=FPAGO.find(function(x){return x.id===pg.fp;});return (f?f.emoji+' '+f.label:pg.fp)+' '+fmt(pg.monto||0).replace(/\u00A0/g,' ');}).join(' + ')+'</div>';
+    var abs=v.abonos?(Array.isArray(v.abonos)?v.abonos:Object.values(v.abonos)):[];
+    if(abs.length)html+='<div style="font-size:10px;color:var(--muted);margin-bottom:3px">Abonos: '+abs.map(function(ab){var f=FPAGO.find(function(x){return x.id===ab.fp;});return esc(ab.nombre||'')+' '+fmt(ab.monto||0).replace(/\u00A0/g,' ')+' ('+(f?f.label:ab.fp)+')';}).join(' · ')+'</div>';
+    var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    if(its.length){
+      html+='<div style="font-size:10px;color:var(--muted)">Consumo:</div>'
+        +its.slice(0,12).map(function(it){
+          var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+          var nom=it.nombre||it.customNombre||(p?p.nombre:'ítem');
+          return '<div style="font-size:10px;padding:1px 0">'+(it.qty||1)+'× '+esc(nom)+(it.varianteNombre?' ('+esc(it.varianteNombre)+')':'')+(it.cubeta?' 🪣':'')+'</div>';
+        }).join('')
+        +(its.length>12?'<div style="font-size:9.5px;color:var(--dim)">… y '+(its.length-12)+' más</div>':'');
+    }
+  }
+  html+='</div>';
+  box.innerHTML=html;
+  box.style.display='block';
+}
+function exportarDatafonoCsv(){
+  var inf=window._dfInforme;
+  if(!inf){alert('Primero analiza el CSV del datáfono.');return;}
+  var S=';';var lineas=[];
+  var num=function(n){return String(n||0);};
+  var fyh=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear()+S+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
+  var clean=function(t){return String(t||'').replace(/<[^>]*>/g,'').replace(/;/g,',');};
+  lineas.push(['SECCION','FECHA','HORA','MONTO','FRANQUICIA','TARJETA','RECIBO','MESA / REFERENCIA','QUIEN COBRO','DIF MIN'].join(S));
+  inf.ok.forEach(function(x){lineas.push(['CRUZADO',fyh(x.v.ts),num(x.v.monto),clean(x.v.franquicia),clean(x.v.tarjeta),clean(x.v.recibo),clean(x.mov.mesa||x.mov.ref),clean(x.mov.uidNombre),num(x.difMin)].join(S));});
+  inf.grupos.forEach(function(g){
+    if(g.tipo==='pagos→cobro'){g.pagos.forEach(function(p){lineas.push(['AGRUPADO (varios vouchers → 1 cobro)',fyh(p.ts),num(p.monto),clean(p.franquicia),clean(p.tarjeta),clean(p.recibo),clean(g.mov.mesa||g.mov.ref),clean(g.mov.uidNombre),num(g.dMaxMin)].join(S));});}
+    else{g.movs.forEach(function(m){lineas.push(['AGRUPADO (1 voucher → varios cobros)',fyh(g.pago.ts),num(g.pago.monto),clean(g.pago.franquicia),clean(g.pago.tarjeta),clean(g.pago.recibo),clean(m.mesa||m.ref),clean(m.uidNombre),num(g.dMaxMin)].join(S));});}
+  });
+  inf.vchSin.forEach(function(r){lineas.push(['SIN REGISTRO EN SISTEMA',fyh(r.ts),num(r.monto),clean(r.franquicia),clean(r.tarjeta),clean(r.recibo),'','',''].join(S));});
+  inf.sinVch.forEach(function(mv){lineas.push(['SIN VOUCHER DEL DATAFONO',fyh(mv.ts),num(mv.monto),'','','',clean(mv.mesa||mv.ref),clean(mv.uidNombre),''].join(S));});
+  var csv='\uFEFF'+lineas.join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  var d=new Date();
+  var nombre='Contraste_datafono_'+d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)+'.csv';
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=nombre;
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(a.href);},500);
+  showToast('📊 Informe exportado: '+nombre+'<br><span style="font-size:12px;opacity:.85">Ábrelo en Excel</span>','#22c55e');
 }
 
 /* ═══ 📱 Contraste con SMS del banco (monto + fecha + HORA) ═══ */
@@ -5846,7 +5938,7 @@ function _movsDigitales(diasSet){
       if(!digital(fp)||monto<=0)return;
       var d=_concilDia(new Date(v.ts));
       if(!diasSet[d])return;
-      movs.push({ts:v.ts,monto:monto,fp:fp,ref:esc(v.mesa||'Venta')+(v.uidNombre?' · cobró '+esc(v.uidNombre):''),vts:v.ts});
+      movs.push({ts:v.ts,monto:monto,fp:fp,ref:esc(v.mesa||'Venta')+(v.uidNombre?' · cobró '+esc(v.uidNombre):''),vts:v.ts,mesa:v.mesa||'',uidNombre:v.uidNombre||''});
     });
   });
   return movs;
