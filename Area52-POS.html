@@ -5918,23 +5918,32 @@ function parsearSmsBanco(texto){
   return out;
 }
 function _movsDigitales(diasSet){
-  // Movimientos de plata digital del sistema en los días dados: pagos de ventas + abonos (con su hora real)
+  // Movimientos de plata digital del sistema en los días dados, SIN contar doble:
+  // los 'pagos' de la venta consolidan el total (incluyen lo ya abonado), así que
+  // cada abono genera su movimiento a SU hora real y se RESTA del pago del mismo
+  // medio; del pago solo queda el neto cobrado al final.
   var digital=function(fp){return fp&&fp!=='efectivo';};
   var movs=[];
   ventas.forEach(function(v){
-    if(v.esPagoCredito!==true&&v.esPagoCredito!==undefined){}
     var abs=v.abonos?(Array.isArray(v.abonos)?v.abonos:Object.values(v.abonos)):[];
-    var absTot=0;
+    var abonadoPorFp={};var absTot=0;
     abs.forEach(function(ab){
-      absTot+=(ab.monto||0);
+      var m=ab.monto||0;absTot+=m;
+      abonadoPorFp[ab.fp||'']=(abonadoPorFp[ab.fp||'']||0)+m;
       if(!digital(ab.fp))return;
       var d=_concilDia(new Date(ab.ts||v.ts));
       if(!diasSet[d])return;
-      movs.push({ts:ab.ts||v.ts,monto:ab.monto||0,fp:ab.fp,ref:'Abono ('+esc(ab.nombre||'')+') · '+esc(v.mesa||''),vts:v.ts});
+      movs.push({ts:ab.ts||v.ts,monto:m,fp:ab.fp,ref:'Abono ('+esc(ab.nombre||'')+') · '+esc(v.mesa||''),vts:v.ts,mesa:v.mesa||'',uidNombre:v.uidNombre||''});
     });
     var pagos=v.pagos&&v.pagos.length?v.pagos:[{fp:v.fp,monto:(v.total||0)-absTot}];
     pagos.forEach(function(pg){
       var fp=pg.fp||pg[0];var monto=(pg.monto!=null?pg.monto:pg[1])||0;
+      // Restar lo que ya entró como abono por ese mismo medio (evita el doble conteo)
+      var yaAbonado=abonadoPorFp[fp]||0;
+      if(yaAbonado>0){
+        var resta=Math.min(yaAbonado,monto);
+        monto-=resta;abonadoPorFp[fp]=yaAbonado-resta;
+      }
       if(!digital(fp)||monto<=0)return;
       var d=_concilDia(new Date(v.ts));
       if(!diasSet[d])return;
