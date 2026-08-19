@@ -18,7 +18,7 @@
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-08-08';
+var APP_BUILD='2026-08-19';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -5528,7 +5528,7 @@ function abrirConcilBanco(){
       +'<button class="btn btn-full" onclick="analizarSmsBanco()" style="background:#a855f7;color:#fff;border:none;font-weight:800">🔍 Contrastar mensajes</button>'
       +'<div style="display:flex;gap:6px;margin-top:6px">'
         +'<button onclick="cargarSmsAutomaticos()" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">📡 Usar los automáticos del celular'+(smsBanco.length?' ('+smsBanco.length+')':'')+'</button>'
-        +'<button onclick="verComoConectarCelular()" style="flex:1;background:var(--card2);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer">⚙️ ¿Cómo conectar el celular?</button>'
+        +'<button onclick="verComoConectarCelular()" style="flex:1;background:var(--card2);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer">⚙️ Conectar correo o celular</button>'
       +'</div>'
       +'<div id="sms-result" style="margin-top:10px"></div>'
     +'</div>'
@@ -5596,15 +5596,21 @@ function _smsMatch(parsed,tolMin){
 function _smsAutoLlego(m){
   var parsed=parsearSmsBanco(m.texto||'')[0];
   if(!parsed)return;
+  // Si el mismo pago ya llegó por otro canal (SMS y correo a la vez), no repetir
+  if(!window._smsYaProc)window._smsYaProc={};
+  var llave=parsed.monto+'|'+parsed.ts;
+  if(window._smsYaProc[llave])return;
+  window._smsYaProc[llave]=true;
+  var esperaMs=(m.origen==='correo')?180000:120000;  // correo demora más: re-chequeo a los 3 min
   var hit=_smsMatch(parsed,1);
   if(hit){
     _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit.difMin+' min)','a52-sms-'+m._fbkey);
     hablar('Se recibieron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+'. Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'').replace(/·.*$/,''));
   }else{
     hablar('Llegaron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+'. Esperando el registro.');
-    // Dar 2 minutos por si el cobro se registra justo después del SMS, y re-verificar
+    // Dar tiempo por si el cobro se registra después del aviso (correo: 3 min), y re-verificar
     setTimeout(function(){
-      var hit2=_smsMatch(parsed,2);
+      var hit2=_smsMatch(parsed,3);
       if(hit2){
         _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit2.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit2.difMin+' min)','a52-sms-'+m._fbkey);
         hablar('Confirmado: los '+_montoVoz(parsed.monto)+' pesos quedaron cruzados con '+hit2.mov.ref.replace(/<[^>]*>/g,'').replace(/·.*$/,''));
@@ -5612,7 +5618,7 @@ function _smsAutoLlego(m){
         _notifAdmin('⚠️ Llegó plata SIN registro','$'+(parsed.monto||0).toLocaleString('es-CO')+(parsed.de?' de '+parsed.de:'')+' · '+new Date(parsed.ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' — nadie registró ese cobro/abono','a52-sms-'+m._fbkey);
         hablar('Atención. Llegaron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+' y nadie registró ese cobro.');
       }
-    },120000);
+    },esperaMs);
   }
 }
 function cargarSmsAutomaticos(){
@@ -5622,20 +5628,50 @@ function cargarSmsAutomaticos(){
   ta.value=smsBanco.map(function(m){return m.texto||'';}).filter(Boolean).join('\n');
   analizarSmsBanco();
 }
+var CODIGO_SCRIPT_CORREO='function revisarCorreosBanco(){\n'
++'  var hilos=GmailApp.search(\'from:notificacionesbancolombia.com is:unread newer_than:1d\');\n'
++'  hilos.forEach(function(h){\n'
++'    h.getMessages().forEach(function(m){\n'
++'      if(!m.isUnread())return;\n'
++'      var cuerpo=m.getPlainBody();\n'
++'      var i=cuerpo.indexOf(\'Bancolombia:\');\n'
++'      if(i>=0){\n'
++'        var texto=cuerpo.substring(i,i+400).split(\'Con llaves\')[0].split(\'Con Bre-b\')[0];\n'
++'        UrlFetchApp.fetch(\'https://area52bar-a36aa-default-rtdb.firebaseio.com/smsBanco.json\',{\n'
++'          method:\'post\',contentType:\'application/json\',\n'
++'          payload:JSON.stringify({texto:texto,ts:Date.now(),origen:\'correo\'})\n'
++'        });\n'
++'      }\n'
++'      m.markRead();\n'
++'    });\n'
++'  });\n'
++'}';
+function copiarScriptCorreo(){
+  var ta=document.getElementById('script-correo-ta');
+  if(!ta)return;
+  ta.select();ta.setSelectionRange(0,99999);
+  try{document.execCommand('copy');showToast('📋 Código copiado','#22c55e');}catch(e){alert('Copia manualmente el código del recuadro.');}
+}
 function verComoConectarCelular(){
-  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">📡 Conectar el celular de los SMS</div>'
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">📡 Conectar las alertas del banco</div>'
     +'<div style="font-size:12px;color:var(--text);line-height:1.5">'
-    +'<b>Android (MacroDroid, gratis):</b><br>'
-    +'1. Instala <b>MacroDroid</b> y crea una macro.<br>'
-    +'2. <b>Disparador:</b> SMS recibido → remitente <i>contiene</i> "Bancolombia" (o el número corto del banco).<br>'
-    +'3. <b>Acción:</b> Petición HTTP → método <b>POST</b> → URL:<br>'
-    +'<code style="font-size:10px;word-break:break-all;background:var(--bg);padding:4px;border-radius:5px;display:block;margin:4px 0">https://area52bar-a36aa-default-rtdb.firebaseio.com/smsBanco.json</code>'
-    +'Tipo de contenido: <b>application/json</b> · Cuerpo:<br>'
-    +'<code style="font-size:10px;background:var(--bg);padding:4px;border-radius:5px;display:block;margin:4px 0">{"texto":"[sms_message]","ts":{{unix_timestamp}}000}</code>'
-    +'(en MacroDroid la variable del texto es <b>[sms_message]</b>)<br>'
-    +'4. Guarda y listo: cada SMS del banco entra solo al sistema.<br><br>'
-    +'<b>iPhone (Atajos):</b> Automatización → "Cuando reciba un mensaje" que contenga "Bancolombia" → acción "Obtener contenido de URL" con la misma URL, método POST, JSON: {"texto":"Mensaje","ts":0}. Desactiva "Preguntar antes de ejecutar".<br><br>'
-    +'<span style="color:var(--muted);font-size:11px">⚠️ Ese celular queda escribiendo en la base del bar: que sea un equipo tuyo de confianza. El sistema toma la fecha/hora que viene DENTRO del mensaje del banco, así que no importa si el push llega con retraso.</span>'
+    +'<div style="background:#22c55e14;border:1px solid #22c55e33;border-radius:9px;padding:8px 10px;margin-bottom:10px">'
+      +'<b style="color:#22c55e">📧 Por CORREO (recomendado)</b><br>'
+      +'<span style="font-size:11px">Se configura <b>UNA sola vez</b> en la cuenta de Gmail que recibe las alertas (area52.gastrobar@gmail.com) y sirve para <b>todos los equipos a la vez</b>: computador y celulares con el POS abierto anuncian solos. No hay que instalar nada en ningún celular.</span>'
+    +'</div>'
+    +'1. En un computador, entra con esa cuenta de Gmail a <b>script.google.com</b> → "Nuevo proyecto".<br>'
+    +'2. Borra lo que aparece y pega este código:<br>'
+    +'<textarea id="script-correo-ta" readonly style="width:100%;height:110px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:9px;font-family:monospace;padding:6px;box-sizing:border-box;margin:4px 0">'+CODIGO_SCRIPT_CORREO+'</textarea>'
+    +'<button onclick="copiarScriptCorreo()" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;margin-bottom:6px">📋 Copiar código</button><br>'
+    +'3. Guarda (💾) y dale ▶ <b>Ejecutar</b> una vez: Google pedirá permisos, acéptalos (es tu propia cuenta leyendo tu propio correo).<br>'
+    +'4. A la izquierda, en <b>Activadores</b> (el relojito ⏰) → "Añadir activador" → función <b>revisarCorreosBanco</b> → "Según tiempo" → <b>Cada minuto</b> → Guardar.<br>'
+    +'5. Listo: cada alerta del banco entra sola al sistema entre 1 y 2 minutos después. El cruce usa la fecha y hora que vienen <b>dentro</b> del mensaje, así que la demora del correo no daña el contraste al minuto — y el sistema ya sabe esperar ese margen antes de alertar "sin registro".<br><br>'
+    +'<b style="color:var(--muted)">📱 Alternativa por SMS (si el banco los manda a un celular):</b><br>'
+    +'<span style="font-size:11px">Android con <b>MacroDroid</b>: macro con disparador "SMS recibido" (remitente contiene Bancolombia) → acción "Petición HTTP" POST a<br>'
+    +'<code style="font-size:9.5px;word-break:break-all;background:var(--bg);padding:3px;border-radius:5px;display:block;margin:3px 0">https://area52bar-a36aa-default-rtdb.firebaseio.com/smsBanco.json</code>'
+    +'contenido <b>application/json</b>, cuerpo: <code style="font-size:9.5px;background:var(--bg);padding:2px 4px;border-radius:4px">{"texto":"[sms_message]","ts":0}</code><br>'
+    +'iPhone: Atajos → automatización "Cuando reciba un mensaje" con "Bancolombia" → "Obtener contenido de URL" con el mismo POST.</span><br><br>'
+    +'<span style="color:var(--muted);font-size:11px">💡 Si un pago llega por los dos canales (SMS y correo), el sistema lo detecta y lo cuenta una sola vez.</span>'
     +'</div>'
     +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:10px">Entendido</button>');
 }
@@ -5901,9 +5937,11 @@ function _smsMonto(str){
   return parseInt(t.replace(/[^0-9]/g,''),10)||0;
 }
 function parsearSmsBanco(texto){
-  // Separa mensajes (cada uno inicia con 'Bancolombia'; tolera Nequi u otros con el mismo patrón)
-  var trozos=String(texto||'').split(/(?=Bancolombia[:\s])/i).map(function(t){return t.trim();}).filter(Boolean);
-  var out=[];
+  // Separa mensajes (cada uno inicia con 'Bancolombia'; tolera Nequi u otros con el mismo patrón).
+  // Se normalizan los saltos de línea porque los CORREOS del banco llegan con el texto partido.
+  var plano=String(texto||'').replace(/[\r\n\t]+/g,' ').replace(/ {2,}/g,' ');
+  var trozos=plano.split(/(?=Bancolombia[:\s])/i).map(function(t){return t.trim();}).filter(Boolean);
+  var out=[];var vistos={};
   trozos.forEach(function(t){
     var mMonto=t.match(/por\s*\$\s*([\d.,]+)/i);
     var mFecha=t.match(/el\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+a\s+las?\s+(\d{1,2}):(\d{2})/i);
@@ -5913,6 +5951,9 @@ function parsearSmsBanco(texto){
     var ts=new Date(y,parseInt(mFecha[2])-1,parseInt(mFecha[1]),parseInt(mFecha[4]),parseInt(mFecha[5])).getTime();
     var mDe=t.match(/de\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ .]+?)\s+por\s*\$/);
     var mCta=t.match(/cuenta\s*\*?(\d{3,6})/i);
+    var llave=monto+'|'+ts;
+    if(vistos[llave])return;   // mismo pago llegado por SMS y por correo: una sola vez
+    vistos[llave]=true;
     out.push({monto:monto,ts:ts,de:mDe?mDe[1].trim():'',cta:mCta?mCta[1]:'',txt:t.slice(0,140)});
   });
   return out;
