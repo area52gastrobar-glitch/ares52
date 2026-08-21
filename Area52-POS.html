@@ -18,7 +18,7 @@
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-08-19';
+var APP_BUILD='2026-08-19-2';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -237,6 +237,7 @@ select.inp{cursor:pointer}
 
 /* ── SYNC ── */
 #sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── MISC ── */
@@ -5552,6 +5553,42 @@ function abrirConcilBanco(){
     +'</div>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
 }
+/* ═══ 👁️ AVISOS VISUALES DE PAGOS: siempre activos (no se pueden apagar) ═══ */
+function _avisosPagoBox(){
+  var box=document.getElementById('pagos-avisos');
+  if(!box){
+    box=document.createElement('div');
+    box.id='pagos-avisos';
+    box.style.cssText='position:fixed;top:64px;right:12px;left:12px;max-width:360px;margin-left:auto;z-index:9800;display:flex;flex-direction:column;gap:8px;pointer-events:none';
+    document.body.appendChild(box);
+  }
+  return box;
+}
+function mostrarAvisoPago(key,tipo,titulo,cuerpo){
+  // tipo: 'ok' (verde, se va solo) · 'wait' (ámbar, queda hasta resolverse) · 'alerta' (rojo, queda hasta tocarlo)
+  if(!usuarioActivo||(usuarioActivo.rol!=='admin'&&usuarioActivo.rol!=='cajero'))return;
+  var box=_avisosPagoBox();
+  var viejo=box.querySelector('[data-key="'+key+'"]');
+  if(viejo)viejo.remove();
+  var colores={ok:['#0d2818','#22c55e'],wait:['#2a2108','#f5a623'],alerta:['#2a0d0d','#ef4444']};
+  var c=colores[tipo]||colores.ok;
+  var d=document.createElement('div');
+  d.setAttribute('data-key',key);
+  d.style.cssText='background:'+c[0]+';border:1.5px solid '+c[1]+';border-radius:13px;padding:11px 14px;box-shadow:0 8px 28px rgba(0,0,0,.45);cursor:pointer;pointer-events:auto;animation:slideDown .25s ease';
+  d.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'
+    +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:900;color:'+c[1]+'">'+titulo+'</div>'
+      +(cuerpo?'<div style="font-size:11.5px;color:var(--text);margin-top:2px;line-height:1.35">'+cuerpo+'</div>':'')
+    +'</div>'
+    +'<span style="color:'+c[1]+';font-size:12px;font-weight:900;opacity:.7">✕</span>'
+  +'</div>';
+  d.onclick=function(){d.remove();};
+  box.insertBefore(d,box.firstChild);
+  while(box.children.length>4)box.removeChild(box.lastChild);
+  if(tipo==='ok')setTimeout(function(){if(d.parentNode)d.remove();},15000);
+  return d;
+}
+
 /* ═══ 🗣️ VOZ DE PAGOS: anuncia por el altavoz los pagos contrastados ═══ */
 var _vozOn=false;
 try{_vozOn=localStorage.getItem('_a52_vozPagos')==='1';}catch(e){}
@@ -5610,19 +5647,25 @@ function _smsAutoLlego(m){
   if(window._smsYaProc[llave])return;
   window._smsYaProc[llave]=true;
   var esperaMs=(m.origen==='correo')?180000:120000;  // correo demora más: re-chequeo a los 3 min
+  var hh=new Date(parsed.ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  var quien=parsed.de?' de <b>'+esc(parsed.de)+'</b>':'';
   var hit=_smsMatch(parsed,1);
   if(hit){
+    mostrarAvisoPago('pago-'+m._fbkey,'ok','💰 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' '),hh+quien+'<br>✓ Cruzado con '+hit.mov.ref+' (Δ'+hit.difMin+' min)');
     _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit.difMin+' min)','a52-sms-'+m._fbkey);
     hablar('Se recibieron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+'. Cruzado con '+hit.mov.ref.replace(/<[^>]*>/g,'').replace(/·.*$/,''));
   }else{
+    mostrarAvisoPago('pago-'+m._fbkey,'wait','💰 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' '),hh+quien+'<br>⏳ Esperando que registren el cobro...');
     hablar('Llegaron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+'. Esperando el registro.');
     // Dar tiempo por si el cobro se registra después del aviso (correo: 3 min), y re-verificar
     setTimeout(function(){
       var hit2=_smsMatch(parsed,3);
       if(hit2){
+        mostrarAvisoPago('pago-'+m._fbkey,'ok','💰 '+fmt(parsed.monto).replace(/\u00A0/g,' ')+' confirmado',hh+quien+'<br>✓ Cruzado con '+hit2.mov.ref+' (Δ'+hit2.difMin+' min)');
         _notifAdmin('💠 Llegó '+fmt(parsed.monto).replace(/\u00A0/g,' ')+(parsed.de?' de '+parsed.de:''),'✓ Cruzado con '+hit2.mov.ref.replace(/<[^>]*>/g,'')+' (Δ'+hit2.difMin+' min)','a52-sms-'+m._fbkey);
         hablar('Confirmado: los '+_montoVoz(parsed.monto)+' pesos quedaron cruzados con '+hit2.mov.ref.replace(/<[^>]*>/g,'').replace(/·.*$/,''));
       }else{
+        mostrarAvisoPago('pago-'+m._fbkey,'alerta','⚠️ '+fmt(parsed.monto).replace(/\u00A0/g,' ')+' SIN registro',hh+quien+'<br>Nadie registró ese cobro o abono. Toca para cerrar.');
         _notifAdmin('⚠️ Llegó plata SIN registro','$'+(parsed.monto||0).toLocaleString('es-CO')+(parsed.de?' de '+parsed.de:'')+' · '+new Date(parsed.ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' — nadie registró ese cobro/abono','a52-sms-'+m._fbkey);
         hablar('Atención. Llegaron '+_montoVoz(parsed.monto)+' pesos'+(parsed.de?' de '+parsed.de:'')+' y nadie registró ese cobro.');
       }
