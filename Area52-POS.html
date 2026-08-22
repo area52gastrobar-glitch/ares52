@@ -1482,6 +1482,7 @@ function renderPanelPedido(){
           :'<button class="btn btn-sm btn-full" onclick="prestarPelotas()" style="margin-top:7px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">🐸 Prestar pelotas bolirrana</button>';
       })()
       +'<button class="btn btn-sm btn-full" onclick="abrirNovedadMesa()" style="margin-top:7px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333">📝 Anotar novedad (descuento, se voló, cortesía...)</button>'
+      +((usuarioActivo.rol!=='mesero')?'<button class="btn btn-sm btn-full" onclick="abrirSocioAsumeMesa()" style="margin-top:7px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833">🤝 Un socio asume parte de la cuenta</button>':'')
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+' style="margin-top:7px">💳 Cobrar todo</button>'
       +'</div>';
 
@@ -2912,6 +2913,48 @@ function eliminarNovedad(nid){
   if(!confirm('¿Eliminar esta novedad? ('+(n.tipoLabel||'')+' '+(n.mesa||'')+')'))return;
   if(n._fbkey)fbSet('novedades/'+n._fbkey,null);
   showToast('🗑️ Novedad eliminada','#6b7280');
+}
+
+/* ═══ 🤝 SOCIO ASUME PARTE DE LA CUENTA DE UNA MESA ═══ */
+function abrirSocioAsumeMesa(){
+  if(!mesaActiva)return;
+  window._samSocio=window._samSocio||'CARLOS';
+  var tot=totalPedido(mesaActiva.id);
+  var chip=function(so){var sel=window._samSocio===so;var col=so==='CARLOS'?'#38bdf8':'#a855f7';
+    return'<button onclick="window._samSocio=\''+so+'\';abrirSocioAsumeMesa()" style="flex:1;background:'+(sel?col:'var(--bg)')+';color:'+(sel?(so==='CARLOS'?'#000':'#fff'):'var(--muted)')+';border:1px solid '+(sel?col:'var(--border)')+';border-radius:9px;padding:10px;font-weight:900;font-size:13px;cursor:pointer">'+so+'</button>';};
+  var vMonto=(document.getElementById('sam-monto')||{}).value||'';
+  modal1('<div style="font-weight:800;font-size:15px;margin-bottom:6px">🤝 Socio asume parte · '+esc(mesaActiva.nombre||('Mesa '+mesaActiva.num))+'</div>'
+    +'<div style="background:var(--bg);border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:12px">Cuenta actual: <b style="color:var(--gold)">'+fmt(tot)+'</b></div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px">¿Qué socio asume?</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'+chip('CARLOS')+chip('JAVIER')+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto que asume</div>'
+    +'<input class="inp money" id="sam-monto" type="text" inputmode="numeric" placeholder="Ej: 30.000" value="'+esc(vMonto)+'" style="margin-bottom:12px"/>'
+    +'<div style="color:var(--muted);font-size:10.5px;margin-bottom:12px">La cuenta de la mesa baja por ese valor (queda una línea 🤝 visible en el pedido) y el monto se carga al consumo del socio. La caja y el inventario no se tocan.</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarSocioAsumeMesa()">🤝 Aplicar</button>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function confirmarSocioAsumeMesa(){
+  if(!mesaActiva)return;
+  var socio=window._samSocio||'CARLOS';
+  var monto=moneyVal('sam-monto')||0;
+  var tot=totalPedido(mesaActiva.id);
+  if(monto<=0){alert('Escribe el monto.');return;}
+  if(monto>tot){alert('No puede ser mayor a la cuenta actual ('+fmt(tot).replace(/\u00A0/g,' ')+').');return;}
+  var id=mesaActiva.id;
+  if(!pedidos[id])pedidos[id]=[];
+  pedidos[id].push({isCustom:true,customNombre:'🤝 Asume '+socio,customPrecio:-monto,qty:1,esAsumeSocio:true,socio:socio,
+    uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)});
+  fbSet('pedidos/'+id,pedidos[id]);
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:socio,
+    items:[{nombre:'🍻 Asumió cuenta · '+(mesaActiva.nombre||('Mesa '+mesaActiva.num)),emoji:'🍻',qty:1,precioBase:monto,precioSocio:monto}],
+    total:monto,esAsumido:true,stockDetalle:[],uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  consumoSocios.push(consumo);
+  var r=ref('consumoSocios');
+  if(r)r.push(consumo);else fbSet('consumoSocios',consumoSocios);
+  closeModal1();
+  logPedido(id,'🤝 '+socio+' asume '+fmt(monto).replace(/\u00A0/g,' '),1);
+  showToast('🤝 '+socio+' asumió '+fmt(monto)+'<br><span style="font-size:12px;opacity:.85">'+esc(mesaActiva.nombre||('Mesa '+mesaActiva.num))+' queda en '+fmt(tot-monto)+' · cargado a su consumo</span>','#38bdf8');
+  renderSoloPedido();updateHeader();actualizarColorMesas();
 }
 
 /* ═══ 🐸 PELOTAS DE BOLIRRANA ═══ */
@@ -8505,6 +8548,55 @@ function planSaneamientoTexto(){
     +'<i>La ejecución no es válida para Secretaría de Salud si no se documenta: fecha, hora, responsable y firma del administrador.</i>';
 }
 
+function pasarFiadoASocio(deudaId){
+  if(!usuarioActivo||(usuarioActivo.rol!=='admin'&&usuarioActivo.rol!=='subadmin')){alert('Solo admin o subadmin pueden pasar deudas a un socio.');return;}
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var pend=(d.total||0)-(d.pagado||0);
+  window._pfsSocio=window._pfsSocio||'CARLOS';
+  var chip=function(so){var sel=window._pfsSocio===so;var col=so==='CARLOS'?'#38bdf8':'#a855f7';
+    return'<button onclick="window._pfsSocio=\''+so+'\';pasarFiadoASocio(\''+deudaId+'\')" style="flex:1;background:'+(sel?col:'var(--bg)')+';color:'+(sel?(so==='CARLOS'?'#000':'#fff'):'var(--muted)')+';border:1px solid '+(sel?col:'var(--border)')+';border-radius:9px;padding:10px;font-weight:900;font-size:13px;cursor:pointer">'+so+'</button>';};
+  var vMonto=(document.getElementById('pfs-monto')||{}).value||'';
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:6px">🤝 Pasar deuda a un socio</div>'
+    +'<div style="background:var(--bg);border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:12px"><b>'+esc(d.clienteNombre||'Cliente')+'</b> · '+esc(d.mesa||'')+'<br><span style="color:#f5a623;font-weight:800">Pendiente: '+fmt(pend)+'</span></div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px">¿Qué socio asume?</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'+chip('CARLOS')+chip('JAVIER')+'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto que asume</div>'
+    +'<input class="inp money" id="pfs-monto" type="text" inputmode="numeric" placeholder="Ej: 30.000" value="'+esc(vMonto)+'" style="margin-bottom:12px"/>'
+    +'<div style="color:var(--muted);font-size:10.5px;margin-bottom:12px">La deuda del cliente baja por ese valor y queda cargado al consumo del socio (sin tocar la caja ni el inventario: la plata no ha entrado, ahora la debe el socio).</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarPasarFiadoASocio(\''+deudaId+'\')">🤝 Pasar al socio</button>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function confirmarPasarFiadoASocio(deudaId){
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var socio=window._pfsSocio||'CARLOS';
+  var monto=moneyVal('pfs-monto')||0;
+  var pend=(d.total||0)-(d.pagado||0);
+  if(monto<=0){alert('Escribe el monto.');return;}
+  if(monto>pend){alert('No puede ser mayor a lo pendiente ('+fmt(pend).replace(/\u00A0/g,' ')+').');return;}
+  d.pagado=(d.pagado||0)+monto;
+  d.pagos=d.pagos||[];
+  d.pagos.push({ts:Date.now(),valor:monto,fp:'socio',socio:socio});
+  var quedo=(d.total||0)-(d.pagado||0);
+  if(quedo<=0){
+    deudasCredito=deudasCredito.filter(function(x){return x.id!==deudaId;});
+  }else{
+    var i=deudasCredito.findIndex(function(x){return x.id===deudaId;});
+    if(i>=0)deudasCredito[i]=d;
+  }
+  var ob={};deudasCredito.forEach(function(x){ob[x.id]=x;});fbSet('deudasCredito',ob);
+  // Cargarlo al consumo del socio (sin caja, sin stock)
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:socio,
+    items:[{nombre:'📒 Asumió fiado · '+(d.mesa||'')+' ('+(d.clienteNombre||'cliente')+')',emoji:'📒',qty:1,precioBase:monto,precioSocio:monto}],
+    total:monto,esAsumido:true,deudaId:deudaId,stockDetalle:[],uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  consumoSocios.push(consumo);
+  var r=ref('consumoSocios');
+  if(r)r.push(consumo);else fbSet('consumoSocios',consumoSocios);
+  closeModal2();
+  showToast('🤝 '+socio+' asumió '+fmt(monto)+' del fiado de '+esc(d.clienteNombre||'cliente')+(quedo<=0?'<br><span style="font-size:12px;opacity:.85">La deuda quedó saldada y salió de cuentas por cobrar</span>':'<br><span style="font-size:12px;opacity:.85">Pendiente del cliente: '+fmt(quedo)+'</span>'),'#22c55e');
+  render();
+}
 function toggleDetalleFiado(deudaId){
   var box=document.getElementById('fiado-det-'+deudaId);
   var flecha=document.getElementById('fiado-flecha-'+deudaId);
@@ -8535,8 +8627,9 @@ function toggleDetalleFiado(deudaId){
     html+='<div style="color:var(--muted);font-size:10.5px;margin:6px 0 2px">ABONOS:</div>'
       +pagos.map(function(pg){
         var f=FPAGO.find(function(x){return x.id===pg.fp;});
+        var medio=pg.fp==='socio'?'🤝 Asumió '+esc(pg.socio||'socio'):(f?f.emoji+' '+f.label:esc(pg.fp||''));
         return'<div style="display:flex;justify-content:space-between;padding:1.5px 0">'
-          +'<span style="color:#22c55e">✓ '+fyh(pg.ts)+' · '+(f?f.emoji+' '+f.label:esc(pg.fp||''))+'</span>'
+          +'<span style="color:#22c55e">✓ '+fyh(pg.ts)+' · '+medio+'</span>'
           +'<span style="color:#22c55e;font-weight:700">'+fmt(pg.valor||0)+'</span>'
         +'</div>';
       }).join('')
@@ -8640,6 +8733,7 @@ function renderCreditos(){
           +'<div style="display:flex;gap:6px;margin-top:6px">'
           +'<button data-act="cred-pagar" data-id="'+d.id+'" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💵 Registrar pago</button>'
           +(puedeDevolver?'<button data-act="cred-volver" data-id="'+d.id+'" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">↩️ A mesa</button>':'')
+          +((usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')?'<button onclick="pasarFiadoASocio(\''+d.id+'\')" title="Pasar a socio" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">🤝</button>':'')
           +(esAdmin?'<button onclick="perderFiado(\''+d.id+'\')" title="Dar por perdida" style="background:#7c2d1218;color:#f97316;border:1px solid #f9731633;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">💀</button>':'')
           +(esAdmin?'<button data-act="cred-del" data-id="'+d.id+'" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>':'')
           +'</div>'
@@ -9561,8 +9655,8 @@ function eliminarConsumoSocio(sid){
     showToast('🗑️ Retiro eliminado · dinero de vuelta en la caja','#22c55e');
     render();return;
   }
-  // 📝 Consumo fuera de carta: no tocó inventario ni caja
-  if(c.esOtro){
+  // 📝 Consumo fuera de carta o deuda asumida: no tocó inventario ni caja
+  if(c.esOtro||c.esAsumido){
     if(!confirm('¿Eliminar este registro?'))return;
     consumoSocios=consumoSocios.filter(function(x){return x.id!==sid;});
     var ro=ref('consumoSocios');
