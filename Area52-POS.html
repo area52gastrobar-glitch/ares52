@@ -3790,6 +3790,7 @@ function renderInventario(){
     +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
     +'<button onclick="elegirImpresionInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirCuadreInventario()" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">📋 Cuadre físico</button>':'')
+    +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="toggleOcultarCant()" style="background:'+(invCfg.ocultarCant?'#a855f7':'var(--card)')+';color:'+(invCfg.ocultarCant?'#fff':'var(--muted)')+';border:1px solid '+(invCfg.ocultarCant?'#a855f7':'var(--border)')+';border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">'+(invCfg.ocultarCant?'🙈 Cajero SIN cantidades':'👁️ Cajero ve cantidades')+'</button>':'')
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
@@ -8504,6 +8505,51 @@ function planSaneamientoTexto(){
     +'<i>La ejecución no es válida para Secretaría de Salud si no se documenta: fecha, hora, responsable y firma del administrador.</i>';
 }
 
+function toggleDetalleFiado(deudaId){
+  var box=document.getElementById('fiado-det-'+deudaId);
+  var flecha=document.getElementById('fiado-flecha-'+deudaId);
+  if(!box)return;
+  if(box.style.display!=='none'){box.style.display='none';if(flecha)flecha.textContent='▸';return;}
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var fyh=function(ts){var x=new Date(ts);return ('0'+x.getDate()).slice(-2)+'/'+('0'+(x.getMonth()+1)).slice(-2)+'/'+x.getFullYear()+' '+('0'+x.getHours()).slice(-2)+':'+('0'+x.getMinutes()).slice(-2);};
+  var its=d.items?(Array.isArray(d.items)?d.items:Object.values(d.items)):[];
+  var pagos=d.pagos?(Array.isArray(d.pagos)?d.pagos:Object.values(d.pagos)):[];
+  var pend=(d.total||0)-(d.pagado||0);
+  var html='<div style="background:var(--bg);border-radius:8px;padding:8px 11px;margin-top:7px;font-size:11.5px">'
+    +'<div style="color:var(--muted);margin-bottom:5px">🕐 Fiado el <b style="color:var(--text)">'+fyh(d.ts)+'</b>'+(d.uidNombre?' · lo fió <b style="color:var(--text)">'+esc(d.uidNombre)+'</b>':'')+'</div>';
+  if(its.length){
+    html+='<div style="color:var(--muted);font-size:10.5px;margin-bottom:2px">CONSUMO:</div>'
+      +its.map(function(it){
+        var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+        var nom=it.nombre||it.customNombre||(p?p.nombre:'ítem');
+        var pu=it.precioCustom!=null?it.precioCustom:(it.precioPromo||it.variantePrecio||(p?(it.cubeta?(p.precioCubeta||p.precio*5):p.precio):0));
+        return'<div style="display:flex;justify-content:space-between;padding:1.5px 0">'
+          +'<span>'+(it.qty||1)+'× '+esc(nom)+(it.varianteNombre?' ('+esc(it.varianteNombre)+')':'')+(it.cubeta?' 🪣':'')+'</span>'
+          +'<span style="color:var(--muted)">'+fmt(pu*(it.qty||1))+'</span>'
+        +'</div>';
+      }).join('');
+  }
+  html+='<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:5px;padding-top:4px;font-weight:800"><span>Total</span><span>'+fmt(d.total||0)+'</span></div>';
+  if(pagos.length){
+    html+='<div style="color:var(--muted);font-size:10.5px;margin:6px 0 2px">ABONOS:</div>'
+      +pagos.map(function(pg){
+        var f=FPAGO.find(function(x){return x.id===pg.fp;});
+        return'<div style="display:flex;justify-content:space-between;padding:1.5px 0">'
+          +'<span style="color:#22c55e">✓ '+fyh(pg.ts)+' · '+(f?f.emoji+' '+f.label:esc(pg.fp||''))+'</span>'
+          +'<span style="color:#22c55e;font-weight:700">'+fmt(pg.valor||0)+'</span>'
+        +'</div>';
+      }).join('')
+      +'<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--muted)"><span>Total abonado</span><span>'+fmt(d.pagado||0)+'</span></div>';
+  }else if((d.pagado||0)>0){
+    html+='<div style="display:flex;justify-content:space-between;margin-top:4px;color:#22c55e"><span>Abonado (sin detalle)</span><span>'+fmt(d.pagado)+'</span></div>';
+  }
+  html+='<div style="display:flex;justify-content:space-between;margin-top:4px;font-weight:900;color:#f5a623"><span>PENDIENTE</span><span>'+fmt(pend)+'</span></div>'
+  +'</div>';
+  box.innerHTML=html;
+  box.style.display='block';
+  if(flecha)flecha.textContent='▾';
+}
 function perderFiado(deudaId){
   if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede dar por perdida una cuenta.');return;}
   var d=deudasCredito.find(function(x){return x.id===deudaId;});
@@ -8586,10 +8632,11 @@ function renderCreditos(){
       +deudasCli.map(function(d){
         var pend=d.total-(d.pagado||0);
         return'<div style="background:var(--card2);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
-          +'<div style="display:flex;justify-content:space-between;align-items:center">'
-            +'<span style="font-size:12px;color:var(--muted)">'+d.mesa+' · '+fmtFecha(d.ts)+'</span>'
+          +'<div onclick="toggleDetalleFiado(\''+d.id+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">'
+            +'<span style="font-size:12px;color:var(--muted)"><span id="fiado-flecha-'+d.id+'">▸</span> '+d.mesa+' · '+fmtFecha(d.ts)+'</span>'
             +'<span style="font-weight:700;font-size:13px;color:#f5a623">'+fmt(pend)+(d.pagado>0?' / '+fmt(d.total):'')+'</span>'
           +'</div>'
+          +'<div id="fiado-det-'+d.id+'" style="display:none"></div>'
           +'<div style="display:flex;gap:6px;margin-top:6px">'
           +'<button data-act="cred-pagar" data-id="'+d.id+'" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💵 Registrar pago</button>'
           +(puedeDevolver?'<button data-act="cred-volver" data-id="'+d.id+'" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">↩️ A mesa</button>':'')
