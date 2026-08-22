@@ -444,7 +444,22 @@ var novedades=[];  // 📝 novedades de mesas: descuentos, clientes que se volar
 var smsBanco=[];  // 📡 SMS del banco empujados desde el celular {texto,ts} → contraste automático
 var pelotasMesa={};  // 🐸 pelotas de bolirrana prestadas por mesa {mesaId:{qty,ts,uidNombre}}
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
-var invCfg={soloAdmin:true};  // 🔐 quién puede ajustar cantidades del inventario
+var invCfg={soloAdmin:true};  // 🔐 quién puede ajustar cantidades · ocultarCant: esconde números al cajero
+function verCantidadesInv(){
+  if(!usuarioActivo)return false;
+  if(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')return true;
+  return invCfg.ocultarCant!==true;
+}
+function _stockTxt(n){return verCantidadesInv()?n:'•••';}
+function toggleOcultarCant(){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  invCfg.ocultarCant=(invCfg.ocultarCant!==true);
+  fbSet('invCfg',invCfg);
+  showToast(invCfg.ocultarCant
+    ?'🙈 Cantidades OCULTAS para el cajero<br><span style="font-size:12px;opacity:.85">Ideal para día de conteo: el cajero no ve los números del sistema</span>'
+    :'👁️ Cantidades visibles para todos','#f5a623');
+  render();
+}
 function puedeAjustarInv(){
   if(!usuarioActivo)return false;
   if(usuarioActivo.rol==='admin')return true;
@@ -2849,6 +2864,7 @@ var TIPOS_NOVEDAD=[
   {id:'cortesia',emoji:'🎁',label:'Cortesía / regalo'},
   {id:'descuento',emoji:'🏷️',label:'Descuento'},
   {id:'dano',emoji:'💔',label:'Daño / rotura'},
+  {id:'perdida',emoji:'💀',label:'Cuenta perdida'},
   {id:'otra',emoji:'📝',label:'Otra'}
 ];
 function abrirNovedadMesa(){
@@ -3749,8 +3765,8 @@ function renderInventario(){
       +'<span>⚠️ Stock bajo · '+totalBajos+' producto'+(totalBajos!==1?'s':'')+'</span><span style="font-size:12px">'+(_secOpen.stockBajo?'▲ ocultar':'▼ ver')+'</span>'
     +'</button>'
     +(_secOpen.stockBajo?'<div style="padding:0 12px 10px">'
-      +bajos.map(function(m){return'<div>'+m.emoji+' '+esc(m.nombre)+' — '+m.stock+' '+m.und+(m.stock===0?' · AGOTADO':'')+'</div>';}).join('')
-      +bajosIng.map(function(i){return'<div>🧂 '+esc(i.nombre)+' — '+i.stock+' '+i.und+(i.stock===0?' · AGOTADO':'')+'</div>';}).join('')
+      +bajos.map(function(m){return'<div>'+m.emoji+' '+esc(m.nombre)+' — '+_stockTxt(m.stock)+' '+m.und+(m.stock===0?' · AGOTADO':'')+'</div>';}).join('')
+      +bajosIng.map(function(i){return'<div>🧂 '+esc(i.nombre)+' — '+_stockTxt(i.stock)+' '+i.und+(i.stock===0?' · AGOTADO':'')+'</div>';}).join('')
     +'</div>':'')
     +'</div>':'';
 
@@ -3797,7 +3813,7 @@ function renderInventario(){
             :'')
           +(esCajero
             ?'<button data-act="ing-edit-stock" data-iid="'+ing.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(ing.stock<=5?'#ef4444':ing.stock<=20?'#f5a623':'var(--text)')+';background:none;border:none;cursor:pointer;padding:0">'+ing.stock+'</button>'
-            :'<span style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(ing.stock<=5?'#ef4444':ing.stock<=20?'#f5a623':'var(--text)')+'">'+ing.stock+'</span>')
+            :'<span style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(ing.stock<=5?'#ef4444':ing.stock<=20?'#f5a623':'var(--text)')+'">'+_stockTxt(ing.stock)+'</span>')
           +(esCajero
             ?'<button data-act="ing-plus" data-iid="'+ing.id+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">+</button>'
             :'')
@@ -3839,7 +3855,7 @@ function renderInventario(){
           :'')
         +(canEdit
           ?'<button data-act="inv-edit-stock" data-pid="'+p.id+'" style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';font-weight:'+(p.stock<0?'900':'800')+';background:'+(p.stock<0?'#ef444415':'none')+';border:none;cursor:pointer;padding:2px 6px;border-radius:4px"><u>'+p.stock+'</u></button>'
-          :'<span style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';padding:2px 6px">'+p.stock+'</span>')
+          :'<span style="font-weight:800;font-size:15px;min-width:36px;text-align:center;color:'+(p.stock<0?'#ef4444':p.stock===0?'#ef4444':p.stock<=5?'#f5a623':'var(--text)')+';padding:2px 6px">'+_stockTxt(p.stock)+'</span>')
         +(canEdit
           ?'<button data-act="inv-plus" data-pid="'+p.id+'" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer">+</button>'
           :'')
@@ -8488,6 +8504,47 @@ function planSaneamientoTexto(){
     +'<i>La ejecución no es válida para Secretaría de Salud si no se documenta: fecha, hora, responsable y firma del administrador.</i>';
 }
 
+function perderFiado(deudaId){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede dar por perdida una cuenta.');return;}
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var pend=(d.total||0)-(d.pagado||0);
+  var its=d.items?(Array.isArray(d.items)?d.items:Object.values(d.items)):[];
+  var resumenIts=its.slice(0,6).map(function(it){
+    var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+    return (it.qty||1)+'× '+(it.nombre||it.customNombre||(p?p.nombre:'ítem'));
+  }).join(', ')+(its.length>6?'…':'');
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:6px">💀 Dar por perdida la cuenta</div>'
+    +'<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px">'
+      +'<b>'+esc(d.clienteNombre||'Cliente')+'</b> · total '+fmt(d.total||0)
+      +((d.pagado||0)>0?' · abonó '+fmt(d.pagado):'')
+      +'<br><span style="color:#ef4444;font-weight:800">Pendiente: '+fmt(pend)+'</span>'
+      +(resumenIts?'<br><span style="color:var(--muted);font-size:11px">'+esc(resumenIts)+'</span>':'')
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">La deuda se elimina de cuentas por cobrar y queda registrada como novedad (💀 pérdida) para la revisión de caja. Elige qué pasa con el inventario:</div>'
+    +'<button class="btn btn-full" onclick="confirmarPerderFiado(\''+deudaId+'\',false)" style="background:#ef4444;color:#fff;border:none;font-weight:800;margin-bottom:8px">💀 Perder SIN devolver stock<br><span style="font-size:10px;font-weight:600;opacity:.9">(se consumieron los productos — lo normal si la persona no volvió)</span></button>'
+    +'<button class="btn btn-full" onclick="confirmarPerderFiado(\''+deudaId+'\',true)" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;font-weight:800;margin-bottom:8px">📦 Perder Y devolver al inventario<br><span style="font-size:10px;font-weight:600;opacity:.9">(los productos nunca se entregaron)</span></button>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cancelar</button>');
+}
+function confirmarPerderFiado(deudaId,devolverStock){
+  var d=deudasCredito.find(function(x){return x.id===deudaId;});
+  if(!d)return;
+  var pend=(d.total||0)-(d.pagado||0);
+  var its=d.items?(Array.isArray(d.items)?d.items:Object.values(d.items)):[];
+  if(devolverStock)its.forEach(function(it){ajustarStockItem(it,+(it.qty||1));});
+  // Registro auditable en novedades (visible en Caja)
+  fbPush('novedades',{id:'nov_'+Date.now(),ts:Date.now(),
+    mesa:'Fiado · '+(d.clienteNombre||'cliente'),
+    tipo:'perdida',tipoLabel:'💀 Cuenta perdida',
+    monto:pend,
+    nota:'Fiado dado por perdido'+((d.pagado||0)>0?' (había abonado '+fmt(d.pagado).replace(/\u00A0/g,' ')+')':'')+(devolverStock?' · productos DEVUELTOS al inventario':' · productos consumidos (sin devolución)'),
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+  deudasCredito=deudasCredito.filter(function(x){return x.id!==deudaId;});
+  var ob={};deudasCredito.forEach(function(x){ob[x.id]=x;});fbSet('deudasCredito',ob);
+  closeModal2();
+  showToast('💀 Cuenta de '+esc(d.clienteNombre||'cliente')+' dada por perdida: '+fmt(pend)+'<br><span style="font-size:12px;opacity:.85">'+(devolverStock?'📦 Productos devueltos al inventario':'Sin devolución de stock')+' · registrada en novedades</span>','#ef4444');
+  render();
+}
 function eliminarFiado(deudaId){
   if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede eliminar fiados.');return;}
   var d=deudasCredito.find(function(x){return x.id===deudaId;});
@@ -8536,6 +8593,7 @@ function renderCreditos(){
           +'<div style="display:flex;gap:6px;margin-top:6px">'
           +'<button data-act="cred-pagar" data-id="'+d.id+'" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer">💵 Registrar pago</button>'
           +(puedeDevolver?'<button data-act="cred-volver" data-id="'+d.id+'" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">↩️ A mesa</button>':'')
+          +(esAdmin?'<button onclick="perderFiado(\''+d.id+'\')" title="Dar por perdida" style="background:#7c2d1218;color:#f97316;border:1px solid #f9731633;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">💀</button>':'')
           +(esAdmin?'<button data-act="cred-del" data-id="'+d.id+'" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>':'')
           +'</div>'
         +'</div>';
@@ -9740,6 +9798,7 @@ function renderAdmin(){
       +'<div><div style="color:#ef4444;font-weight:800;font-size:15px">🔐 Ajustes de inventario</div>'
       +'<div style="color:var(--muted);font-size:12px;margin-top:3px">Controla quién puede cambiar cantidades (+/−, editar stock, ingresos de mercancía). El consumo de personal y marcar productos agotados siguen abiertos porque quedan registrados.</div></div>'
       +'<button onclick="toggleInvLock()" style="background:'+(invCfg.soloAdmin!==false?'#ef4444':'#f5a623')+';color:#fff;border:none;border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(invCfg.soloAdmin!==false?'🔒 SOLO ADMIN':'🔓 Admin y subadmin')+'</button>'
+      +'<button onclick="toggleOcultarCant()" style="background:'+(invCfg.ocultarCant?'#a855f7':'var(--card2)')+';color:'+(invCfg.ocultarCant?'#fff':'var(--muted)')+';border:1px solid '+(invCfg.ocultarCant?'#a855f7':'var(--border)')+';border-radius:9px;padding:10px 16px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">'+(invCfg.ocultarCant?'🙈 Cajero SIN cantidades':'👁️ Cajero ve cantidades')+'</button>'
     +'</div>'
   +'</div>';
 
