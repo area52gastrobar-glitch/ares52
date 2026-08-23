@@ -7141,10 +7141,44 @@ function renderVentas(){
       porProd[k].qty+=qty;porProd[k].total+=precioItem(it)*(it.qty||1);
     });
   });
-  var ranking=Object.values(porProd).sort(function(a,b){return b.qty-a.qty;});
+  // 🔴 Lo que está EN MESAS ahora: ya salió del inventario (se descuenta al servir), solo falta cobrarlo
+  var enMesasTot=0;var enMesasItems=0;
+  Object.keys(pedidos||{}).forEach(function(mid){
+    var its=pedidos[mid]||[];
+    its.forEach(function(it){
+      enMesasTot+=precioItem(it)*(it.qty||1);
+      if(it.isCustom)return;
+      enMesasItems+=(it.qty||1);
+      if(it.isCombo){
+        var kc='combo_'+(it.comboNombre||'Combo');
+        if(!porProd[kc])porProd[kc]={nombre:it.comboNombre||'Combo',emoji:'🎁',qty:0,total:0};
+        porProd[kc].enMesa=(porProd[kc].enMesa||0)+(it.qty||1);
+        porProd[kc].enMesaTotal=(porProd[kc].enMesaTotal||0)+(it.comboPrecio||0)*(it.qty||1);
+        return;
+      }
+      if(it.isCubetazoMix){
+        (it.cubMixDetalle||[]).forEach(function(dd){
+          var km='p_'+dd.nombre;
+          if(!porProd[km])porProd[km]={nombre:dd.nombre,emoji:dd.emoji||'🍺',qty:0,total:0};
+          porProd[km].enMesa=(porProd[km].enMesa||0)+dd.cantidad*(it.qty||1);
+          porProd[km].enMesaTotal=(porProd[km].enMesaTotal||0)+(dd.precioUnidad||0)*dd.cantidad*(it.qty||1);
+        });
+        return;
+      }
+      var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+      var nombre=(p?p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'');
+      var emoji=p?p.emoji:'📦';
+      var qty=it.cubeta?(it.qty||1)*5:(it.qty||1);
+      var k='p_'+nombre;
+      if(!porProd[k])porProd[k]={nombre:nombre,emoji:emoji,qty:0,total:0};
+      porProd[k].enMesa=(porProd[k].enMesa||0)+qty;
+      porProd[k].enMesaTotal=(porProd[k].enMesaTotal||0)+precioItem(it)*(it.qty||1);
+    });
+  });
+  var ranking=Object.values(porProd).sort(function(a,b){return (b.qty+(b.enMesa||0))-(a.qty+(a.enMesa||0));});
 
   var kpis='<div class="kpi-grid">'
-    +[['💰','Ventas turno',fmt(totV),'#f5a623'],['🍽️','Cobros turno',hoyV.length,'#22c55e'],['🪣','Cubetazos',cubetazos,'#22c55e'],['📦','Productos distintos',ranking.length,'#38bdf8']].map(function(x){
+    +[['💰','Ventas turno',fmt(totV),'#f5a623'],['🔴','En mesas ahora',fmt(enMesasTot),'#ef4444'],['🍽️','Cobros turno',hoyV.length,'#22c55e'],['🪣','Cubetazos',cubetazos,'#22c55e'],['📦','Productos distintos',ranking.length,'#38bdf8']].map(function(x){
       return'<div class="kpi"><div style="font-size:20px">'+x[0]+'</div><div style="color:var(--muted);font-size:10px;margin-top:2px">'+x[1]+'</div><div style="color:'+x[3]+';font-weight:900;font-size:16px;margin-top:2px">'+x[2]+'</div></div>';
     }).join('')+'</div>';
 
@@ -7153,8 +7187,11 @@ function renderVentas(){
   }).join('')||'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin cobros</div>';
 
   var prodRows=ranking.slice(0,10).map(function(p){
-    return'<div class="res-row"><div><div style="font-size:12px;font-weight:600">'+p.emoji+' '+esc(p.nombre)+'</div><div style="color:var(--muted);font-size:11px">'+p.qty+' und</div></div><span style="color:var(--gold);font-weight:800">'+fmt(p.total)+'</span></div>';
-  }).join('')||'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin ventas</div>';
+    var em=p.enMesa||0;
+    return'<div class="res-row"><div><div style="font-size:12px;font-weight:600">'+p.emoji+' '+esc(p.nombre)+'</div>'
+      +'<div style="color:var(--muted);font-size:11px">'+(p.qty+em)+' und'+(em?' <span style="color:#ef4444;font-weight:700">('+p.qty+' cobradas + '+em+' en mesas)</span>':'')+'</div></div>'
+      +'<span style="color:var(--gold);font-weight:800">'+fmt(p.total+(p.enMesaTotal||0))+'</span></div>';
+  }).join('')||'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin consumo todavía</div>';
 
     var histRows=hoyV.slice().reverse().map(function(v){
     var f=FPAGO.find(function(x){return x.id===v.fp;});
@@ -7223,7 +7260,7 @@ function renderVentas(){
     +kpis
     +'<div class="res-grid">'
     +'<div class="res-card"><div class="section-title">Por forma de pago — turno</div>'+pagoRows+'</div>'
-    +'<div class="res-card"><div class="section-title">Top productos — turno</div>'+prodRows+'</div>'
+    +'<div class="res-card"><div class="section-title">🔥 Consumo del turno — cobrado + 🔴 en mesas</div>'+prodRows+'</div>'
     +(function(){
       var abiertoVC=!!_secOpen.ventasCat;
       var modoVC=window._vcModo||'turno';
