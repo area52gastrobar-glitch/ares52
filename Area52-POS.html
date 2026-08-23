@@ -3446,6 +3446,21 @@ function abrirVerificacionCobro(pagos,total){
     +'</div>');
 }
 
+function eliminarVentaDuplicada(fbkey){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  var v=ventas.find(function(x){return x._fbkey===fbkey;});
+  if(!v)return;
+  var hh=new Date(v.ts);
+  if(!confirm('🗑️ ¿Eliminar esta venta?\n\n'+(v.mesa||'')+' · '+fmt(v.total||0).replace(/\u00A0/g,' ')+' · '+('0'+hh.getHours()).slice(-2)+':'+('0'+hh.getMinutes()).slice(-2)+'\n\nÚsalo para cobros DUPLICADOS o registrados por error. El dinero sale de las ventas del día; el inventario NO se toca (los productos solo se descontaron una vez al servirlos). Queda registrada una novedad.'))return;
+  fbSet('ventas/'+fbkey,null);
+  fbPush('novedades',{id:'nov_'+Date.now(),ts:Date.now(),
+    mesa:v.mesa||'',tipo:'otra',tipoLabel:'🗑️ Venta eliminada (duplicado/error)',
+    monto:v.total||0,
+    nota:'Venta de las '+('0'+hh.getHours()).slice(-2)+':'+('0'+hh.getMinutes()).slice(-2)+' eliminada por el admin ('+((v.pagos&&v.pagos.length?v.pagos:[{fp:v.fp,monto:v.total}]).map(function(p){return (p.fp||'')+' '+fmt(p.monto||0).replace(/\u00A0/g,' ');}).join(' + '))+'). Inventario sin cambios.',
+    uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre});
+  showToast('🗑️ Venta eliminada: '+esc(v.mesa||'')+' · '+fmt(v.total||0)+'<br><span style="font-size:12px;opacity:.85">Inventario intacto · quedó en novedades</span>','#ef4444');
+  render();
+}
 function confirmarCobro(){
   if(!mesaActiva)return;
   var pagos=window._pagosParciales||{};
@@ -3478,6 +3493,30 @@ function confirmarCobro(){
 
   var mesa=mesaActiva;
   var ped=pedidos[mesa.id]||[];
+
+  // ── 🛡️ CANDADOS ANTI-COBRO-DOBLE ──
+  // (a) Cerrojo mientras se procesa: un segundo toque al botón no hace nada
+  if(window._cobrandoMesa===mesa.id){return;}
+  // (b) Si el pedido ya está vacío, otro equipo (u otro toque) ya cobró esta mesa
+  if(!ped.length){
+    alert('⚠️ Esta mesa ya no tiene pedido: parece que YA fue cobrada (quizás desde otro equipo). No se registró nada.');
+    window._cobroVerificado=false;window._compTemp=null;
+    closeModal1();render();
+    return;
+  }
+  // (c) Cobro idéntico muy reciente: misma mesa y mismo valor en los últimos 3 minutos
+  var _mesaNom=mesa.nombre||('Mesa '+mesa.num);
+  var _dup=ventas.find(function(v){return v.mesa===_mesaNom&&Math.round(v.total)===Math.round(total)&&(Date.now()-v.ts)<180000;});
+  if(_dup&&!window._cobroDobleOk){
+    var _hhd=new Date(_dup.ts);
+    if(!confirm('🛑 COBRO DUPLICADO?\n\n'+_mesaNom+' ya se cobró por '+fmt(total).replace(/\u00A0/g,' ')+' a las '+('0'+_hhd.getHours()).slice(-2)+':'+('0'+_hhd.getMinutes()).slice(-2)+' (hace '+Math.round((Date.now()-_dup.ts)/1000)+' seg).\n\n¿Seguro que quieres cobrarla OTRA VEZ?')){
+      window._cobroVerificado=false;window._compTemp=null;
+      return;
+    }
+    window._cobroDobleOk=true;
+  }
+  window._cobrandoMesa=mesa.id;
+  setTimeout(function(){window._cobrandoMesa=null;window._cobroDobleOk=false;},8000);
 
   // Build venta with multiple payments
   var pagosList=Object.entries(pagos).filter(function(kv){return kv[1]>0;}).map(function(kv){
@@ -7722,6 +7761,7 @@ function histTodasVentas(){
       +(v._fbkey?'<button onclick="reimprimirVenta(\''+v._fbkey+'\')" style="width:100%;margin-top:6px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Imprimir recibo</button>':'')
       +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey)?'<button data-act="venta-editfp" data-key="'+v._fbkey+'" style="width:100%;margin-top:6px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✏️ Corregir forma de pago</button>':'')
       +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey&&!v.esPagoCredito)?'<button data-act="venta-devolver" data-key="'+v._fbkey+'" style="width:100%;margin-top:6px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">↩️ Devolver a mesa (anular cobro)</button>':'')
+      +((usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey)?'<button onclick="eliminarVentaDuplicada(\''+v._fbkey+'\')" style="width:100%;margin-top:6px;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">🗑️ Eliminar venta (cobro duplicado/error) — sin tocar inventario</button>':'')
     +'</div>';
   }
 
