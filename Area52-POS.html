@@ -5930,6 +5930,71 @@ function _cruceConGrupos(pagos,movs,TOL){
     movsSin:movs.filter(function(mv,mi){return !usadoM[mi];})};
 }
 
+/* ═══ 🔬 ¿Por qué no cruzó? — traza del motor ═══ */
+function _hhmmD(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);}
+function _estadoDeMov(D,mv){
+  var o=D.ok.find(function(x){return x.mov===mv;});
+  if(o)return'✅ ese cobro YA cruzó con el mensaje de '+_hhmmD(o.sms.ts)+(o.sms.de?' de '+esc(o.sms.de):'');
+  var g=D.grupos.find(function(x){return x.mov===mv||(x.movs&&x.movs.indexOf(mv)>=0);});
+  if(g)return'🧩 ese cobro quedó usado en un pago dividido';
+  var f=D.fiadoDia.find(function(x){return x.mov===mv;});
+  if(f)return'📒 ese cobro cruzó por día con el mensaje de '+_hhmmD(f.pago.ts);
+  return null;
+}
+function _estadoDeSms(D,m){
+  var o=D.ok.find(function(x){return x.sms===m;});
+  if(o)return'✅ ese mensaje YA cruzó con '+o.mov.ref;
+  var g=D.grupos.find(function(x){return x.pago===m||(x.pagos&&x.pagos.indexOf(m)>=0);});
+  if(g)return'🧩 ese mensaje quedó usado en un pago dividido'+(g.mov?' con '+g.mov.ref:'');
+  var f=D.fiadoDia.find(function(x){return x.pago===m;});
+  if(f)return'📒 ese mensaje cruzó por día con '+f.mov.ref;
+  return null;
+}
+function diagSmsSin(i){
+  var box=document.getElementById('sdiag-r'+i);
+  var D=window._smsDiag;
+  if(!box||!D)return;
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  var m=D.smsSin[i];
+  var cand=D.movs.filter(function(mv){return mv.monto===m.monto;});
+  var html='<div style="background:var(--bg);border-radius:8px;padding:7px 10px;margin-top:4px;font-size:10.5px">';
+  if(!cand.length){
+    html+='En los días revisados <b>no existe NINGÚN cobro o abono digital por '+fmt(m.monto).replace(/\u00A0/g,' ')+'</b>. O no se registró, o se registró por otro valor o como efectivo.';
+  }else{
+    html+='Cobros por el mismo monto y qué pasó con cada uno:<br>'
+      +cand.map(function(mv){
+        var est=_estadoDeMov(D,mv);
+        var dif=Math.round(Math.abs(mv.ts-m.ts)/60000);
+        if(est)return'• '+_hhmmD(mv.ts)+' · '+mv.ref+' → '+est+' <b>(por eso no quedó libre para este)</b>';
+        return'• '+_hhmmD(mv.ts)+' · '+mv.ref+' → ⏱ está libre pero a Δ'+dif+' min, fuera de la tolerancia de ±'+(D.TOL/60000)+' — sube la tolerancia y vuelve a contrastar';
+      }).join('<br>');
+  }
+  html+='</div>';
+  box.innerHTML=html;box.style.display='block';
+}
+function diagMovSin(i){
+  var box=document.getElementById('sdiag-m'+i);
+  var D=window._smsDiag;
+  if(!box||!D)return;
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  var mv=D.sinSms[i];
+  var cand=D.sms.filter(function(m){return m.monto===mv.monto;});
+  var html='<div style="background:var(--bg);border-radius:8px;padding:7px 10px;margin-top:4px;font-size:10.5px">';
+  if(!cand.length){
+    html+='Entre los mensajes cargados <b>no hay NINGUNO por '+fmt(mv.monto).replace(/\u00A0/g,' ')+'</b>. O la plata nunca llegó, o el mensaje no está en lo que cargaste (revisa 🔎 Ver recibidos).';
+  }else{
+    html+='Mensajes por el mismo monto y qué pasó con cada uno:<br>'
+      +cand.map(function(m){
+        var est=_estadoDeSms(D,m);
+        var dif=Math.round(Math.abs(mv.ts-m.ts)/60000);
+        if(est)return'• '+_hhmmD(m.ts)+(m.de?' de '+esc(m.de):'')+' → '+est+' <b>(por eso no quedó libre para este cobro)</b>';
+        return'• '+_hhmmD(m.ts)+(m.de?' de '+esc(m.de):'')+' → ⏱ está libre pero a Δ'+dif+' min, fuera de la tolerancia de ±'+(D.TOL/60000)+' — sube la tolerancia y vuelve a contrastar';
+      }).join('<br>');
+  }
+  html+='</div>';
+  box.innerHTML=html;box.style.display='block';
+}
+
 /* ═══ 💳 Contraste con el LISTADO DEL DATÁFONO (tarjetas) ═══ */
 function procesarArchivoDatafono(inp){
   var f=inp.files&&inp.files[0];if(!f)return;
@@ -6199,6 +6264,7 @@ function analizarSmsBanco(){
   var fiadoDiaS=cruce.fiadoDia||[];
   var smsSin=cruce.pagosSin;
   var sinSms=cruce.movsSin;
+  window._smsDiag={sms:sms,movs:movs,ok:ok,grupos:gruposS,fiadoDia:fiadoDiaS,smsSin:smsSin,sinSms:sinSms,TOL:TOL};
   var fpN=function(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.emoji+' '+f.label:fp;};
   var hhmm=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
   var totSmsSin=smsSin.reduce(function(a,m){return a+m.monto;},0);
@@ -6217,9 +6283,9 @@ function analizarSmsBanco(){
     +(fiadoDiaS.length?'<div style="font-weight:800;font-size:12px;color:#a855f7;margin-bottom:3px">📒 Fiados cruzados por monto y día (la plata llegó antes del registro)</div>'
       +fiadoDiaS.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#a855f7">'+fmt(x.pago.monto)+'</b> · llegó '+hhmm(x.pago.ts)+(x.pago.de?' de '+esc(x.pago.de):'')+' ↔ registrado '+hhmm(x.mov.ts)+' · '+x.mov.ref+'</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(smsSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Llegó plata al banco SIN registro en el sistema · '+fmt(totSmsSin)+'</div>'
-      +smsSin.map(function(m){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' — ¿cobro o abono que no se registró?</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
+      +smsSin.map(function(m,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagSmsSin('+i+')" style="cursor:pointer"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-r'+i+'" style="display:none"></div></div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
-      +sinSms.map(function(mv){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' ('+fpN(mv.fp)+') — ¿la plata nunca llegó?</div>';}).join(''):'')
+      +sinSms.map(function(mv,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagMovSin('+i+')" style="cursor:pointer"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' ('+fpN(mv.fp)+') <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-m'+i+'" style="display:none"></div></div>';}).join(''):'')
     +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Solo se revisan los días que traen los mensajes. Ojo: si el celular no recibe TODOS los SMS del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
 }
 function _concilDia(d){
