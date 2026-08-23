@@ -5595,7 +5595,8 @@ function abrirConcilBanco(){
       +'</div>'
       +'<button class="btn btn-full" onclick="analizarSmsBanco()" style="background:#a855f7;color:#fff;border:none;font-weight:800">🔍 Contrastar mensajes</button>'
       +'<div style="display:flex;gap:6px;margin-top:6px">'
-        +'<button onclick="cargarSmsAutomaticos()" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">📡 Usar los automáticos del celular'+(smsBanco.length?' ('+smsBanco.length+')':'')+'</button>'
+        +'<button onclick="cargarSmsAutomaticos()" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">📡 Usar automáticos'+(smsBanco.length?' ('+smsBanco.length+')':' (0)')+'</button>'
+        +'<button onclick="verMensajesRecibidos()" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">🔎 Ver recibidos</button>'
         +'<button onclick="verComoConectarCelular()" style="flex:1;background:var(--card2);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer">⚙️ Conectar correo o celular</button>'
       +'</div>'
       +'<div id="sms-result" style="margin-top:10px"></div>'
@@ -5752,6 +5753,39 @@ function probarPagoRecibido(){
     +(smsBanco.length?' · último hace '+Math.round((Date.now()-(smsBanco[smsBanco.length-1].ts||0))/60000)+' min':' — si acabas de configurar el correo y esto sigue en 0, revisa el activador en script.google.com')
     +'</span>';
   showToast(estado,problemas.length?'#f5a623':'#22c55e');
+}
+function verMensajesRecibidos(){
+  var filas;
+  if(!smsBanco.length){
+    filas='<div style="background:#ef444415;border:1px solid #ef444433;border-radius:9px;padding:10px;font-size:12px;color:#ef4444;font-weight:700">📭 NO ha llegado NINGÚN mensaje a Firebase.<br><span style="font-weight:600;font-size:11px;color:var(--text)">El problema está ANTES del POS: el script de Gmail no está empujando. Revisa en script.google.com → menú <b>Ejecuciones</b>: ¿aparecen corridas cada minuto? ¿alguna en rojo? Si no hay ninguna, falta el activador; si están en rojo, ábrela y mira el error (suele ser permisos: ▶ Ejecutar una vez a mano y aceptar).</span></div>';
+  }else{
+    filas=smsBanco.slice().reverse().slice(0,25).map(function(m){
+      var p=parsearSmsBanco(m.texto||'')[0];
+      var lleg=new Date(m.ts||0);
+      var llegTxt=('0'+lleg.getDate()).slice(-2)+'/'+('0'+(lleg.getMonth()+1)).slice(-2)+' '+('0'+lleg.getHours()).slice(-2)+':'+('0'+lleg.getMinutes()).slice(-2);
+      return'<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">'
+        +'<div style="display:flex;justify-content:space-between;gap:6px">'
+          +'<span style="color:var(--muted)">llegó '+llegTxt+' · '+(m.origen||'sms')+'</span>'
+          +(p?'<span style="color:#22c55e;font-weight:800">✓ '+fmt(p.monto).replace(/\u00A0/g,' ')+' · '+('0'+new Date(p.ts).getHours()).slice(-2)+':'+('0'+new Date(p.ts).getMinutes()).slice(-2)+'</span>'
+             :'<span style="color:#ef4444;font-weight:800">✗ no se pudo leer</span>')
+        +'</div>'
+        +'<div style="color:var(--text);opacity:.75;font-size:10px;word-break:break-word">'+esc(String(m.texto||'').slice(0,160))+'…</div>'
+      +'</div>';
+    }).join('');
+  }
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">🔎 Mensajes recibidos en Firebase ('+smsBanco.length+')</div>'
+    +'<div style="max-height:50vh;overflow-y:auto">'+filas+'</div>'
+    +'<button class="btn btn-full" onclick="inyectarSmsPrueba()" style="background:#a855f718;color:#a855f7;border:1px solid #a855f744;font-weight:800;margin-top:10px">🧪 Inyectar mensaje de prueba a Firebase</button>'
+    +'<div style="color:var(--muted);font-size:10px;margin-top:4px">La prueba escribe directo en Firebase: si aparece aquí y suena el aviso, el POS y Firebase están bien y lo que falla es el script del correo.</div>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cerrar</button>');
+}
+function inyectarSmsPrueba(){
+  var ahora=new Date();
+  var hh=('0'+ahora.getHours()).slice(-2)+':'+('0'+ahora.getMinutes()).slice(-2);
+  var dd=('0'+ahora.getDate()).slice(-2)+'/'+('0'+(ahora.getMonth()+1)).slice(-2)+'/'+String(ahora.getFullYear()).slice(2);
+  fbPush('smsBanco',{texto:'Bancolombia: PRUEBA, recibiste una transferencia de INYECCION DE PRUEBA por $9,999.00 en tu cuenta *0000 el '+dd+' a las '+hh+'.',ts:Date.now(),origen:'prueba'});
+  showToast('🧪 Mensaje de prueba enviado a Firebase<br><span style="font-size:12px;opacity:.85">En 1-2 segundos debe aparecer en la lista y sonar el aviso</span>','#a855f7');
+  setTimeout(function(){verMensajesRecibidos();},1500);
 }
 function cargarSmsAutomaticos(){
   var ta=document.getElementById('sms-texto');
