@@ -5756,15 +5756,16 @@ function probarPagoRecibido(){
 function cargarSmsAutomaticos(){
   var ta=document.getElementById('sms-texto');
   if(!ta)return;
-  if(!smsBanco.length){alert('No han llegado mensajes automáticos del celular todavía.');return;}
-  ta.value=smsBanco.map(function(m){return m.texto||'';}).filter(Boolean).join('\n');
+  if(!smsBanco.length){alert('No han llegado mensajes automáticos todavía.');return;}
+  var autos=smsBanco.map(function(m){return m.texto||'';}).filter(Boolean).join('\n');
+  ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+autos;   // fusiona con lo pegado (los repetidos se cuentan una sola vez)
   analizarSmsBanco();
 }
 var CODIGO_SCRIPT_CORREO='function revisarCorreosBanco(){\n'
-+'  var hilos=GmailApp.search(\'from:notificacionesbancolombia.com is:unread newer_than:1d\');\n'
++'  var lab=GmailApp.getUserLabelByName(\'A52-procesado\')||GmailApp.createLabel(\'A52-procesado\');\n'
++'  var hilos=GmailApp.search(\'from:notificacionesbancolombia.com newer_than:2d -label:A52-procesado\');\n'
 +'  hilos.forEach(function(h){\n'
 +'    h.getMessages().forEach(function(m){\n'
-+'      if(!m.isUnread())return;\n'
 +'      var cuerpo=m.getPlainBody();\n'
 +'      var i=cuerpo.indexOf(\'Bancolombia:\');\n'
 +'      if(i>=0){\n'
@@ -5774,8 +5775,8 @@ var CODIGO_SCRIPT_CORREO='function revisarCorreosBanco(){\n'
 +'          payload:JSON.stringify({texto:texto,ts:Date.now(),origen:\'correo\'})\n'
 +'        });\n'
 +'      }\n'
-+'      m.markRead();\n'
 +'    });\n'
++'    h.addLabel(lab);\n'
 +'  });\n'
 +'}';
 function copiarScriptCorreo(){
@@ -5795,7 +5796,7 @@ function verComoConectarCelular(){
     +'2. Borra lo que aparece y pega este código:<br>'
     +'<textarea id="script-correo-ta" readonly style="width:100%;height:110px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:9px;font-family:monospace;padding:6px;box-sizing:border-box;margin:4px 0">'+CODIGO_SCRIPT_CORREO+'</textarea>'
     +'<button onclick="copiarScriptCorreo()" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;margin-bottom:6px">📋 Copiar código</button><br>'
-    +'3. Guarda (💾) y dale ▶ <b>Ejecutar</b> una vez: Google pedirá permisos, acéptalos (es tu propia cuenta leyendo tu propio correo).<br>'
+    +'3. Guarda (💾) y dale ▶ <b>Ejecutar</b> una vez: Google pedirá permisos, acéptalos (es tu propia cuenta leyendo tu propio correo). El script marca cada correo procesado con la etiqueta <b>A52-procesado</b> — así funciona aunque tú ya hayas leído el correo. Si ya lo tenías montado con la versión anterior, reemplaza el código por este.<br>'
     +'4. A la izquierda, en <b>Activadores</b> (el relojito ⏰) → "Añadir activador" → función <b>revisarCorreosBanco</b> → "Según tiempo" → <b>Cada minuto</b> → Guardar.<br>'
     +'5. Listo: cada alerta del banco entra sola al sistema entre 1 y 2 minutos después. El cruce usa la fecha y hora que vienen <b>dentro</b> del mensaje, así que la demora del correo no daña el contraste al minuto — y el sistema ya sabe esperar ese margen antes de alertar "sin registro".<br><br>'
     +'<b style="color:var(--muted)">📱 Alternativa por SMS (si el banco los manda a un celular):</b><br>'
@@ -5870,7 +5871,27 @@ function _cruceConGrupos(pagos,movs,TOL){
       grupos.push({pago:p,movs:comb.items.map(function(c){return movs[c.i];}),dMaxMin:Math.round(comb.dMax/60000),tipo:'cobro→pagos'});
     }
   });
-  return{ok:ok,grupos:grupos,
+  // 4) FIADOS: la transferencia llega cuando el cliente quiere y el pago se registra
+  //    horas después → cruce por monto exacto + MISMO DÍA, sin exigir la hora.
+  var fiadoDia=[];
+  movs.forEach(function(mv,mi){
+    if(usadoM[mi])return;
+    if(!/fiado/i.test(String(mv.mesa||mv.ref||'')))return;
+    var diaMov=_concilDia(new Date(mv.ts));
+    var mejor=-1,mejorDif=Infinity;
+    pagos.forEach(function(p,pi){
+      if(usadoP[pi])return;
+      if(p.monto!==mv.monto)return;
+      if(_concilDia(new Date(p.ts))!==diaMov)return;
+      var dif=Math.abs(p.ts-mv.ts);
+      if(dif<mejorDif){mejor=pi;mejorDif=dif;}
+    });
+    if(mejor>=0){
+      usadoP[mejor]=true;usadoM[mi]=true;
+      fiadoDia.push({pago:pagos[mejor],mov:mv,difMin:Math.round(mejorDif/60000)});
+    }
+  });
+  return{ok:ok,grupos:grupos,fiadoDia:fiadoDia,
     pagosSin:pagos.filter(function(p,pi){return !usadoP[pi];}),
     movsSin:movs.filter(function(mv,mi){return !usadoM[mi];})};
 }
@@ -5931,6 +5952,7 @@ function analizarDatafono(){
   var cruce=_cruceConGrupos(validas,movs,TOL);
   var ok=cruce.ok.map(function(x){return{v:x.pago,mov:x.mov,difMin:x.difMin};});
   var grupos=cruce.grupos;
+  var fiadoDiaD=cruce.fiadoDia||[];
   var vchSin=cruce.pagosSin;
   var sinVch=cruce.movsSin;
   var hhmm=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
@@ -5941,7 +5963,7 @@ function analizarDatafono(){
   window._dfInforme={ok:ok,grupos:grupos,vchSin:vchSin,sinVch:sinVch,validas:validas,ignoradas:ignoradas,tolMin:TOL/60000,hhmm:hhmm,tj:tj};
   res.innerHTML=
     '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
-      +'💳 '+validas.length+' vouchers aprobados · ✅ '+ok.length+' cruzados'+(grupos.length?' · 🧩 '+grupos.length+' agrupados':'')+' · 📥 '+vchSin.length+' sin registro · 📤 '+sinVch.length+' sin voucher'
+      +'💳 '+validas.length+' vouchers aprobados · ✅ '+ok.length+' cruzados'+(grupos.length?' · 🧩 '+grupos.length+' agrupados':'')+(fiadoDiaD.length?' · 📒 '+fiadoDiaD.length+' fiados por día':'')+' · 📥 '+vchSin.length+' sin registro · 📤 '+sinVch.length+' sin voucher'
       +(ignoradas?' · <span style="color:var(--muted)">'+ignoradas+' ignoradas (anuladas/rechazadas)</span>':'')
       +(totProp?'<br><span style="color:#22c55e;font-size:11px">💁 Propinas en el datáfono: '+fmt(totProp)+'</span>':'')
       +'<button onclick="exportarDatafonoCsv()" style="display:block;width:100%;margin-top:8px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:8px;font-size:11px;font-weight:800;cursor:pointer">📊 Exportar informe a Excel</button>'
@@ -5953,6 +5975,8 @@ function analizarDatafono(){
         if(g.tipo==='pagos→cobro')return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+g.pagos.map(function(p){return fmt(p.monto);}).join(' + ')+'</b> ('+g.pagos.length+' vouchers) ↔ '+g.mov.ref+' <b>'+fmt(g.mov.monto)+'</b> · Δmáx '+g.dMaxMin+' min</div>';
         return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(g.pago.monto)+'</b> (1 voucher) ↔ '+g.movs.map(function(m){return m.ref+' '+fmt(m.monto);}).join(' + ')+' · Δmáx '+g.dMaxMin+' min</div>';
       }).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(fiadoDiaD.length?'<div style="font-weight:800;font-size:12px;color:#a855f7;margin-bottom:3px">📒 Fiados cruzados por monto y día</div>'
+      +fiadoDiaD.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#a855f7">'+fmt(x.v?x.v.monto:x.pago.monto)+'</b> · voucher '+hhmm((x.v||x.pago).ts)+' ↔ registrado '+hhmm(x.mov.ts)+' · '+x.mov.ref+'</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(vchSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Pasaron tarjeta y NO está registrado en el sistema · '+fmt(totVchSin)+'</div>'
       +vchSin.map(function(r,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">'
         +'<div onclick="verMovsCercaDf('+i+')" style="cursor:pointer"><b style="color:#ef4444">'+fmt(r.monto)+'</b> · '+hhmm(r.ts)+' · '+esc(tj(r))+' · recibo '+esc(r.recibo||'')+' <span style="color:var(--muted)">▸ ver qué se cobró a esa hora</span></div>'
@@ -6138,6 +6162,7 @@ function analizarSmsBanco(){
   var cruce=_cruceConGrupos(sms,movs,TOL);
   var ok=cruce.ok.map(function(x){return{sms:x.pago,mov:x.mov,difMin:x.difMin};});
   var gruposS=cruce.grupos;
+  var fiadoDiaS=cruce.fiadoDia||[];
   var smsSin=cruce.pagosSin;
   var sinSms=cruce.movsSin;
   var fpN=function(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.emoji+' '+f.label:fp;};
@@ -6146,7 +6171,7 @@ function analizarSmsBanco(){
   var totSinSms=sinSms.reduce(function(a,m){return a+m.monto;},0);
   res.innerHTML=
     '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
-      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados'+(gruposS.length?' · 🧩 '+gruposS.length+' agrupados':'')+' · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
+      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados'+(gruposS.length?' · 🧩 '+gruposS.length+' agrupados':'')+(fiadoDiaS.length?' · 📒 '+fiadoDiaS.length+' fiados por día':'')+' · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
     +'</div>'
     +(ok.length?'<div style="font-weight:800;font-size:12px;color:#22c55e;margin-bottom:3px">✅ Cruzados al minuto</div>'
       +ok.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#22c55e">'+fmt(x.sms.monto)+'</b> · SMS '+hhmm(x.sms.ts)+(x.sms.de?' de '+esc(x.sms.de):'')+' ↔ '+x.mov.ref+' ('+fpN(x.mov.fp)+') · Δ'+x.difMin+' min</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
@@ -6155,6 +6180,8 @@ function analizarSmsBanco(){
         if(g.tipo==='pagos→cobro')return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+g.pagos.map(function(p){return fmt(p.monto);}).join(' + ')+'</b> ('+g.pagos.length+' transferencias) ↔ '+g.mov.ref+' <b>'+fmt(g.mov.monto)+'</b> · Δmáx '+g.dMaxMin+' min</div>';
         return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(g.pago.monto)+'</b> (1 transferencia) ↔ '+g.movs.map(function(m){return m.ref+' '+fmt(m.monto);}).join(' + ')+' · Δmáx '+g.dMaxMin+' min</div>';
       }).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(fiadoDiaS.length?'<div style="font-weight:800;font-size:12px;color:#a855f7;margin-bottom:3px">📒 Fiados cruzados por monto y día (la plata llegó antes del registro)</div>'
+      +fiadoDiaS.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#a855f7">'+fmt(x.pago.monto)+'</b> · llegó '+hhmm(x.pago.ts)+(x.pago.de?' de '+esc(x.pago.de):'')+' ↔ registrado '+hhmm(x.mov.ts)+' · '+x.mov.ref+'</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(smsSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Llegó plata al banco SIN registro en el sistema · '+fmt(totSmsSin)+'</div>'
       +smsSin.map(function(m){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' — ¿cobro o abono que no se registró?</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
