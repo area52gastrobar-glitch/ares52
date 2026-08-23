@@ -5629,6 +5629,14 @@ function abrirConcilBanco(){
       +'<button onclick="document.getElementById(\'sms-file\').click()" style="width:100%;background:#a855f718;color:#a855f7;border:2px dashed #a855f755;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;margin-bottom:6px">📎 Subir archivo de mensajes (.txt)</button>'
       +'<textarea id="sms-texto" placeholder="...o pega aquí los mensajes (pueden ir varios seguidos)" style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px;font-size:11px;box-sizing:border-box;margin-bottom:6px"></textarea>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+        +'<span style="color:var(--muted);font-size:11px">Periodo a revisar:</span>'
+        +'<select class="inp" id="sms-rango" onchange="analizarSmsBanco();var r=document.getElementById(\'sms-fechas\');if(r)r.style.display=this.value===\'rango\'?\'flex\':\'none\'" style="flex:1;padding:7px"><option value="turno" selected>Turno actual</option><option value="hoy">Hoy</option><option value="48h">Últimas 48 horas</option><option value="rango">📅 Fechas específicas</option><option value="todo">Todo</option></select>'
+      +'</div>'
+      +'<div id="sms-fechas" style="display:none;gap:8px;margin-bottom:6px">'
+        +'<input class="inp" type="date" id="sms-d1" onchange="analizarSmsBanco()" style="flex:1;padding:7px;font-size:12px"/>'
+        +'<input class="inp" type="date" id="sms-d2" onchange="analizarSmsBanco()" style="flex:1;padding:7px;font-size:12px"/>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<span style="color:var(--muted);font-size:11px">Diferencia máxima de hora:</span>'
         +'<select class="inp" id="sms-tol" onchange="analizarSmsBanco()" style="flex:1;padding:7px"><option value="1" selected>±1 minuto</option><option value="3">±3 minutos</option><option value="10">±10 minutos</option><option value="60">±60 minutos</option><option value="120">±120 minutos</option></select>'
       +'</div>'
@@ -6287,12 +6295,31 @@ function _movsDigitales(diasSet){
   });
   return movs;
 }
+function _smsRangoLimites(){
+  var m=(document.getElementById('sms-rango')||{}).value||'turno';
+  var hoy0=new Date();hoy0.setHours(0,0,0,0);
+  if(m==='turno')return{desde:turnoInicio||hoy0.getTime(),hasta:null,label:'turno actual'};
+  if(m==='hoy')return{desde:hoy0.getTime(),hasta:null,label:'hoy'};
+  if(m==='48h')return{desde:Date.now()-48*3600000,hasta:null,label:'últimas 48 h'};
+  if(m==='rango'){
+    var d1v=(document.getElementById('sms-d1')||{}).value;
+    var d2v=(document.getElementById('sms-d2')||{}).value;
+    var d1=d1v?new Date(d1v+'T00:00:00').getTime():0;
+    var d2=d2v?new Date(d2v+'T23:59:59').getTime():null;
+    return{desde:d1,hasta:d2,label:'fechas elegidas'};
+  }
+  return{desde:0,hasta:null,label:'todo'};
+}
 function analizarSmsBanco(){
   var texto=(document.getElementById('sms-texto')||{}).value||'';
-  var sms=parsearSmsBanco(texto);
+  var todos=parsearSmsBanco(texto);
   var res=document.getElementById('sms-result');
   if(!res)return;
-  if(!sms.length){res.innerHTML='<div style="color:#f5a623;font-size:11px">No encontré mensajes válidos. Cada SMS debe traer "por $..." y "el dd/mm/aa a las hh:mm".</div>';return;}
+  if(!todos.length){res.innerHTML='<div style="color:#f5a623;font-size:11px">No encontré mensajes válidos. Cada SMS debe traer "por $..." y "el dd/mm/aa a las hh:mm".</div>';return;}
+  var rango=_smsRangoLimites();
+  var sms=todos.filter(function(m){return m.ts>=rango.desde&&(!rango.hasta||m.ts<=rango.hasta);});
+  var fueraRango=todos.length-sms.length;
+  if(!sms.length){res.innerHTML='<div style="color:#f5a623;font-size:11px">Hay '+todos.length+' mensajes cargados pero ninguno cae en el periodo elegido ('+rango.label+'). Cambia el periodo arriba.</div>';return;}
   // Solo se contrastan los DÍAS que aparecen en los mensajes
   var diasSet={};sms.forEach(function(m){diasSet[_concilDia(new Date(m.ts))]=true;});
   var movs=_movsDigitales(diasSet);
@@ -6325,7 +6352,7 @@ function analizarSmsBanco(){
       +smsSin.map(function(m,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagSmsSin('+i+')" style="cursor:pointer"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-r'+i+'" style="display:none"></div></div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
       +sinSms.map(function(mv,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagMovSin('+i+')" style="cursor:pointer"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' ('+fpN(mv.fp)+') <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-m'+i+'" style="display:none"></div></div>';}).join(''):'')
-    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Solo se revisan los días que traen los mensajes. Ojo: si el celular no recibe TODOS los SMS del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
+    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Periodo: <b>'+rango.label+'</b>'+(fueraRango?' · '+fueraRango+' mensajes de otras fechas ignorados':'')+' · Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Solo se revisan los días de los mensajes del periodo. Ojo: si no llegan TODOS los avisos del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
 }
 function _concilDia(d){
   // Normaliza cualquier formato de fecha a 'YYYY-MM-DD'
