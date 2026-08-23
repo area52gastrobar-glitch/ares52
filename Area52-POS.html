@@ -6320,9 +6320,14 @@ function analizarSmsBanco(){
   var sms=todos.filter(function(m){return m.ts>=rango.desde&&(!rango.hasta||m.ts<=rango.hasta);});
   var fueraRango=todos.length-sms.length;
   if(!sms.length){res.innerHTML='<div style="color:#f5a623;font-size:11px">Hay '+todos.length+' mensajes cargados pero ninguno cae en el periodo elegido ('+rango.label+'). Cambia el periodo arriba.</div>';return;}
-  // Solo se contrastan los DÍAS que aparecen en los mensajes
+  // Solo se contrastan los DÍAS que aparecen en los mensajes...
   var diasSet={};sms.forEach(function(m){diasSet[_concilDia(new Date(m.ts))]=true;});
-  var movs=_movsDigitales(diasSet);
+  // ...y AMBOS lados se recortan por la MISMA ventana del periodo elegido:
+  // si un cobro quedó fuera del periodo, tampoco se evalúa (antes entraban
+  // los días completos y salían "sin mensaje" cobros de horas ya filtradas).
+  var movs=_movsDigitales(diasSet).filter(function(mv){
+    return mv.ts>=rango.desde&&(!rango.hasta||mv.ts<=rango.hasta);
+  });
   var TOL=(parseInt((document.getElementById('sms-tol')||{}).value)||1)*60000;
   var cruce=_cruceConGrupos(sms,movs,TOL);
   var ok=cruce.ok.map(function(x){return{sms:x.pago,mov:x.mov,difMin:x.difMin};});
@@ -6352,7 +6357,7 @@ function analizarSmsBanco(){
       +smsSin.map(function(m,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagSmsSin('+i+')" style="cursor:pointer"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-r'+i+'" style="display:none"></div></div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
       +sinSms.map(function(mv,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagMovSin('+i+')" style="cursor:pointer"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' ('+fpN(mv.fp)+') <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-m'+i+'" style="display:none"></div></div>';}).join(''):'')
-    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Periodo: <b>'+rango.label+'</b>'+(fueraRango?' · '+fueraRango+' mensajes de otras fechas ignorados':'')+' · Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Solo se revisan los días de los mensajes del periodo. Ojo: si no llegan TODOS los avisos del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
+    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Periodo: <b>'+rango.label+'</b>'+(fueraRango?' · '+fueraRango+' mensajes de otras fechas ignorados':'')+' · Mensajes Y cobros se revisan dentro de la misma ventana de tiempo · Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Ojo: si no llegan TODOS los avisos del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
 }
 function _concilDia(d){
   // Normaliza cualquier formato de fecha a 'YYYY-MM-DD'
