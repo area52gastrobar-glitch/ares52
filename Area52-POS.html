@@ -7226,6 +7226,35 @@ function ventasPorCategoria(desde,hasta){
       cats[cat].prods[nombre].qty+=qty;cats[cat].prods[nombre].total+=rev;
     });
   });
+  // 🔴 Lo servido en mesas abiertas (ya salió del inventario, falta cobrarlo)
+  // Solo si el periodo llega hasta hoy (no aplica a rangos históricos cerrados)
+  if(!hasta||hasta>=Date.now()-60000){
+    Object.keys(pedidos||{}).forEach(function(mid){
+      (pedidos[mid]||[]).forEach(function(it){
+        if(it.isCustom)return;
+        var cat,nombre,emoji;
+        if(it.isCombo){cat='Combos';nombre=it.comboNombre||'Combo';emoji='🎁';}
+        else if(it.isCubetazoMix){
+          var d0=(it.cubMixDetalle||[])[0];
+          var p0=d0?menu.find(function(m){return Number(m.id)===Number(d0.prodId);}):null;
+          cat=(p0&&p0.cat)||'Cerveza';nombre=it.cubMixNombre||'Cubetazo mixto';emoji='🪣';
+        } else {
+          var p=menu.find(function(m){return m.id===it.pid;});
+          cat=(p&&p.cat)||'Sin categoría';
+          nombre=((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' (cubetazo)':'');
+          emoji=(p&&p.emoji)||'📦';
+        }
+        var rev=precioItem(it)*(it.qty||1);
+        var qty=(it.qty||1)*(it.cubeta?5:1);
+        if(!cats[cat])cats[cat]={qty:0,total:0,prods:{}};
+        cats[cat].enMesa=(cats[cat].enMesa||0)+qty;
+        cats[cat].enMesaTotal=(cats[cat].enMesaTotal||0)+rev;
+        if(!cats[cat].prods[nombre])cats[cat].prods[nombre]={qty:0,total:0,emoji:emoji};
+        cats[cat].prods[nombre].enMesa=(cats[cat].prods[nombre].enMesa||0)+qty;
+        cats[cat].prods[nombre].enMesaTotal=(cats[cat].prods[nombre].enMesaTotal||0)+rev;
+      });
+    });
+  }
   return cats;
 }
 function _vcRango(){
@@ -7395,6 +7424,13 @@ function renderVentas(){
         }).join('')
         +'</div>';
     }
+    var botonesAdmin='';
+    if(abierto&&usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey){
+      botonesAdmin='<div style="display:flex;gap:6px;margin-top:7px">'
+        +(!v.esPagoCredito?'<button data-act="venta-devolver" data-key="'+v._fbkey+'" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:10.5px;font-weight:700;cursor:pointer">↩️ Devolver a mesa</button>':'')
+        +'<button onclick="eliminarVentaDuplicada(\''+v._fbkey+'\')" style="flex:1;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:6px;font-size:10.5px;font-weight:700;cursor:pointer">🗑️ Eliminar (duplicado/error)</button>'
+      +'</div>';
+    }
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
       +'<div onclick="toggleCobroDet(\''+vKey+'\')" style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer">'
         +'<div><div style="font-size:12px;font-weight:700">'+(abierto?'▼':'▶')+' '+(z?z.label:'')+' · '+esc(v.mesa||'?')
@@ -7404,6 +7440,7 @@ function renderVentas(){
         +'<span style="color:var(--gold);font-weight:900;font-size:15px">'+fmt(v.total)+'</span>'
       +'</div>'
       +itemsHtml
+      +botonesAdmin
       +'</div>';
   }).join('');
 
@@ -7440,13 +7477,15 @@ function renderVentas(){
       }
       var filas=claves.map(function(c){
         var abiertaCat=!!(window._vcOpen&&window._vcOpen[c]);
-        var prods=abiertaCat?Object.keys(cats[c].prods).sort(function(a,b){return cats[c].prods[b].total-cats[c].prods[a].total;}).map(function(n){
+        var prods=abiertaCat?Object.keys(cats[c].prods).sort(function(a,b){var A=cats[c].prods[a],B=cats[c].prods[b];return (B.total+(B.enMesaTotal||0))-(A.total+(A.enMesaTotal||0));}).map(function(n){
           var pr=cats[c].prods[n];
-          return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0 3px 16px;border-bottom:1px solid var(--border)"><span>'+pr.emoji+' '+esc(n)+' × '+pr.qty+'</span><span style="font-weight:700">'+fmt(pr.total)+'</span></div>';
+          var em=pr.enMesa||0;
+          return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0 3px 16px;border-bottom:1px solid var(--border)"><span>'+pr.emoji+' '+esc(n)+' × '+(pr.qty+em)+(em?' <span style="color:#ef4444;font-weight:700">('+em+' en mesa sin cobrar)</span>':'')+'</span><span style="font-weight:700">'+fmt(pr.total+(pr.enMesaTotal||0))+'</span></div>';
         }).join(''):'';
+        var emC=cats[c].enMesa||0;
         return'<div onclick="toggleVcCat(\''+esc(c).replace(/\'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">'
-          +'<span style="font-size:13px;font-weight:800">'+(abiertaCat?'▼':'▶')+' '+esc(c)+' <span style="color:var(--muted);font-weight:600;font-size:11px">· '+cats[c].qty+' und</span></span>'
-          +'<span style="color:var(--gold);font-weight:900;font-size:14px">'+fmt(cats[c].total)+'</span>'
+          +'<span style="font-size:13px;font-weight:800">'+(abiertaCat?'▼':'▶')+' '+esc(c)+' <span style="color:var(--muted);font-weight:600;font-size:11px">· '+(cats[c].qty+emC)+' und'+(emC?' <span style="color:#ef4444;font-weight:800">(🔴'+emC+' en mesas)</span>':'')+'</span></span>'
+          +'<span style="color:var(--gold);font-weight:900;font-size:14px">'+fmt(cats[c].total+(cats[c].enMesaTotal||0))+'</span>'
         +'</div>'+prods;
       }).join('');
       return'<div class="res-card full-col">'
