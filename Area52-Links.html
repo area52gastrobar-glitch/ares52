@@ -235,6 +235,14 @@ body{
 .promo-precio{font-weight:900;font-size:17px;color:#f0c040;white-space:nowrap;text-align:right}
 .promo-antes{font-size:10.5px;color:#8a8a9a;text-decoration:line-through;text-align:right}
 .promo-week{border:1.5px solid rgba(240,192,64,.4);border-radius:16px;padding:12px 14px;background:rgba(240,192,64,.05)}
+/* 🍹 2x1 gigante */
+@keyframes big2x1{0%,100%{transform:scale(1);filter:drop-shadow(0 0 14px rgba(255,94,200,.8))}50%{transform:scale(1.07);filter:drop-shadow(0 0 28px rgba(124,255,178,.9))}}
+@keyframes borde2x1{0%{border-color:#ff5ec8}33%{border-color:#a855f7}66%{border-color:#7cffb2}100%{border-color:#ff5ec8}}
+.promo-2x1{border:2.5px solid #ff5ec8;border-radius:18px;padding:16px 14px;text-align:center;background:linear-gradient(135deg,rgba(255,94,200,.14),rgba(168,85,247,.12),rgba(124,255,178,.10));background-size:200% 200%;animation:borde2x1 3s linear infinite,promoShine 5s ease infinite,promoPulse 2.2s ease-in-out infinite;margin-bottom:10px}
+.promo-2x1 .p2-num{font-family:'Bebas Neue',sans-serif;font-size:64px;line-height:.95;letter-spacing:2px;background:linear-gradient(135deg,#ff5ec8,#a855f7 45%,#7cffb2);-webkit-background-clip:text;background-clip:text;color:transparent;display:inline-block;animation:big2x1 1.8s ease-in-out infinite}
+.promo-2x1 .p2-cat{font-size:17px;font-weight:900;letter-spacing:4px;color:#fff;text-shadow:0 0 14px rgba(255,94,200,.8);margin-top:2px}
+.promo-2x1 .p2-claim{font-size:11px;font-weight:800;letter-spacing:2.5px;color:#7cffb2;text-shadow:0 0 10px rgba(124,255,178,.7);margin-top:4px}
+.promo-2x1 .p2-when{font-size:10.5px;font-weight:700;color:rgba(255,255,255,.75);letter-spacing:1.5px;margin-top:7px}
 
 /* ═══════════════════════════════════════════════════════
    👽 TEMA NEÓN ÁREA 52 — al estilo de la rocola y la carta
@@ -485,6 +493,7 @@ body{
       var z=document.getElementById("promo-zone");
       if(!z)return;
       var conProd=promosData.map(function(pr){
+        if(pr.tipo==="2x1")return{pr:pr,es2x1:true,activa:activaAhora(pr)};
         var p=menuData.find(function(m){return String(m.id)===String(pr.prodId);});
         if(!p)return null;
         var esCub=(pr.tipo||"unidad")==="cubeta";
@@ -494,6 +503,14 @@ body{
       if(!conProd.length){z.style.display="none";return;}
       var activas=conProd.filter(function(x){return x.activa;});
       var fila=function(x){
+        if(x.es2x1){
+          return '<div class="promo-2x1">'
+            +'<div class="p2-num">2×1</div>'
+            +'<div class="p2-cat">EN '+esc(x.pr.cat||'').toUpperCase()+'</div>'
+            +'<div class="p2-claim">'+(x.activa?'🔥 ACTIVA AHORA · PIDE 2, PAGA 1 🔥':'PIDE 2 · PAGA 1')+'</div>'
+            +'<div class="p2-when">📅 '+diasTxt(x.pr)+' · 🕐 '+horaTxt(x.pr)+'</div>'
+          +'</div>';
+        }
         return '<div class="promo-item">'
           +'<div><div class="promo-nom">'+(x.p.emoji||"🔥")+' '+esc(x.p.nombre)+(x.esCub?' · 🪣 CUBETAZO':'')+'</div>'
           +'<div class="promo-when">📅 '+diasTxt(x.pr)+' · 🕐 '+horaTxt(x.pr)+'</div></div>'

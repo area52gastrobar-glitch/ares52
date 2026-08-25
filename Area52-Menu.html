@@ -648,6 +648,16 @@ function regenerar(){
       if((document.getElementById("cfg-promos")||{value:"si"}).value==="no")return"";
       if(!promosData.length)return"";
       var cards=promosData.map(function(pr){
+        if(pr.tipo==="2x1"){
+          return'<div style="background:linear-gradient(135deg,#2a0a24,#1a0a2e,#0a2418);border:3px solid #ff5ec8;border-radius:18px;padding:20px 18px;margin-bottom:12px;text-align:center;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+            +'<div style="position:absolute;top:-14px;left:-8px;font-size:66px;opacity:.12">🍹</div>'
+            +'<div style="position:absolute;bottom:-14px;right:-8px;font-size:66px;opacity:.12">🍹</div>'
+            +'<div style="font-size:52px;font-weight:900;line-height:1;letter-spacing:2px;background:linear-gradient(135deg,#ff5ec8,#a855f7 45%,#7cffb2);-webkit-background-clip:text;background-clip:text;color:transparent">2×1</div>'
+            +'<div style="font-size:19px;font-weight:900;letter-spacing:5px;color:#fff;margin-top:4px;text-shadow:0 0 12px rgba(255,94,200,.7)">EN '+esc(pr.cat||'').toUpperCase()+'</div>'
+            +'<div style="font-size:11px;font-weight:800;letter-spacing:3px;color:#7cffb2;margin-top:5px">PIDE 2 · PAGA 1</div>'
+            +'<div style="display:inline-block;background:rgba(255,94,200,.15);border:1px solid rgba(255,94,200,.5);border-radius:20px;padding:5px 16px;margin-top:10px;font-size:11px;font-weight:800;color:#fff;letter-spacing:1px">📅 '+_promoDiasTxt(pr)+' &nbsp;·&nbsp; 🕐 '+_promoHoraTxt(pr)+'</div>'
+          +'</div>';
+        }
         var p=menuData.find(function(m){return String(m.id)===String(pr.prodId);});
         if(!p)return"";
         var esCub=(pr.tipo||'unidad')==='cubeta';

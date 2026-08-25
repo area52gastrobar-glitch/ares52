@@ -603,6 +603,7 @@ function diaNegocioStr(ts){return fechaNegocio(ts).toLocaleDateString('es-CO');}
 function hoyNegocioStr(){return diaNegocioStr(Date.now());}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function precioItem(it){
+  if(it.es2x1Gratis) return 0;   // 🎁 unidad gratis de una promo 2x1
   if(it.isCombo) return it.comboPrecio||0;
   if(it.isCustom) return it.customPrecio||0;
   if(it.isCubetazoMix) return it.cubMixPrecio||0;
@@ -618,25 +619,39 @@ function _hm(str){  // 'HH:MM' → minutos del día; vacío → null
   var p=String(str).split(':');
   return (parseInt(p[0])||0)*60+(parseInt(p[1])||0);
 }
-function promoVigente(prodId,tipo){
+function _promoEnVentana(pr){
   var ahora=new Date();
   var dia=ahora.getDay();               // 0=domingo ... 6=sábado
   var diaAnt=(dia+6)%7;
   var min=ahora.getHours()*60+ahora.getMinutes();
+  var dias=pr.dias||[];
+  var ini=_hm(pr.horaIni),fin=_hm(pr.horaFin);
+  if(ini===null||fin===null){                       // sin horario: todo el día
+    return dias.indexOf(dia)>=0;
+  }
+  if(fin>=ini){                                     // horario normal en el mismo día
+    return dias.indexOf(dia)>=0&&min>=ini&&min<=fin;
+  }
+  // Cruza medianoche (ej: 20:00 → 02:00): vale la noche del día elegido
+  return (dias.indexOf(dia)>=0&&min>=ini)||(dias.indexOf(diaAnt)>=0&&min<=fin);
+}
+function promo2x1Vigente(p){
+  if(!p)return null;
   return promos.find(function(pr){
     if(pr.on===false)return false;
+    if(pr.tipo!=='2x1')return false;
+    if(pr.cat){if(String(pr.cat)!==String(p.cat||''))return false;}
+    else if(String(pr.prodId)!==String(p.id))return false;
+    return _promoEnVentana(pr);
+  })||null;
+}
+function promoVigente(prodId,tipo){
+  return promos.find(function(pr){
+    if(pr.on===false)return false;
+    if(pr.tipo==='2x1')return false;
     if(String(pr.prodId)!==String(prodId))return false;
     if((pr.tipo||'unidad')!==tipo)return false;
-    var dias=pr.dias||[];
-    var ini=_hm(pr.horaIni),fin=_hm(pr.horaFin);
-    if(ini===null||fin===null){                       // sin horario: todo el día
-      return dias.indexOf(dia)>=0;
-    }
-    if(fin>=ini){                                     // horario normal en el mismo día
-      return dias.indexOf(dia)>=0&&min>=ini&&min<=fin;
-    }
-    // Cruza medianoche (ej: 20:00 → 02:00): vale la noche del día elegido
-    return (dias.indexOf(dia)>=0&&min>=ini)||(dias.indexOf(diaAnt)>=0&&min<=fin);
+    return _promoEnVentana(pr);
   })||null;
 }
 var DIAS_SEMANA=[{n:1,l:'L'},{n:2,l:'M'},{n:3,l:'X'},{n:4,l:'J'},{n:5,l:'V'},{n:6,l:'S'},{n:0,l:'D'}];
@@ -2676,8 +2691,19 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
     var _vv=p.variantes.find(function(v){return v.nombre===varianteNombre;});
     if(_vv&&_vv.und)_vUnd=parseInt(_vv.und)||1;
   }
+  // 🍹 Promo 2x1 vigente: la mitad va gratis (pide 2, paga 1; con 3 paga 2)
+  var _p2=(p&&!cubeta)?promo2x1Vigente(p):null;
+  var _gratis2x1=_p2?Math.floor(cantidad/2):0;
+  if(_gratis2x1>0){
+    cantidad=cantidad-_gratis2x1;
+    pedidos[id].push({
+      pid:pid,cubeta:false,qty:_gratis2x1,
+      varianteNombre:varianteNombre||'',variantePrecio:0,varianteUnd:_vUnd,
+      es2x1Gratis:true,
+      uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)});
+  }
   var idx=_rep?-1:pedidos[id].findIndex(function(it){
-    return !it.recGrupos&&it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
+    return !it.recGrupos&&!it.es2x1Gratis&&it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
   });
   if(idx>=0)pedidos[id][idx].qty+=cantidad;
   else pedidos[id].push({
@@ -2692,12 +2718,16 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
   // Descontar stock en tiempo real
-  ajustarStockItem({pid:pid,cubeta:cubeta,varianteNombre:varianteNombre,varianteUnd:_vUnd,isCustom:false,isCombo:false,qty:cantidad,recGrupos:_rep?_rep.recGrupos:null},-cantidad);
+  ajustarStockItem({pid:pid,cubeta:cubeta,varianteNombre:varianteNombre,varianteUnd:_vUnd,isCustom:false,isCombo:false,qty:cantidad+_gratis2x1,recGrupos:_rep?_rep.recGrupos:null},-(cantidad+_gratis2x1));
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
   var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
-  logPedido(id,cantidad+'× '+nombreP,cantidad);
-  showToast('✅ '+cantidad+'× '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+nItems+' ítems · '+fmt(totMesa)+'</span>','#22c55e');
+  logPedido(id,(cantidad+_gratis2x1)+'× '+nombreP+(_gratis2x1>0?' (2x1: '+_gratis2x1+' gratis)':''),cantidad+_gratis2x1);
+  if(_gratis2x1>0){
+    showToast('🍹 ¡2x1! '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+cantidad+' pagada'+(cantidad>1?'s':'')+' + '+_gratis2x1+' GRATIS 🎁 · '+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+fmt(totMesa)+'</span>','#ff5ec8');
+  }else{
+    showToast('✅ '+cantidad+'× '+esc(nombreP)+'<br><span style="font-size:12px;opacity:.85">'+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+nItems+' ítems · '+fmt(totMesa)+'</span>','#22c55e');
+  }
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
 
@@ -3303,7 +3333,7 @@ function nombreItemPed(it){
   if(it.isCombo)return '🎁 '+(it.comboNombre||'Combo');
   if(it.isCubetazoMix)return '🪣 '+(it.cubMixNombre||'Cubetazo mixto');
   var p=menu.find(function(m){return m.id==it.pid;});
-  return (p?p.emoji+' '+p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'')+(it.recGruposTxt?' <span style="color:#38bdf8;font-size:10px;font-weight:600">['+esc(it.recGruposTxt)+']</span>':'');
+  return (p?p.emoji+' '+p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'')+(it.es2x1Gratis?' <span style="background:#ff5ec822;color:#ff5ec8;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:900">🎁 2x1 GRATIS</span>':'')+(it.recGruposTxt?' <span style="color:#38bdf8;font-size:10px;font-weight:600">['+esc(it.recGruposTxt)+']</span>':'');
 }
 
 function renderDividirModal(){
@@ -8477,9 +8507,23 @@ function confirmarCredito(total){
 function abrirPromos(){window._prEdit=null;renderPromosModal();}
 function renderPromosModal(){
   var lista=promos.slice().sort(function(a,b){return (b.on!==false?1:0)-(a.on!==false?1:0);}).map(function(pr){
-    var p=menu.find(function(m){return String(m.id)===String(pr.prodId);});
-    var vig=promoVigente(pr.prodId,pr.tipo||'unidad')===pr;
+    var es2=pr.tipo==='2x1';
+    var p=es2?null:menu.find(function(m){return String(m.id)===String(pr.prodId);});
+    var vig=es2?(pr.on!==false&&_promoEnVentana(pr)):(promoVigente(pr.prodId,pr.tipo||'unidad')===pr);
     var normal=p?((pr.tipo==='cubeta')?(p.cubeta||0):(p.precio||0)):0;
+    if(es2){
+      return'<div style="background:var(--bg);border:1px solid '+(vig?'#ff5ec888':'var(--border)')+';border-radius:10px;padding:9px 11px;margin-bottom:7px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+          +'<div style="flex:1;min-width:0">'
+            +'<div style="font-size:13px;font-weight:800"><span style="background:#ff5ec8;color:#fff;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:900">2x1</span> '+esc(pr.cat||'')+(vig?' <span style="background:#22c55e22;color:#22c55e;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:900">ACTIVA AHORA</span>':'')+'</div>'
+            +'<div style="color:var(--muted);font-size:10px;margin-top:1px">'+_promoDiasTxt(pr)+(pr.horaIni&&pr.horaFin?' · '+pr.horaIni+' a '+pr.horaFin:' · todo el día')+'</div>'
+          +'</div>'
+          +'<button onclick="togglePromo(\''+pr.id+'\')" style="background:'+(pr.on!==false?'#22c55e':'var(--card2)')+';color:'+(pr.on!==false?'#fff':'var(--muted)')+';border:none;border-radius:7px;padding:7px 10px;font-size:10px;font-weight:900;cursor:pointer">'+(pr.on!==false?'ON':'OFF')+'</button>'
+          +'<button onclick="editarPromo(\''+pr.id+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer">✏️</button>'
+          +'<button onclick="eliminarPromo(\''+pr.id+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:7px 10px;font-size:11px;cursor:pointer">🗑</button>'
+        +'</div>'
+      +'</div>';
+    }
     return'<div style="background:var(--bg);border:1px solid '+(vig?'#22c55e66':'var(--border)')+';border-radius:10px;padding:9px 11px;margin-bottom:7px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
         +'<div style="flex:1;min-width:0">'
@@ -8506,11 +8550,42 @@ function renderPromosModal(){
 function editarPromo(id){
   var pr=id?promos.find(function(x){return x.id===id;}):null;
   window._prEdit={id:id,prodId:pr?pr.prodId:null,tipo:pr?(pr.tipo||'unidad'):'unidad',valor:pr?pr.valor:0,
+    cat:pr?(pr.cat||''):'',
     dias:pr?(pr.dias||[]).slice():[],horaIni:pr?(pr.horaIni||''):'',horaFin:pr?(pr.horaFin||''):'',busq:''};
   renderPromoForm();
 }
 function renderPromoForm(){
   var e=window._prEdit;
+  var es2x1=e.tipo==='2x1';
+  var modoHtml='<div style="display:flex;gap:8px;margin-bottom:12px">'
+    +'<button onclick="window._prEdit.tipo=\'unidad\';renderPromoForm();" style="flex:1;background:'+(!es2x1?'#f5a623':'var(--bg)')+';color:'+(!es2x1?'#1a1a22':'var(--muted)')+';border:1px solid '+(!es2x1?'#f5a623':'var(--border)')+';border-radius:9px;padding:10px 0;font-weight:900;font-size:12px;cursor:pointer">🏷️ Precio especial</button>'
+    +'<button onclick="window._prEdit.tipo=\'2x1\';renderPromoForm();" style="flex:1;background:'+(es2x1?'#ff5ec8':'var(--bg)')+';color:'+(es2x1?'#fff':'var(--muted)')+';border:1px solid '+(es2x1?'#ff5ec8':'var(--border)')+';border-radius:9px;padding:10px 0;font-weight:900;font-size:12px;cursor:pointer">🍹 2x1</button>'
+  +'</div>';
+  if(es2x1){
+    var catsP=menu.reduce(function(a,m){if(m.cat&&a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort();
+    var horas2='';for(var h2=0;h2<24;h2++){['00','30'].forEach(function(mm2){var v2=('0'+h2).slice(-2)+':'+mm2;horas2+='<option value="'+v2+'">'+v2+'</option>';});}
+    var diasHtml2='<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Días de la promo</div><div style="display:flex;gap:5px;margin-bottom:10px">'
+      +DIAS_SEMANA.map(function(d){
+        var sel=e.dias.indexOf(d.n)>=0;
+        return'<button onclick="var i=window._prEdit.dias.indexOf('+d.n+');if(i>=0)window._prEdit.dias.splice(i,1);else window._prEdit.dias.push('+d.n+');renderPromoForm();" style="flex:1;background:'+(sel?'#ff5ec8':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'#ff5ec8':'var(--border)')+';border-radius:8px;padding:9px 0;font-weight:900;font-size:12px;cursor:pointer">'+d.l+'</button>';
+      }).join('')+'</div>';
+    modal1('<div style="font-weight:800;font-size:16px;margin-bottom:10px">'+(e.id?'✏️ Editar promoción':'🏷️ Nueva promoción')+'</div>'
+      +modoHtml
+      +'<div style="background:#ff5ec812;border:1px solid #ff5ec833;border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:11px;color:var(--muted)">🍹 <b style="color:#ff5ec8">2x1</b>: el cliente pide 2 y paga 1 (con 3 paga 2, con 4 paga 2). Se aplica solo al agregar productos de la categoría elegida en las mesas, y sale destacada en la carta y los links.</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Categoría del 2x1</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
+        +catsP.map(function(c){var sel=e.cat===c;return'<button onclick="window._prEdit.cat=\''+esc(c).replace(/\'/g,"\\'")+'\';renderPromoForm();" style="background:'+(sel?'#ff5ec8':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'#ff5ec8':'var(--border)')+';border-radius:8px;padding:8px 13px;font-weight:800;font-size:12px;cursor:pointer">'+esc(c)+'</button>';}).join('')
+      +'</div>'
+      +diasHtml2
+      +'<div style="display:flex;gap:8px;margin-bottom:4px">'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Desde (hora)</div><select class="inp" id="pr-hini"><option value="">Todo el día</option>'+horas2.replace('value="'+e.horaIni+'"','value="'+e.horaIni+'" selected')+'</select></div>'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Hasta (hora)</div><select class="inp" id="pr-hfin"><option value="">Todo el día</option>'+horas2.replace('value="'+e.horaFin+'"','value="'+e.horaFin+'" selected')+'</select></div>'
+      +'</div>'
+      +'<div style="color:var(--muted);font-size:10px;margin-bottom:12px">💡 Ej: martes y miércoles de 14:00 a 20:00.</div>'
+      +'<button class="btn btn-full" onclick="guardarPromo()" style="background:#ff5ec8;color:#fff;border:none;font-weight:900">💾 Guardar promoción 2x1</button>'
+      +'<button class="btn btn-full" onclick="renderPromosModal()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">← Volver</button>');
+    return;
+  }
   var p=e.prodId?menu.find(function(m){return String(m.id)===String(e.prodId);}):null;
   var q=_normTxt((e.busq||'').trim());
   var matches=(!p&&q)?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,6):[];
@@ -8532,6 +8607,7 @@ function renderPromoForm(){
     }).join('')+'</div>';
   var horas='';for(var h=0;h<24;h++){['00','30'].forEach(function(mm){var v=('0'+h).slice(-2)+':'+mm;horas+='<option value="'+v+'">'+v+'</option>';});}
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:10px">'+(e.id?'✏️ Editar promoción':'🏷️ Nueva promoción')+'</div>'
+    +modoHtml
     +prodHtml+tipoHtml
     +(p?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio de promoción</div>'
       +'<input class="inp money" id="pr-valor" type="text" inputmode="numeric" value="'+(e.valor?moneyFmt(e.valor):'')+'" placeholder="Ej: 30.000" style="margin-bottom:10px"/>'
@@ -8546,14 +8622,20 @@ function renderPromoForm(){
 }
 function guardarPromo(){
   var e=window._prEdit;
-  if(!e.prodId){alert('Elige el producto.');return;}
-  var valor=moneyVal('pr-valor')||0;
-  if(valor<=0){alert('Escribe el precio de la promoción.');return;}
-  if(!e.dias.length){alert('Elige al menos un día.');return;}
   var hini=(document.getElementById('pr-hini')||{}).value||'';
   var hfin=(document.getElementById('pr-hfin')||{}).value||'';
   if((hini&&!hfin)||(!hini&&hfin)){alert('Define las dos horas, o deja ambas en "Todo el día".');return;}
-  var pr={id:e.id||('pr_'+Date.now()),prodId:e.prodId,tipo:e.tipo||'unidad',valor:valor,dias:e.dias.slice(),horaIni:hini,horaFin:hfin,on:true};
+  if(!e.dias.length){alert('Elige al menos un día.');return;}
+  var pr;
+  if(e.tipo==='2x1'){
+    if(!e.cat){alert('Elige la categoría del 2x1.');return;}
+    pr={id:e.id||('pr_'+Date.now()),tipo:'2x1',cat:e.cat,dias:e.dias.slice(),horaIni:hini,horaFin:hfin,on:true};
+  }else{
+    if(!e.prodId){alert('Elige el producto.');return;}
+    var valor=moneyVal('pr-valor')||0;
+    if(valor<=0){alert('Escribe el precio de la promoción.');return;}
+    pr={id:e.id||('pr_'+Date.now()),prodId:e.prodId,tipo:e.tipo||'unidad',valor:valor,dias:e.dias.slice(),horaIni:hini,horaFin:hfin,on:true};
+  }
   var i=promos.findIndex(function(x){return x.id===pr.id;});
   if(i>=0){pr.on=promos[i].on!==false;promos[i]=pr;}else promos.push(pr);
   var ob={};promos.forEach(function(x){ob[x.id]=x;});fbSet('promos',ob);
