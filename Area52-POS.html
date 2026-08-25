@@ -397,7 +397,7 @@ var TABS_GRUPOS=[
   {titulo:'📦 Inventario y personas',tabs:['inventario','socios','empleados']},
   {titulo:'⚙️ Configuración',tabs:['saneamiento','admin']}
 ];
-var EMOJIS=['🍺','🍻','🥃','🍷','🥂','🍹','🥤','💧','🧃','🧉','🍸','🍾','☕','🫖','🧋','⚡','🔋','🥫','🍕','🍔','🌭','🌮','🌯','🫔','🥙','🍗','🍖','🥩','🥓','🍟','🧆','🍝','🍜','🥘','🫕','🥟','🧀','🥗','🎂','🍰','🧁','🍩','🍪','🍫','🚬','🔥','💫','🌶️','🍤','🦐','🦑','🦀','🍣','🍱','🍊','🍋','🍓','🫐','🥭','🧊','🥚','🍳','🫙','🥤','🍞','🥐','🧇'];
+var EMOJIS=['🍺','🍻','🥃','🍷','🥂','🍹','🥤','💧','🧃','🧉','🍸','🍾','☕','🫖','🧋','⚡','🔋','🥫','🍕','🍔','🌭','🌮','🌯','🫔','🫓','🌽','🥙','🍗','🍖','🥩','🥓','🍟','🧆','🍝','🍜','🥘','🫕','🥟','🥪','🧀','🥗','🥖','🍚','🎂','🍰','🧁','🍩','🍪','🍫','🚬','🔥','💫','🌶️','🍤','🦐','🦑','🦀','🍣','🍱','🍊','🍋','🍓','🫐','🥭','🧊','🥚','🍳','🫙','🍞','🥐','🧇'];
 var CATG_GASTOS=['Mercancía','Insumos','Servicios','Personal','Mantenimiento','Transporte','Otro'];
 
 /* ═══════════════ ESTADO ═══════════════ */
@@ -3842,6 +3842,55 @@ function _precioUnitVenta(p){
   }
   return 0;
 }
+var _EMOJI_REGLAS=[
+  [/arepa/i,'🫓'],[/mazorc|maiz|maíz/i,'🌽'],[/burrit/i,'🌯'],[/taco/i,'🌮'],[/empanad/i,'🥟'],
+  [/hamburgues|burger/i,'🍔'],[/pizza/i,'🍕'],[/lasag|lasañ|pasta|espagu/i,'🍝'],[/alita|alas|wing/i,'🍗'],
+  [/costilla|carne|churrasco|res |lomo/i,'🍖'],[/picada/i,'🥓'],[/chorrean|baguette|chorizo/i,'🥖'],
+  [/papa|frita/i,'🍟'],[/perro|hot ?dog/i,'🌭'],[/sandwich|sánduche|club house/i,'🥪'],
+  [/ensalada/i,'🥗'],[/sopa|caldo|ajiaco/i,'🥘'],[/queso/i,'🧀'],[/salchipapa/i,'🍟'],
+  [/patacon|patacón/i,'🫓'],[/nacho/i,'🧀'],[/ceviche|camaron|camarón/i,'🍤'],[/pescado|mojarra|trucha/i,'🍣'],
+  [/pollo/i,'🍗'],[/torta|pastel|postre/i,'🍰'],[/brownie|chocolate/i,'🍫'],[/helado/i,'🍨'],
+  [/cerveza|beer|coronita|miller|budwei|stella|heineken|aguila|águila|poker|club colombia|corona|modelo|sol\b|mitica|mítica|cordillera/i,'🍺'],
+  [/michelada/i,'🍺'],[/coctel|cóctel|margarita|mojito|gin|sex on/i,'🍹'],
+  [/aguardiente|amarillo|antioque|ron |ron$|caldas|medellin|medellín/i,'🍾'],
+  [/whisk|buchan|old parr|sello|jack daniel|chivas/i,'🥃'],[/tequila|jimador|cuervo/i,'🥃'],
+  [/vodka|smirnoff/i,'🍸'],[/vino/i,'🍷'],
+  [/agua /i,'💧'],[/agua$/i,'💧'],[/gaseosa|bretaña|coca|postobon|postobón|colombiana|sprite|cuatro/i,'🥤'],
+  [/energiz|red ?bull|hatsu|vive ?100|monster/i,'⚡'],[/gatorade|hidrat/i,'⚡'],
+  [/limonada|jugo|naranjada/i,'🧃'],[/caf[eé]|tinto|capuchino|cappuc/i,'☕'],[/t[eé] |aromatica|aromática/i,'🫖'],
+  [/cigarril|lucky|mustang|marlboro|rothman/i,'🚬']
+];
+function _emojiSugerido(p){
+  var txt=(p.nombre||'')+' '+(p.subcat||'')+' '+(p.cat||'');
+  for(var i=0;i<_EMOJI_REGLAS.length;i++){if(_EMOJI_REGLAS[i][0].test(txt))return _EMOJI_REGLAS[i][1];}
+  return null;
+}
+function abrirAutoEmojis(){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  var cambios=[];
+  menu.forEach(function(p){
+    var sug=_emojiSugerido(p);
+    if(sug&&sug!==p.emoji)cambios.push({p:p,de:p.emoji||'📦',a:sug});
+  });
+  if(!cambios.length){modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">🪄 Auto-asignar iconos</div><div style="color:var(--muted);font-size:12px">Todos los productos ya tienen el icono que les corresponde según su nombre. Nada por cambiar. 👌</div><button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');return;}
+  window._autoEmojiCambios=cambios;
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">🪄 Auto-asignar iconos · '+cambios.length+' cambios</div>'
+    +'<div style="max-height:45vh;overflow-y:auto;background:var(--bg);border-radius:9px;padding:8px 11px;font-size:12px">'
+      +cambios.map(function(c){return'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span>'+esc(c.p.nombre)+'</span><span>'+c.de+' → <b>'+c.a+'</b></span></div>';}).join('')
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:10.5px;margin:8px 0 12px">Detectado por el nombre del producto (arepa→🫓, mazorcada→🌽, burrito→🌯, hamburguesa→🍔...). Cualquier producto puedes ajustarlo a mano después editándolo.</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarAutoEmojis()">✨ Aplicar los '+cambios.length+' cambios</button>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+}
+function confirmarAutoEmojis(){
+  var cambios=window._autoEmojiCambios||[];
+  cambios.forEach(function(c){c.p.emoji=c.a;});
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+  window._autoEmojiCambios=null;
+  closeModal2();
+  showToast('🪄 '+cambios.length+' iconos actualizados<br><span style="font-size:12px;opacity:.85">La carta pública los tomará de Firebase</span>','#a855f7');
+  render();
+}
 function abrirSetupCocina(){
   if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
   var esBurger=function(m){return /hamburgues|burger/i.test(m.nombre||'');};
@@ -3967,6 +4016,7 @@ function renderInventario(){
     +'<button onclick="elegirImpresionInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirCuadreInventario()" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">📋 Cuadre físico</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirSetupCocina()" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">🍔 Configurar cocina</button>':'')
+    +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirAutoEmojis()" style="background:#a855f718;color:#a855f7;border:1px solid #a855f733;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">🪄 Auto-iconos</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="toggleOcultarCant()" style="background:'+(invCfg.ocultarCant?'#a855f7':'var(--card)')+';color:'+(invCfg.ocultarCant?'#fff':'var(--muted)')+';border:1px solid '+(invCfg.ocultarCant?'#a855f7':'var(--border)')+';border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">'+(invCfg.ocultarCant?'🙈 Cajero SIN cantidades':'👁️ Cajero ve cantidades')+'</button>':'')
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div>'
@@ -3992,7 +4042,7 @@ function renderInventario(){
 
   if(invTab==='ingredientes'){
     // ── INGREDIENTES section ──────────────────────────────────────────────────
-    var ingRows=ingredientes.map(function(ing){
+    var _ingFila=function(ing){
       return'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">'
         +'<span style="font-size:22px">🧂</span>'
         +'<div style="flex:1">'
@@ -4017,12 +4067,39 @@ function renderInventario(){
             :'')
         +'</div>'
         +'</div>';
-    }).join('')||'<div style="color:var(--muted);text-align:center;padding:20px">Sin ingredientes registrados</div>';
+    };
 
     var addIngBtn=esCajero
       ?'<button class="btn btn-green btn-full mb12" onclick="abrirNuevoIngrediente()">+ Nuevo ingrediente</button>'
       :'';
 
+    var _gruposMap={};
+    ingredientes.forEach(function(ing){
+      var g=(ing.grupo||'').trim()||'📦 Sin grupo';
+      if(!_gruposMap[g])_gruposMap[g]=[];
+      _gruposMap[g].push(ing);
+    });
+    var _gruposKeys=Object.keys(_gruposMap).sort(function(a,b){
+      if(a==='📦 Sin grupo')return 1;if(b==='📦 Sin grupo')return -1;return a.localeCompare(b);
+    });
+    var ingRows;
+    if(!ingredientes.length){
+      ingRows='<div style="color:var(--muted);text-align:center;padding:20px">Sin ingredientes registrados</div>';
+    }else if(_gruposKeys.length===1&&_gruposKeys[0]==='📦 Sin grupo'){
+      ingRows=_gruposMap['📦 Sin grupo'].map(_ingFila).join('');
+    }else{
+      ingRows=_gruposKeys.map(function(g){
+        var k='ingGrp_'+g;
+        var abierto=_secOpen[k]!==false;
+        var its=_gruposMap[g];
+        var totG=its.reduce(function(a,i){return a+(parseInt(i.stock)||0);},0);
+        return'<div data-inggrp="'+esc(g)+'" onclick="toggleIngGrp(this.getAttribute(\'data-inggrp\'))" style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:8px;padding:8px 10px;margin:6px 0;cursor:pointer">'
+          +'<span style="font-size:13px;font-weight:800">'+(abierto?'▼':'▶')+' '+esc(g)+' <span style="color:var(--muted);font-weight:600;font-size:11px">· '+its.length+' insumo'+(its.length!==1?'s':'')+'</span></span>'
+          +'<span style="color:var(--muted);font-size:11px;font-weight:700">'+(verCantidadesInv()?totG+' total':'•••')+'</span>'
+        +'</div>'
+        +(abierto?'<div style="padding-left:6px">'+its.map(_ingFila).join('')+'</div>':'');
+      }).join('');
+    }
     return alertHtml+tabPills+addIngBtn
       +'<div class="card">'+ingRows+'</div>';
   }
@@ -4219,7 +4296,10 @@ function renderCarta(){
   var recetaRows=_receta.length
     ?_receta.map(function(ri,rIdx){
         var ing=menu.find(function(m){return m.id==ri.pid;});
-        return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'          +'<span style="font-size:16px">'+(ing?ing.emoji:'?')+'</span>'          +'<span style="flex:1;font-size:12px;font-weight:600">'+(ing?esc(ing.nombre):'Eliminado')+'</span>'          +'<span style="color:var(--muted);font-size:11px">×'+ri.cantidad+'</span>'          +'<button data-act="del-rec" data-ridx="'+rIdx+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px">✕</button>'          +'</div>';
+        var insumo=!ing?ingredientes.find(function(i){return String(i.id)===String(ri.pid);}):null;
+        var emj=ing?ing.emoji:(insumo?'🧂':'?');
+        var nom=ing?ing.nombre:(insumo?insumo.nombre:'Eliminado');
+        return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'          +'<span style="font-size:16px">'+emj+'</span>'          +'<span style="flex:1;font-size:12px;font-weight:600">'+esc(nom)+(insumo?' <span style="color:var(--muted);font-size:10px;font-weight:500">(insumo · '+esc(insumo.und||'und')+')</span>':'')+'</span>'          +'<span style="color:var(--muted);font-size:11px">×'+ri.cantidad+'</span>'          +'<button data-act="del-rec" data-ridx="'+rIdx+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px">✕</button>'          +'</div>';
       }).join('')
     :'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Sin ingredientes — producto simple</div>';
     var emojiButtons=EMOJIS.map(function(e,i){
@@ -4279,7 +4359,12 @@ function renderCarta(){
         +'<input type="hidden" id="f-emoji" value="'+esc(curEmoji)+'"/>'
       +'</div>'
       // ── Recipe section ──
-      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'        +'<div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">🧾 Receta (ingredientes que descuenta al vender)</div>'        +'<div id="receta-rows">'+recetaRows+'</div>'        +'<div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">'          +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ingrediente</div>'            +'<select class="inp inp-sm" id="rec-ing-sel"><option value="">— Selecciona —</option>'            +(ingredientes.length?'<optgroup label="🧂 Insumos">'+ingredientes.map(function(i){return'<option value="ing:'+i.id+'">🧂 '+esc(i.nombre)+' ('+i.und+')</option>';}).join('')+'</optgroup>':'')            +'<optgroup label="🍽️ Productos de la carta">'+menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'        +'<div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">🧾 Receta (ingredientes que descuenta al vender)</div>'        +'<div id="receta-rows">'+recetaRows+'</div>'        +'<div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">'          +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ingrediente</div>'            +'<select class="inp inp-sm" id="rec-ing-sel"><option value="">— Selecciona —</option>'            +(ingredientes.length?(function(){
+              var gm={};ingredientes.forEach(function(i){var g=(i.grupo||'').trim()||'Insumos';if(!gm[g])gm[g]=[];gm[g].push(i);});
+              return Object.keys(gm).sort().map(function(g){
+                return'<optgroup label="🧂 '+esc(g)+'">'+gm[g].map(function(i){return'<option value="ing:'+i.id+'">🧂 '+esc(i.nombre)+' ('+i.und+')</option>';}).join('')+'</optgroup>';
+              }).join('');
+            })():'')            +'<optgroup label="🍽️ Productos de la carta">'+menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
         +'<button class="btn btn-outline btn-full" onclick="cancelarProd()">Cancelar</button>'
       +'</div></div>';
   } else {
@@ -4580,10 +4665,22 @@ function guardarIngredientes(){
   fbSet('ingredientes',obj);
 }
 
+function toggleIngGrp(g){
+  var k='ingGrp_'+g;
+  _secOpen[k]=(_secOpen[k]===false);
+  render();
+}
+function _gruposIng(){
+  var g={};ingredientes.forEach(function(i){var x=(i.grupo||'').trim();if(x)g[x]=1;});
+  return Object.keys(g).sort();
+}
 function abrirNuevoIngrediente(){
   modal2('<div style="color:var(--accent);font-weight:800;font-size:16px;margin-bottom:14px">🧂 Nuevo ingrediente</div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Nombre</div>'
-      +'<input class="inp" id="ing-nombre" placeholder="Ej: Carne, Pan, Papa..." autofocus/></div>'
+      +'<input class="inp" id="ing-nombre" placeholder="Ej: Empanada de pollo, Carne, Pan..." autofocus/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Grupo (opcional — agrupa en la lista: Empanadas, Carnes, Panes...)</div>'
+      +'<input class="inp" id="ing-grupo" list="ing-grupos-list" placeholder="Ej: Empanadas"/>'
+      +'<datalist id="ing-grupos-list">'+_gruposIng().map(function(g){return'<option value="'+esc(g)+'">';}).join('')+'</datalist></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Stock inicial</div>'
         +'<input class="inp" id="ing-stock" type="number" min="0" value="0"/></div>'
@@ -4602,7 +4699,8 @@ function confirmarNuevoIngrediente(){
   var stock=parseInt((document.getElementById('ing-stock')||{}).value)||0;
   var und=(document.getElementById('ing-und')||{}).value||'und';
   if(!nombre){alert('Escribe el nombre del ingrediente.');return;}
-  ingredientes.push({id:'ing_'+Date.now(),nombre:nombre,stock:stock,und:und});
+  var grupo=((document.getElementById('ing-grupo')||{}).value||'').trim();
+  ingredientes.push({id:'ing_'+Date.now(),nombre:nombre,stock:stock,und:und,grupo:grupo});
   guardarIngredientes();
   closeModal2();render();
 }
@@ -4613,6 +4711,9 @@ function abrirEditIngrediente(iid){
   modal2('<div style="color:var(--accent);font-weight:800;font-size:16px;margin-bottom:14px">✏️ Editar ingrediente</div>'
     +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Nombre</div>'
       +'<input class="inp" id="ing-nombre" value="'+esc(ing.nombre)+'" autofocus/></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Grupo (opcional)</div>'
+      +'<input class="inp" id="ing-grupo" list="ing-grupos-list" value="'+esc(ing.grupo||'')+'" placeholder="Ej: Empanadas"/>'
+      +'<datalist id="ing-grupos-list">'+_gruposIng().map(function(g){return'<option value="'+esc(g)+'">';}).join('')+'</datalist></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:4px">Stock</div>'
         +'<input class="inp" id="ing-stock" type="number" min="0" value="'+ing.stock+'"/></div>'
@@ -4655,7 +4756,8 @@ function guardarEditIngrediente(){
   if(!nombre||!iid)return;
   var ing=ingredientes.find(function(x){return x.id===iid;});
   if(!ing)return;
-  Object.assign(ing,{nombre:nombre,stock:stock,und:und});
+  var grupo=((document.getElementById('ing-grupo')||{}).value||'').trim();
+  Object.assign(ing,{nombre:nombre,stock:stock,und:und,grupo:grupo});
   guardarIngredientes();
   closeModal2();render();
 }
@@ -10706,7 +10808,7 @@ function guardarFotoCompCfg(){
 
 /* ═══════════════ ADMIN USUARIOS ═══════════════ */
 var _rolSelU='mesero';var _emojiSelU='🛸';
-var EMOJIS_U=['👑','💰','🛸','🤝','🧑','👩','👩🏿','👩🏾','👩🏽','👨🏿','🧔','👨','👱‍♀️','👩🏿‍🍳','🧑‍🍳','👨‍🍳','👩‍🍳','🎯','⭐','🌟','🦋','🌙','🔥','💫','🚀','🛰️','👽','🤖','🎸','🎧','🍺','🍻','💼','🏆','😎','🦄','🐺','🦅','🐲','💎','⚡','🎩','🕶️'];
+var EMOJIS_U=['👽','👾','🛸','🐙','🦠','🌵','🫧','🔮','🌌','🪐','☄️','🌠','🤖','🦎','🐸','🦑','🧿','💚','👑','💰','🤝','🧑','👩','👩🏿','👩🏾','👩🏽','👨🏿','🧔','👨','👱‍♀️','👩🏿‍🍳','🧑‍🍳','👨‍🍳','👩‍🍳','🎯','⭐','🌟','🦋','🌙','🔥','💫','🚀','🛰️','🎸','🎧','🍺','🍻','💼','🏆','😎','🦄','🐺','🦅','🐲','💎','⚡','🎩','🕶️'];
 function toggleTurnoUsuario(id){
   var u=usuarios.find(function(x){return x.id===id;});
   if(!u)return;
