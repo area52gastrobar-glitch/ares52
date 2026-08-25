@@ -3832,6 +3832,26 @@ function verIngresosInv(){
 }
 
 /* ═══════════════ INVENTARIO ═══════════════ */
+function _precioUnitVenta(p){
+  // Precio de venta por unidad de stock: precio directo, o derivado de la variante más económica por unidad
+  if((p.precio||0)>0)return p.precio;
+  if(p.variantes&&p.variantes.length){
+    var mejores=p.variantes.map(function(v){return (v.precio||0)/(parseInt(v.und)||1);}).filter(function(x){return x>0;});
+    if(mejores.length)return Math.min.apply(null,mejores);
+  }
+  return 0;
+}
+function _valorInventario(){
+  var venta=0,costo=0,sinCosto=0,conStock=0;
+  menu.forEach(function(p){
+    var st=parseInt(p.stock)||0;
+    if(st<=0||p.sinStock)return;
+    conStock++;
+    venta+=st*_precioUnitVenta(p);
+    if((p.costo||0)>0)costo+=st*p.costo;else sinCosto++;
+  });
+  return{venta:venta,costo:costo,sinCosto:sinCosto,conStock:conStock};
+}
 function renderInventario(){
   var esAdmin=puedeAjustarInv();  // 🔐 respeta el candado de inventario
   // Edición directa del inventario (precios, ±, borrar) SOLO admin. Los demás solo usan "➕ Ingresar inventario".
@@ -3874,7 +3894,20 @@ function renderInventario(){
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirCuadreInventario()" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">📋 Cuadre físico</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="toggleOcultarCant()" style="background:'+(invCfg.ocultarCant?'#a855f7':'var(--card)')+';color:'+(invCfg.ocultarCant?'#fff':'var(--muted)')+';border:1px solid '+(invCfg.ocultarCant?'#a855f7':'var(--border)')+';border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">'+(invCfg.ocultarCant?'🙈 Cajero SIN cantidades':'👁️ Cajero ve cantidades')+'</button>':'')
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
-    +'</div><div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'</div>'
+    +(esAdmin?(function(){
+      var vi=_valorInventario();
+      return'<div class="card mb12" style="border:1px solid #22c55e33">'
+        +'<div class="section-title" style="color:#22c55e">💰 Valor del inventario actual</div>'
+        +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+          +'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">SI SE VENDIERA TODO (precio de venta)</div><div style="color:var(--gold);font-weight:900;font-size:17px">'+fmt(vi.venta)+'</div></div>'
+          +(vi.costo>0?'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">COSTO (precio de compra)</div><div style="color:#38bdf8;font-weight:900;font-size:17px">'+fmt(vi.costo)+'</div></div>'
+          +'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">UTILIDAD POTENCIAL</div><div style="color:#22c55e;font-weight:900;font-size:17px">'+fmt(vi.venta-vi.costo)+'</div><div style="color:var(--muted);font-size:10px">margen '+(vi.venta>0?Math.round((vi.venta-vi.costo)/vi.venta*100):0)+'%</div></div>':'')
+        +'</div>'
+        +(vi.sinCosto>0?'<div style="color:var(--muted);font-size:10.5px;margin-top:6px">💡 '+vi.sinCosto+' de '+vi.conStock+' productos con stock aún no tienen precio de compra — agrégalo editando el producto (campo "💵 Precio de COMPRA") y la utilidad se calcula sola.</div>':'')
+      +'</div>';
+    })():'')
+    +'<div style="display:flex;gap:8px;margin-bottom:14px">'
     +['carta','ingredientes'].map(function(t){
       var sel=invTab===t;
       var label=t==='carta'?'🍺 Productos carta':'🧂 Ingredientes cocina';
@@ -4134,6 +4167,8 @@ function renderCarta(){
           +'<input class="inp" id="f-subcat-new" value="'+((curSub&&subcats.indexOf(curSub)<0)?esc(curSub):'')+'" placeholder="Escribe la nueva subcategoría" style="margin-top:6px;display:'+((curSub&&subcats.indexOf(curSub)<0)?'block':'none')+'"/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio detal (COP) *</div>'
           +'<input class="inp money" id="f-precio" type="text" value="'+moneyFmt(p.precio||'')+'" placeholder="0" inputmode="numeric"/></div>'
+        +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">💵 Precio de COMPRA por unidad (costo, opcional)</div>'
+          +'<input class="inp money" id="f-costo" type="text" value="'+moneyFmt(p.costo||'')+'" placeholder="Para calcular utilidad" inputmode="numeric"/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Stock inicial</div>'
           +'<div style="display:flex;gap:5px">'
           +'<input class="inp" id="f-stock" type="number" value="'+(p.stock||'')+'" placeholder="0" style="flex:1"/>'
@@ -4405,6 +4440,11 @@ function abrirMercanciaModal(id, esIng){
         +[6,12,24,48].map(function(v){return'<button data-qv="'+v+'" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">+'+v+'</button>';}).join('')
       +'</div>'
     +'</div>'
+    +(!esIng?'<div style="margin-bottom:14px">'
+      +'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">💵 ¿A cómo compraste cada '+esc(item.und||'unidad')+'? <span style="font-size:10px">(opcional — actualiza el costo del producto)</span></div>'
+      +'<input class="inp money" id="merc-costo" type="text" inputmode="numeric" placeholder="'+(item.costo?'Último: '+moneyFmt(item.costo):'Precio de compra por unidad')+'"/>'
+      +(item.costo?'<div style="color:var(--muted);font-size:10px;margin-top:3px">Costo actual registrado: '+fmt(item.costo).replace(/\u00A0/g,' ')+' — si esta compra vino a otro precio, se promedia con lo que hay en stock.</div>':'<div style="color:var(--muted);font-size:10px;margin-top:3px">Este producto aún no tiene costo: el precio que pongas queda como su costo desde ahora.</div>')
+    +'</div>':'')
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
       +'<button class="btn btn-green btn-full" data-act="confirm-mercancia" data-id="'+id+'" data-esing="'+esIng+'">📦 Agregar al stock</button>'
@@ -4420,7 +4460,27 @@ function confirmarMercancia(id, esIng){
     if(ing)cambiarStock('i',ing.id,cant,'📦 Llegó mercancía');
   } else {
     var p=menu.find(function(m){return m.id===parseInt(id);});
-    if(p)cambiarStock('p',p.id,cant,'📦 Llegó mercancía');
+    if(p){
+      var costoCompra=moneyVal('merc-costo')||0;
+      var motivo='📦 Llegó mercancía';
+      if(costoCompra>0){
+        var stAnt=Math.max(0,parseInt(p.stock)||0);
+        var costoAnt=p.costo||0;
+        var nuevoCosto;
+        if(costoAnt>0&&stAnt>0){
+          // Promedio ponderado: lo que había a su costo + lo que llega a su precio
+          nuevoCosto=Math.round((stAnt*costoAnt+cant*costoCompra)/(stAnt+cant));
+        }else{
+          // Sin costo previo: el stock viejo sin precio se irá acabando; desde ya rige el nuevo
+          nuevoCosto=costoCompra;
+        }
+        p.costo=nuevoCosto;
+        motivo+=' (a '+fmt(costoCompra).replace(/\u00A0/g,' ')+' c/u'+(nuevoCosto!==costoCompra?' · costo promedio: '+fmt(nuevoCosto).replace(/\u00A0/g,' '):'')+')';
+        var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+      }
+      cambiarStock('p',p.id,cant,motivo);
+      if(costoCompra>0)showToast('📦 +'+cant+' '+esc(p.und||'und')+' de '+esc(p.nombre)+'<br><span style="font-size:12px;opacity:.85">💵 Compra a '+fmt(costoCompra)+' c/u · costo del producto: '+fmt(p.costo)+'</span>','#22c55e');
+    }
   }
   closeModal2();render();
 }
@@ -4933,6 +4993,7 @@ function agregarIngReceta(){
 function guardarProd(){
   var nombre=(document.getElementById('f-nombre')||{}).value;nombre=nombre?nombre.trim():'';
   var precio=moneyVal('f-precio')||0;
+  var costo=moneyVal('f-costo')||0;
   var _catSel=(document.getElementById('f-cat-sel')||{}).value||'';
   var cat=(_catSel==='__new__')?(((document.getElementById('f-cat-new')||{}).value||'').trim()):_catSel;
   var _subSel=(document.getElementById('f-subcat-sel')||{}).value||'';
@@ -4961,10 +5022,10 @@ function guardarProd(){
   if(!cat){alert('Escribe la categoría.');return;}
   if(editandoProd==='nuevo'){
     var maxId=0;menu.forEach(function(m){if(m.id>maxId)maxId=m.id;});
-    menu.push({id:maxId+1,nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[],sinStock:_sinStockF,disponible:true});
+    menu.push({id:maxId+1,nombre:nombre,precio:precio,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[],sinStock:_sinStockF,disponible:true});
     _recetaTemp=[];
   } else {
-    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
+    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
   }
   editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();
 }
@@ -7405,7 +7466,24 @@ function renderVentas(){
   var ranking=Object.values(porProd).sort(function(a,b){return (b.qty+(b.enMesa||0))-(a.qty+(a.enMesa||0));});
 
   var kpis='<div class="kpi-grid">'
-    +[['💰','Ventas turno',fmt(totV),'#f5a623'],['🔴','En mesas ahora',fmt(enMesasTot),'#ef4444'],['🍽️','Cobros turno',hoyV.length,'#22c55e'],['🪣','Cubetazos',cubetazos,'#22c55e'],['📦','Productos distintos',ranking.length,'#38bdf8']].map(function(x){
+    +(function(){
+      // 📈 Utilidad estimada del turno (solo si hay costos cargados)
+      var utl=0,ventaConCosto=0,sinCostoQty=0;
+      var addU=function(it){
+        if(it.isCustom||it.isCombo||it.isCubetazoMix){sinCostoQty+=(it.qty||1);return;}
+        var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
+        if(!p||!(p.costo>0)){sinCostoQty+=(it.qty||1);return;}
+        var undM=it.cubeta?5:(parseInt(it.varianteUnd)||1);
+        var rev=precioItem(it)*(it.qty||1);
+        var cst=p.costo*undM*(it.qty||1);
+        utl+=rev-cst;ventaConCosto+=rev;
+      };
+      hoyV.forEach(function(v){(v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[]).forEach(addU);});
+      Object.keys(pedidos||{}).forEach(function(mid){(pedidos[mid]||[]).forEach(addU);});
+      window._utilidadTurno=(ventaConCosto>0)?{utl:utl,margen:Math.round(utl/ventaConCosto*100),sinCosto:sinCostoQty}:null;
+      return'';
+    })()
+    +[['💰','Ventas turno',fmt(totV),'#f5a623'],['🔴','En mesas ahora',fmt(enMesasTot),'#ef4444']].concat(window._utilidadTurno?[['📈','Utilidad (con costos)',fmt(window._utilidadTurno.utl)+' · '+window._utilidadTurno.margen+'%','#22c55e']]:[]).concat([['🍽️','Cobros turno',hoyV.length,'#22c55e'],['🪣','Cubetazos',cubetazos,'#22c55e'],['📦','Productos distintos',ranking.length,'#38bdf8']]).map(function(x){
       return'<div class="kpi"><div style="font-size:20px">'+x[0]+'</div><div style="color:var(--muted);font-size:10px;margin-top:2px">'+x[1]+'</div><div style="color:'+x[3]+';font-weight:900;font-size:16px;margin-top:2px">'+x[2]+'</div></div>';
     }).join('')+'</div>';
 
