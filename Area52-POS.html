@@ -2122,6 +2122,7 @@ function _aplicarNuevaCantidad(idx,nueva){
 }
 function sumarCantidadPedido(idx,cuanto){
   var pped=pedidos[mesaActiva.id]||[];var it=pped[idx];if(!it)return;
+  if(it.recGrupos){alert('🎛 Este ítem lleva tipos elegidos ('+(it.recGruposTxt||'')+').\nPara pedir más, agrégalo de nuevo desde la carta y eliges los tipos; para menos, elimínalo y vuélvelo a agregar.');closeModal2();return;}
   _aplicarNuevaCantidad(idx, it.qty+(parseInt(cuanto)||0));
 }
 function sumarCantidadPedidoLibre(idx){
@@ -2507,6 +2508,17 @@ function ajustarStockItem(item,delta,motivo){
   // Receta (escala igual por las unidades de la variante)
   if(p.receta&&p.receta.length){
     p.receta.forEach(function(ri){
+      if(ri.grupo){
+        // 🎛 Grupo repartido por el mesero: el detalle exacto viaja en el ítem
+        var rg=item.recGrupos?(Array.isArray(item.recGrupos)?item.recGrupos:Object.values(item.recGrupos)).find(function(x){return x.grupo===ri.grupo;}):null;
+        if(rg&&rg.det){
+          var factor=Math.abs(delta)/(item.qty||Math.abs(delta));
+          (Array.isArray(rg.det)?rg.det:Object.values(rg.det)).forEach(function(d){
+            cambiarStock('i',d.ingId,Math.round(d.cant*factor)*s,mot+' ('+ri.grupo+': '+d.nombre+' · '+p.nombre+')');
+          });
+        }
+        return;
+      }
       var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
       cambiarStock(enMenu?'p':'i',ri.pid,ri.cantidad*Math.abs(delta)*mult*s,mot+' (receta de '+p.nombre+')');
     });
@@ -2569,11 +2581,92 @@ function abrirSumarCantidad(idx){
     +'</div>');
 }
 
+function abrirRepartoGrupos(pid,cubeta,cantidad,varianteNombre,variantePrecio){
+  var p=menu.find(function(m){return m.id===pid;});if(!p)return;
+  var vUnd=1;
+  if(varianteNombre&&p.variantes){var vv=p.variantes.find(function(v){return v.nombre===varianteNombre;});if(vv&&vv.und)vUnd=parseInt(vv.und)||1;}
+  var grupos=(p.receta||[]).filter(function(r){return r.grupo;});
+  window._repCtx={pid:pid,cubeta:cubeta,cantidad:cantidad,varianteNombre:varianteNombre,variantePrecio:variantePrecio,
+    grupos:grupos.map(function(g){return{grupo:g.grupo,necesita:(g.cantidad||1)*vUnd*cantidad};}),sel:{}};
+  grupos.forEach(function(g){window._repCtx.sel[g.grupo]={};});
+  _renderRepartoModal();
+}
+function _renderRepartoModal(){
+  var C=window._repCtx;if(!C)return;
+  var p=menu.find(function(m){return m.id===C.pid;});
+  var html='<div style="text-align:center;margin-bottom:12px"><div style="font-size:26px">'+(p?p.emoji:'')+'</div>'
+    +'<div style="font-weight:800;font-size:15px">'+esc(p?p.nombre:'')+(C.varianteNombre?' ('+esc(C.varianteNombre)+')':'')+' × '+C.cantidad+'</div></div>';
+  var completo=true;
+  C.grupos.forEach(function(g){
+    var its=ingredientes.filter(function(i){return (i.grupo||'').trim()===g.grupo;});
+    var va=Object.values(C.sel[g.grupo]).reduce(function(a,b){return a+b;},0);
+    if(va!==g.necesita)completo=false;
+    html+='<div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-weight:800;font-size:13px">🎛 '+esc(g.grupo)+'</span>'
+      +'<span style="font-weight:900;font-size:13px;color:'+(va===g.necesita?'#22c55e':va>g.necesita?'#ef4444':'#f5a623')+'">'+va+' de '+g.necesita+'</span></div>'
+      +its.map(function(i){
+        var c=C.sel[g.grupo][i.id]||0;
+        return'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+          +'<span style="flex:1;font-size:12.5px;font-weight:600">'+esc(i.nombre)+' <span style="color:var(--muted);font-size:10px">('+(verCantidadesInv()?('quedan '+i.stock):'')+')</span></span>'
+          +'<button onclick="repMenos(\''+esc(g.grupo).replace(/\'/g,"\\'")+'\',\''+i.id+'\')" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:32px;height:32px;font-size:17px;cursor:pointer">−</button>'
+          +'<span style="min-width:26px;text-align:center;font-weight:900;font-size:15px;color:'+(c>0?'#22c55e':'var(--muted)')+'">'+c+'</span>'
+          +'<button onclick="repMas(\''+esc(g.grupo).replace(/\'/g,"\\'")+'\',\''+i.id+'\')" style="background:#22c55e18;color:#22c55e;border:none;border-radius:6px;width:32px;height:32px;font-size:17px;cursor:pointer">+</button>'
+        +'</div>';
+      }).join('')
+    +'</div>';
+  });
+  html+='<button class="btn btn-green btn-full" '+(completo?'':'disabled style="opacity:.45"')+' onclick="confirmarReparto()">✅ Listo, agregar a la mesa</button>'
+    +'<button class="btn btn-full" onclick="window._repCtx=null;closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>';
+  modal2(html);
+}
+function repMas(grupo,ingId){
+  var C=window._repCtx;if(!C)return;
+  var g=C.grupos.find(function(x){return x.grupo===grupo;});
+  var va=Object.values(C.sel[grupo]).reduce(function(a,b){return a+b;},0);
+  if(va>=g.necesita)return;
+  C.sel[grupo][ingId]=(C.sel[grupo][ingId]||0)+1;
+  _renderRepartoModal();
+}
+function repMenos(grupo,ingId){
+  var C=window._repCtx;if(!C)return;
+  if(!C.sel[grupo][ingId])return;
+  C.sel[grupo][ingId]--;
+  if(!C.sel[grupo][ingId])delete C.sel[grupo][ingId];
+  _renderRepartoModal();
+}
+function confirmarReparto(){
+  var C=window._repCtx;if(!C)return;
+  var recGrupos=[],txtP=[];
+  var ok=true;
+  C.grupos.forEach(function(g){
+    var det=Object.keys(C.sel[g.grupo]).map(function(ingId){
+      var i=ingredientes.find(function(x){return x.id===ingId;});
+      return{ingId:ingId,nombre:i?i.nombre:'?',cant:C.sel[g.grupo][ingId]};
+    });
+    var suma=det.reduce(function(a,d){return a+d.cant;},0);
+    if(suma!==g.necesita)ok=false;
+    recGrupos.push({grupo:g.grupo,det:det});
+    var base=new RegExp('^'+g.grupo.replace(/s$/i,'')+'s?( de)? ','i');
+    txtP.push(det.map(function(d){return d.cant+'× '+d.nombre.replace(base,'');}).join(' · '));
+  });
+  if(!ok){alert('Completa el reparto exacto.');return;}
+  window._repartoListo={recGrupos:recGrupos,txt:txtP.join(' | ')};
+  window._repCtx=null;
+  closeModal2();
+  agregarItemQty(C.pid,C.cubeta,C.cantidad,C.varianteNombre,C.variantePrecio);
+}
 function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
   if(!mesaActiva)return;
   var p=menu.find(function(m){return m.id===pid;});
   var id=mesaActiva.id;
   if(!pedidos[id])pedidos[id]=[];
+  // 🎛 Receta con grupos: el mesero reparte los tipos antes de servir
+  var _gruposRec=(p&&p.receta?p.receta:[]).filter(function(r){return r.grupo;});
+  var _rep=window._repartoListo||null;window._repartoListo=null;
+  if(_gruposRec.length&&!_rep){
+    abrirRepartoGrupos(pid,cubeta,cantidad,varianteNombre,variantePrecio);
+    return;
+  }
   // Promo vigente al momento de agregar: el precio se CONGELA en el ítem
   // (si la promo termina con la mesa abierta, lo ya pedido conserva su precio)
   var _promo=(!varianteNombre)?promoVigente(pid,cubeta?'cubeta':'unidad'):null;
@@ -2583,8 +2676,8 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
     var _vv=p.variantes.find(function(v){return v.nombre===varianteNombre;});
     if(_vv&&_vv.und)_vUnd=parseInt(_vv.und)||1;
   }
-  var idx=pedidos[id].findIndex(function(it){
-    return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
+  var idx=_rep?-1:pedidos[id].findIndex(function(it){
+    return !it.recGrupos&&it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
   });
   if(idx>=0)pedidos[id][idx].qty+=cantidad;
   else pedidos[id].push({
@@ -2593,11 +2686,13 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
     variantePrecio:variantePrecio||0,
     varianteUnd:_vUnd,
     precioPromo:_pPromo,
+    recGrupos:_rep?_rep.recGrupos:null,
+    recGruposTxt:_rep?_rep.txt:'',
     uidItem:'it'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36),
   });
   var r=ref('pedidos/'+id);if(r)r.set(pedidos[id]);
   // Descontar stock en tiempo real
-  ajustarStockItem({pid:pid,cubeta:cubeta,varianteNombre:varianteNombre,varianteUnd:_vUnd,isCustom:false,isCombo:false},-cantidad);
+  ajustarStockItem({pid:pid,cubeta:cubeta,varianteNombre:varianteNombre,varianteUnd:_vUnd,isCustom:false,isCombo:false,qty:cantidad,recGrupos:_rep?_rep.recGrupos:null},-cantidad);
   var totMesa=totalPedido(id);
   var nItems=pedidos[id].reduce(function(a,b){return a+b.qty;},0);
   var nombreP=(p?p.emoji+' '+p.nombre:'Producto')+(varianteNombre?' ('+varianteNombre+')':'')+(cubeta?' 🪣':'');
@@ -3208,7 +3303,7 @@ function nombreItemPed(it){
   if(it.isCombo)return '🎁 '+(it.comboNombre||'Combo');
   if(it.isCubetazoMix)return '🪣 '+(it.cubMixNombre||'Cubetazo mixto');
   var p=menu.find(function(m){return m.id==it.pid;});
-  return (p?p.emoji+' '+p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'');
+  return (p?p.emoji+' '+p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'')+(it.recGruposTxt?' <span style="color:#38bdf8;font-size:10px;font-weight:600">['+esc(it.recGruposTxt)+']</span>':'');
 }
 
 function renderDividirModal(){
@@ -4295,6 +4390,14 @@ function renderCarta(){
   var _receta=(p&&p.receta)?p.receta:[];
   var recetaRows=_receta.length
     ?_receta.map(function(ri,rIdx){
+        if(ri.grupo){
+          return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'
+            +'<span style="font-size:16px">🎛</span>'
+            +'<span style="flex:1;font-size:12px;font-weight:600">Grupo: '+esc(ri.grupo)+' <span style="color:#38bdf8;font-size:10px;font-weight:700">(el mesero elige los tipos al servir)</span></span>'
+            +'<span style="color:var(--muted);font-size:11px">×'+ri.cantidad+'</span>'
+            +'<button data-act="del-rec" data-ridx="'+rIdx+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px">✕</button>'
+          +'</div>';
+        }
         var ing=menu.find(function(m){return m.id==ri.pid;});
         var insumo=!ing?ingredientes.find(function(i){return String(i.id)===String(ri.pid);}):null;
         var emj=ing?ing.emoji:(insumo?'🧂':'?');
@@ -4361,7 +4464,9 @@ function renderCarta(){
       // ── Recipe section ──
       +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'        +'<div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">🧾 Receta (ingredientes que descuenta al vender)</div>'        +'<div id="receta-rows">'+recetaRows+'</div>'        +'<div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">'          +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ingrediente</div>'            +'<select class="inp inp-sm" id="rec-ing-sel"><option value="">— Selecciona —</option>'            +(ingredientes.length?(function(){
               var gm={};ingredientes.forEach(function(i){var g=(i.grupo||'').trim()||'Insumos';if(!gm[g])gm[g]=[];gm[g].push(i);});
-              return Object.keys(gm).sort().map(function(g){
+              var conGrupo=Object.keys(gm).filter(function(g){return g!=='Insumos';}).sort();
+              var grpOpts=conGrupo.length?'<optgroup label="🎛 GRUPOS (el mesero reparte al servir)">'+conGrupo.map(function(g){return'<option value="grp:'+esc(g)+'">🎛 Grupo: '+esc(g)+' — elegir tipos al servir</option>';}).join('')+'</optgroup>':'';
+              return grpOpts+Object.keys(gm).sort().map(function(g){
                 return'<optgroup label="🧂 '+esc(g)+'">'+gm[g].map(function(i){return'<option value="ing:'+i.id+'">🧂 '+esc(i.nombre)+' ('+i.und+')</option>';}).join('')+'</optgroup>';
               }).join('');
             })():'')            +'<optgroup label="🍽️ Productos de la carta">'+menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
@@ -5184,6 +5289,16 @@ function agregarIngReceta(){
   var cant=parseFloat((document.getElementById('rec-ing-cant')||{}).value)||1;
   if(!sel||!sel.value){alert('Selecciona un ingrediente.');return;}
   var selVal=sel.value;
+  if(selVal.startsWith('grp:')){
+    var gNom=selVal.slice(4);
+    var prodG=editandoProd&&editandoProd!=='nuevo'?menu.find(function(m){return m.id===editandoProd;}):null;
+    var recG=prodG?((prodG.receta||[]).slice()):(_recetaTemp||[]).slice();
+    var exG=recG.findIndex(function(r){return r.grupo===gNom;});
+    if(exG>=0)recG[exG].cantidad+=cant;else recG.push({grupo:gNom,cantidad:cant});
+    if(prodG){prodG.receta=recG;var moG={};menu.forEach(function(m){moG[m.id]=m;});fbSet('menu',moG);}
+    else _recetaTemp=recG;
+    render();return;
+  }
   var pid=selVal.startsWith('ing:')?selVal.slice(4):parseInt(selVal.replace('menu:',''));
   // Get current product receta
   var prod=editandoProd&&editandoProd!=='nuevo'?menu.find(function(m){return m.id===editandoProd;}):null;
