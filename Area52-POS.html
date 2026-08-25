@@ -3928,6 +3928,37 @@ function verIngresosInv(){
 }
 
 /* ═══════════════ INVENTARIO ═══════════════ */
+function corregirCosto(pid){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede corregir costos.');return;}
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:6px">💵 Corregir precio de compra</div>'
+    +'<div style="background:var(--bg);border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:12px">'+p.emoji+' <b>'+esc(p.nombre)+'</b><br><span style="color:var(--muted)">Costo actual: '+(p.costo>0?fmt(p.costo).replace(/\u00A0/g,' '):'sin definir')+' · vende a '+fmt(_precioUnitVenta(p)).replace(/\u00A0/g,' ')+((p.variantes&&p.variantes.length)?' por '+esc(p.und||'und'):'')+'</span></div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nuevo costo por '+esc(p.und||'unidad')+'</div>'
+    +'<input class="inp money" id="cc-valor" type="text" inputmode="numeric" placeholder="Ej: 3.500" value="'+(p.costo>0?moneyFmt(p.costo):'')+'" style="margin-bottom:10px"/>'
+    +'<div style="color:var(--muted);font-size:10px;margin-bottom:12px">Este valor reemplaza el costo actual (no promedia). Para las compras del día a día usa mejor "📦 Llegó mercancía", que promedia solo.</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarCorregirCosto('+pid+')">💾 Guardar costo</button>'
+    +(p.costo>0?'<button class="btn btn-full" onclick="confirmarCorregirCosto('+pid+',true)" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;margin-top:8px">🗑 Quitar el costo (dejar sin definir)</button>':'')
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>');
+  setTimeout(function(){var i=document.getElementById('cc-valor');if(i){i.focus();i.select&&i.select();}},80);
+}
+function confirmarCorregirCosto(pid,quitar){
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p)return;
+  var anterior=p.costo||0;
+  if(quitar){
+    p.costo=0;
+  }else{
+    var v=moneyVal('cc-valor')||0;
+    if(v<=0){alert('Escribe el nuevo costo.');return;}
+    p.costo=v;
+  }
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+  logKardex('p',p.id,p.nombre,0,'💵 Costo corregido: '+(anterior>0?fmt(anterior).replace(/\u00A0/g,' '):'sin definir')+' → '+(p.costo>0?fmt(p.costo).replace(/\u00A0/g,' '):'sin definir'),parseInt(p.stock)||0);
+  closeModal2();
+  showToast('💵 Costo de '+esc(p.nombre)+' actualizado'+(p.costo>0?': '+fmt(p.costo):' (quedó sin definir)'),'#22c55e');
+  render();
+}
 function _precioUnitVenta(p){
   // Precio de venta por unidad de stock: precio directo, o derivado de la variante más económica por unidad
   if((p.precio||0)>0)return p.precio;
@@ -4208,10 +4239,13 @@ function renderInventario(){
       +'<div style="flex:1">'
         +'<div style="font-weight:700;font-size:13px">'+esc(p.nombre)+'</div>'
         +'<div style="color:var(--accent);font-size:11px">'+fmt(p.precio)+(p.esCerveza&&p.cubeta?' · Cubetazo: '+fmt(p.cubeta):'')+(p.esComida?' · 👨‍🍳':'')+'</div>'
-        +((p.costo>0&&usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?(function(){
+        +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?(function(){
+          if(!(p.costo>0)){
+            return usuarioActivo.rol==='admin'?'<div onclick="event.stopPropagation();corregirCosto('+p.id+')" style="font-size:10px;color:#38bdf8;cursor:pointer;font-weight:700">💵 + poner precio de compra</div>':'';
+          }
           var pv=_precioUnitVenta(p);
           var u=pv-p.costo;
-          return'<div style="font-size:10px;color:var(--muted)">💵 costo '+fmt(p.costo).replace(/\u00A0/g,' ')+' → <span style="color:'+(u>0?'#22c55e':'#ef4444')+';font-weight:700">utilidad '+fmt(u).replace(/\u00A0/g,' ')+(pv>0?' ('+Math.round(u/pv*100)+'%)':'')+'</span>'+((p.variantes&&p.variantes.length)?' por '+esc(p.und||'und'):'')+'</div>';
+          return'<div onclick="event.stopPropagation();corregirCosto('+p.id+')" style="font-size:10px;color:var(--muted);cursor:pointer">💵 costo '+fmt(p.costo).replace(/\u00A0/g,' ')+' → <span style="color:'+(u>0?'#22c55e':'#ef4444')+';font-weight:700">utilidad '+fmt(u).replace(/\u00A0/g,' ')+(pv>0?' ('+Math.round(u/pv*100)+'%)':'')+'</span>'+((p.variantes&&p.variantes.length)?' por '+esc(p.und||'und'):'')+' <span style="color:#38bdf8;font-weight:700">✎</span></div>';
         })():'')
       +'</div>'
       +(p.sinStock
