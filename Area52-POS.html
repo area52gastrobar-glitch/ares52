@@ -671,7 +671,7 @@ function iniciarSync(){
   fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
-  fbOn('ingredientes',function(v){if(v){ingredientes=Object.values(v);ingredientes.forEach(function(i){if(i.stock==null||isNaN(parseInt(i.stock)))i.stock=0;else i.stock=parseInt(i.stock);});}if(tabActual==='inventario'||tabActual==='cocina')render();});
+  fbOn('ingredientes',function(v){ingredientes=v?Object.values(v):[];ingredientes.forEach(function(i){if(i.stock==null||isNaN(parseInt(i.stock)))i.stock=0;else i.stock=parseInt(i.stock);});if(tabActual==='inventario'||tabActual==='cocina')render();});
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
   fbOn('configBar',function(v){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
@@ -2783,7 +2783,8 @@ function abrirSelectorVariante(pid){
     return'<button data-act="pick-variante" data-pid="'+pid+'" data-nom="'+esc(v.nombre)+'" data-pre="'+v.precio+'" '
       +'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;'
       +'text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px">'
-      +'<span style="font-weight:700;font-size:14px">'+esc(v.nombre)+((v.und||1)>1?' <span style="color:var(--muted);font-size:11px;font-weight:600">('+v.und+' und)</span>':'')+'</span>'
+      +'<span style="flex:1"><span style="font-weight:700;font-size:14px">'+esc(v.nombre)+((v.und||1)>1?' <span style="color:var(--muted);font-size:11px;font-weight:600">('+v.und+' und)</span>':'')+'</span>'
+      +(v.desc?'<br><span style="color:var(--muted);font-size:10.5px;font-weight:500">'+esc(v.desc)+'</span>':'')+'</span>'
       +'<span style="color:var(--accent);font-weight:700;font-size:15px">'+fmt(v.precio)+'</span>'
       +'</button>';
   }).join('');
@@ -4268,7 +4269,7 @@ function renderCarta(){
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-sinstock" '+(p.sinStock?'checked':'')+'/> '
         +'✨ Sin control de cantidad — solo Disponible / Agotado <span style="color:var(--muted);font-size:11px">(cócteles, preparados...)</span></label>'
-      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Alitas x8 · x16 · x24. "Und" = cuántas descuenta del stock)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: x8)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="'+(v.und||1)+'" style="width:52px;text-align:center" data-vund="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
+      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Alitas x8 · x16 · x24. "Und" = cuántas descuenta del stock)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: x8)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="'+(v.und||1)+'" style="width:52px;text-align:center" data-vund="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>'              +'<input class="inp inp-sm" placeholder="Especificación (opcional — ej: 8 alas bañadas en BBQ + papas) — sale en la carta" value="'+esc(v.desc||'')+'" style="margin:-2px 0 8px;font-size:11px" data-vdesc="'+vi+'"/>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
         +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:3px">🪣 Precio CUBETAZO ×5 (COP)</div>'
         +'<input class="inp money" id="f-cubeta" type="text" value="'+moneyFmt(p.cubeta||'')+'" placeholder="Ej: 20.000" inputmode="numeric"/>'
       +'</div>'
@@ -4628,11 +4629,24 @@ function abrirEditIngrediente(iid){
     +'<input type="hidden" id="ing-id" value="'+iid+'"/>'
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
-      +'<button data-act="del-ing" data-iid="'+iid+'" style="flex:1;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px;font-weight:700;cursor:pointer">🗑 Eliminar</button>'
+      +'<button onclick="eliminarIngrediente(\''+iid+'\')" style="flex:1;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px;font-weight:700;cursor:pointer">🗑 Eliminar</button>'
       +'<button class="btn btn-green btn-full" onclick="guardarEditIngrediente()">💾 Guardar</button>'
     +'</div>');
 }
 
+function eliminarIngrediente(iid){
+  var ing=ingredientes.find(function(x){return x.id===iid;});
+  if(!ing)return;
+  var usanReceta=menu.filter(function(m){return m.receta&&m.receta.some(function(r){return String(r.pid)===String(iid);});});
+  var aviso=usanReceta.length?'\n\n⚠️ OJO: lo usan las recetas de: '+usanReceta.map(function(m){return m.nombre;}).join(', ')+'. Esas recetas quedarán con un ingrediente roto.':'';
+  if(!confirm('¿Eliminar el ingrediente "'+ing.nombre+'"?'+aviso))return;
+  ingredientes=ingredientes.filter(function(x){return x.id!==iid;});
+  var obj={};ingredientes.forEach(function(i){obj[i.id]=i;});
+  fbSet('ingredientes',ingredientes.length?obj:null);
+  closeModal2();
+  showToast('🗑 Ingrediente "'+esc(ing.nombre)+'" eliminado','#ef4444');
+  render();
+}
 function guardarEditIngrediente(){
   var iid=(document.getElementById('ing-id')||{}).value;
   var nombre=((document.getElementById('ing-nombre')||{}).value||'').trim();
@@ -4823,8 +4837,16 @@ function agregarVariante(){
   row.innerHTML='<input class="inp inp-sm" placeholder="Nombre (ej: x16)" style="flex:2" data-vnom="'+vi+'"/>'
     +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" style="flex:1" data-vpre="'+vi+'"/>'
     +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="1" style="width:52px;text-align:center" data-vund="'+vi+'"/>'
-    +'<button onclick="this.parentElement.remove()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>';
-  list.appendChild(row);
+    +'<button onclick="this.parentElement.parentElement.remove()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>';
+  var wrap=document.createElement('div');
+  wrap.appendChild(row);
+  var descInp=document.createElement('input');
+  descInp.className='inp inp-sm';
+  descInp.placeholder='Especificación (opcional — ej: 8 alas bañadas en BBQ + papas) — sale en la carta';
+  descInp.style.cssText='margin:-2px 0 8px;font-size:11px';
+  descInp.setAttribute('data-vdesc',vi);
+  wrap.appendChild(descInp);
+  list.appendChild(wrap);
   row.querySelector('[data-vnom]').focus();
 }
 
@@ -5102,7 +5124,9 @@ function guardarProd(){
     var pre=preEl?parseInt(String(preEl.value).replace(/[^0-9]/g,''))||0:0;
     var undEl=document.querySelector('[data-vund="'+vi+'"]');
     var vund=undEl?Math.max(1,parseInt(undEl.value)||1):1;
-    if(nom&&pre>0) variantes.push({nombre:nom,precio:pre,und:vund});
+    var descEl=document.querySelector('[data-vdesc="'+vi+'"]');
+    var vdesc=descEl?String(descEl.value||'').trim():'';
+    if(nom&&pre>0) variantes.push({nombre:nom,precio:pre,und:vund,desc:vdesc});
   });
   var cubeta=cerv?(moneyVal('f-cubeta')||null):null;
   var emoji=(document.getElementById('f-emoji')||{}).value||'🍺';
