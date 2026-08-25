@@ -345,6 +345,13 @@ body.cliente-mode #doc{
       </select>
     </div>
     <div class="opt-group">
+      <label>🔥 Hoja de promos</label>
+      <select id="cfg-promos" onchange="regenerar()">
+        <option value="si">Incluir</option>
+        <option value="no">No incluir</option>
+      </select>
+    </div>
+    <div class="opt-group">
       <label>Cubetazo</label>
       <select id="cfg-cubeta" onchange="regenerar()">
         <option value="si">Mostrar</option>
@@ -476,6 +483,19 @@ firebase.initializeApp({
 var db=firebase.database();
 var menuData=[];
 var combosData=[];
+var promosData=[];
+var DIAS_CORT=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+function _promoDiasTxt(pr){
+  var d=(pr.dias||[]).slice().sort();
+  if(d.length===7)return'Todos los días';
+  if(JSON.stringify(d)==='[0,5,6]'||JSON.stringify(d)==='[5,6]')return'Fines de semana';
+  return d.map(function(x){return DIAS_CORT[x];}).join(' · ');
+}
+function _promoHoraTxt(pr){
+  var f12=function(hm){if(!hm)return null;var p=hm.split(':');var h=parseInt(p[0]),m=p[1]||'00';var ap=h>=12?'pm':'am';h=h%12;if(h===0)h=12;return h+':'+m+' '+ap;};
+  var a=f12(pr.horaIni),b=f12(pr.horaFin);
+  return(a&&b)?(a+' – '+b):'todo el día';
+}
 
 function fmt(n){return "$"+Number(n).toLocaleString("es-CO");}
 function esc(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -503,6 +523,7 @@ function recargar(){
     regenerar();
   },function(e){document.getElementById("status").textContent="Error: "+e.message;});
   db.ref("combos").on("value",function(snap){var v=snap.val();combosData=v?Object.values(v).filter(function(c){return c&&c.nombre;}):[];if(menuData.length)regenerar();});
+  db.ref("promos").on("value",function(snap){var v=snap.val();promosData=v?(Array.isArray(v)?v:Object.values(v)).filter(function(p){return p&&p.on!==false;}):[];if(menuData.length)regenerar();});
 }
 
 function regenerar(){
@@ -622,6 +643,42 @@ function regenerar(){
         +'<svg width="40" height="45" viewBox="0 0 140 110" fill="#f0c040"><path d="M15 35 Q15 10 70 10 Q125 10 125 35 L125 42 L15 42 Z"/><rect x="12" y="42" width="116" height="12" rx="2" opacity=".7"/><rect x="10" y="78" width="120" height="20" rx="10"/></svg>'
       +'</div>'
     +"</div>"
+    // Hoja publicitaria de promociones
+    +(function(){
+      if((document.getElementById("cfg-promos")||{value:"si"}).value==="no")return"";
+      if(!promosData.length)return"";
+      var cards=promosData.map(function(pr){
+        var p=menuData.find(function(m){return String(m.id)===String(pr.prodId);});
+        if(!p)return"";
+        var esCub=(pr.tipo||'unidad')==='cubeta';
+        var normal=esCub?(p.cubeta||((p.precio||0)*5)):(p.precio||0);
+        var ahorro=normal-(pr.valor||0);
+        return'<div style="background:linear-gradient(135deg,#1a0a2e,#0d1b2a);border:2px solid #f0c040;border-radius:16px;padding:16px 18px;margin-bottom:12px;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+          +'<div style="position:absolute;top:-10px;right:-10px;font-size:60px;opacity:.12">'+(p.emoji||'🔥')+'</div>'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
+            +'<div>'
+              +'<div style="font-size:17px;font-weight:900;color:#fff;letter-spacing:.5px">'+(p.emoji||'')+' '+esc(p.nombre)+(esCub?' · 🪣 CUBETAZO':'')+'</div>'
+              +'<div style="font-size:11px;color:#7cffb2;font-weight:700;margin-top:3px;letter-spacing:1px">📅 '+_promoDiasTxt(pr)+' · 🕐 '+_promoHoraTxt(pr)+'</div>'
+            +'</div>'
+            +'<div style="text-align:right;flex-shrink:0">'
+              +(normal>pr.valor?'<div style="font-size:12px;color:#888;text-decoration:line-through">'+fmt(normal)+'</div>':'')
+              +'<div style="font-size:24px;font-weight:900;color:#f0c040;text-shadow:0 0 12px rgba(240,192,64,.5)">'+fmt(pr.valor||0)+'</div>'
+              +(ahorro>0?'<div style="font-size:10px;color:#7cffb2;font-weight:800">AHORRAS '+fmt(ahorro)+'</div>':'')
+            +'</div>'
+          +'</div>'
+        +'</div>';
+      }).join("");
+      if(!cards)return"";
+      return'<div class="menu-pages" style="page-break-after:always">'
+        +'<div style="text-align:center;margin:14px 0 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+          +'<div style="font-size:34px">🔥</div>'
+          +'<div style="font-size:26px;font-weight:900;letter-spacing:4px;background:linear-gradient(90deg,#f0c040,#ff6b6b,#f0c040);-webkit-background-clip:text;background-clip:text;color:transparent">PROMOCIONES</div>'
+          +'<div style="font-size:11px;color:#7cffb2;letter-spacing:3px;font-weight:700;margin-top:2px">OFERTAS ACTIVAS · ÁREA 52</div>'
+        +'</div>'
+        +cards
+        +'<div style="text-align:center;font-size:10px;color:#666;margin-top:8px">Promociones válidas únicamente en los días y horarios indicados.</div>'
+      +'</div>';
+    })()
     // Sections
     +'<div class="menu-pages">'
       +combosSection
