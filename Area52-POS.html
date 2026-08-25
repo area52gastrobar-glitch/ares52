@@ -3841,6 +3841,73 @@ function _precioUnitVenta(p){
   }
   return 0;
 }
+function abrirSetupCocina(){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  var esBurger=function(m){return /hamburgues|burger/i.test(m.nombre||'');};
+  var burgers=menu.filter(esBurger);
+  var papas=menu.find(function(m){return /papa/i.test(m.nombre||'')&&!esBurger(m);});
+  var carne=ingredientes.find(function(i){return /carne/i.test(i.nombre||'');});
+  var pasos=[];
+  pasos.push(carne?'✅ Insumo ya existe: 🥩 '+esc(carne.nombre):'🆕 Crear insumo: 🥩 Carne de hamburguesa (stock 0 — tú pones las unidades)');
+  pasos.push(papas?'✅ Papas detectadas: '+papas.emoji+' '+esc(papas.nombre)+' (stock actual: '+papas.stock+')':'🆕 Crear producto: 🍟 Papas a la francesa (precio y stock los pones tú)');
+  if(burgers.length){
+    pasos.push('🍔 Configurar '+burgers.length+' hamburguesa'+(burgers.length>1?'s':'')+': '+burgers.map(function(b){return esc(b.nombre);}).join(', '));
+    pasos.push('→ a cada una: SIN stock propio + receta de 1 carne + 1 porción de papas (el combo)');
+  }else{
+    pasos.push('⚠️ No encontré productos con "hamburguesa" en el nombre. Créalas en la carta primero y vuelve a tocar este botón.');
+  }
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:8px">🍔 Configurar cocina por insumos</div>'
+    +'<div style="background:var(--bg);border-radius:9px;padding:9px 12px;font-size:11.5px;line-height:1.6">'+pasos.join('<br>')+'</div>'
+    +'<div style="color:var(--muted);font-size:10.5px;margin:8px 0 12px">Después de aplicar, lo único que te queda es poner las unidades: el stock del insumo 🥩 (tus 10 carnes) y el de 🍟 (tus 52 porciones). Las hamburguesas quedan limitadas por el insumo más escaso (verás "🧾 alcanza p/ N"). Puedes tocar este botón las veces que quieras: no duplica nada.</div>'
+    +(burgers.length?'<button class="btn btn-green btn-full" onclick="confirmarSetupCocina()">✨ Aplicar configuración</button>':'')
+    +'<button class="btn btn-full" onclick="closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">'+(burgers.length?'Cancelar':'Cerrar')+'</button>');
+}
+function confirmarSetupCocina(){
+  var esBurger=function(m){return /hamburgues|burger/i.test(m.nombre||'');};
+  var burgers=menu.filter(esBurger);
+  // 1) Insumo carne (si falta)
+  var carne=ingredientes.find(function(i){return /carne/i.test(i.nombre||'');});
+  if(!carne){
+    carne={id:'ing_'+Date.now(),nombre:'Carne de hamburguesa',stock:0,und:'und'};
+    ingredientes.push(carne);
+    guardarIngredientes();
+  }
+  // 2) Producto papas (si falta)
+  var papas=menu.find(function(m){return /papa/i.test(m.nombre||'')&&!esBurger(m);});
+  if(!papas){
+    var maxId=menu.reduce(function(a,m){return Math.max(a,Number(m.id)||0);},0);
+    papas={id:maxId+1,nombre:'Papas a la francesa',emoji:'🍟',precio:0,costo:0,cat:'Cocina',subcat:'',stock:0,und:'porciones',esComida:true,receta:[],variantes:[],disponible:true};
+    menu.push(papas);
+  }
+  // 3) Cada hamburguesa: sin stock propio + receta 1 carne + 1 papas (sin duplicar)
+  var configuradas=0;
+  burgers.forEach(function(b){
+    b.sinStock=true;
+    if(b.disponible===undefined)b.disponible=true;
+    b.receta=Array.isArray(b.receta)?b.receta:[];
+    if(!b.receta.some(function(r){return String(r.pid)===String(carne.id);}))b.receta.push({pid:carne.id,cantidad:1});
+    if(!b.receta.some(function(r){return Number(r.pid)===Number(papas.id);}))b.receta.push({pid:papas.id,cantidad:1});
+    configuradas++;
+  });
+  var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+  closeModal2();
+  showToast('✨ Cocina configurada: '+configuradas+' hamburguesa'+(configuradas>1?'s':'')+' por insumos<br><span style="font-size:12px;opacity:.85">Ahora pon las unidades: stock de 🥩 '+esc(carne.nombre)+' y de '+papas.emoji+' '+esc(papas.nombre)+(papas.precio?'':' (y su precio de venta)')+'</span>','#22c55e');
+  render();
+}
+function _maxPorReceta(p){
+  // ¿Para cuántas unidades alcanzan los insumos de la receta? (el más escaso manda)
+  if(!p.receta||!p.receta.length)return null;
+  var min=Infinity;
+  p.receta.forEach(function(ri){
+    var enMenu=menu.find(function(m){return Number(m.id)===Number(ri.pid);});
+    var it=enMenu||ingredientes.find(function(i){return String(i.id)===String(ri.pid);});
+    if(!it)return;
+    var st=parseInt(it.stock)||0;
+    var alcanza=Math.floor(st/(ri.cantidad||1));
+    if(alcanza<min)min=alcanza;
+  });
+  return min===Infinity?null:Math.max(0,min);
+}
 function _esComidaProd(p){
   return p.esComida===true||/cocina|comida/i.test(String(p.cat||''));
 }
@@ -3898,6 +3965,7 @@ function renderInventario(){
     +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
     +'<button onclick="elegirImpresionInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirCuadreInventario()" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">📋 Cuadre físico</button>':'')
+    +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirSetupCocina()" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">🍔 Configurar cocina</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="toggleOcultarCant()" style="background:'+(invCfg.ocultarCant?'#a855f7':'var(--card)')+';color:'+(invCfg.ocultarCant?'#fff':'var(--muted)')+';border:1px solid '+(invCfg.ocultarCant?'#a855f7':'var(--border)')+';border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">'+(invCfg.ocultarCant?'🙈 Cajero SIN cantidades':'👁️ Cajero ve cantidades')+'</button>':'')
     +(esAdmin?'<button onclick="exportarInventarioExcel()" style="margin-left:auto;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:8px;padding:7px 14px;font-weight:700;font-size:12px;cursor:pointer">📥 Exportar Excel</button>':'')
     +'</div>'
@@ -3967,9 +4035,15 @@ function renderInventario(){
       +'<div style="flex:1">'
         +'<div style="font-weight:700;font-size:13px">'+esc(p.nombre)+'</div>'
         +'<div style="color:var(--accent);font-size:11px">'+fmt(p.precio)+(p.esCerveza&&p.cubeta?' · Cubetazo: '+fmt(p.cubeta):'')+(p.esComida?' · 👨‍🍳':'')+'</div>'
+        +((p.costo>0&&usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?(function(){
+          var pv=_precioUnitVenta(p);
+          var u=pv-p.costo;
+          return'<div style="font-size:10px;color:var(--muted)">💵 costo '+fmt(p.costo).replace(/\u00A0/g,' ')+' → <span style="color:'+(u>0?'#22c55e':'#ef4444')+';font-weight:700">utilidad '+fmt(u).replace(/\u00A0/g,' ')+(pv>0?' ('+Math.round(u/pv*100)+'%)':'')+'</span>'+((p.variantes&&p.variantes.length)?' por '+esc(p.und||'und'):'')+'</div>';
+        })():'')
       +'</div>'
       +(p.sinStock
         ?'<div style="display:flex;align-items:center;gap:6px">'
+          +(function(){var mx=_maxPorReceta(p);if(mx==null||!verCantidadesInv())return'';return'<span style="font-size:10.5px;font-weight:800;color:'+(mx<=0?'#ef4444':mx<=5?'#f5a623':'#22c55e')+'">🧾 alcanza p/ '+mx+'</span>';})()
           +'<button onclick="toggleDisponible('+p.id+')" style="background:'+(p.disponible!==false?'#22c55e18':'#ef444418')+';color:'+(p.disponible!==false?'#22c55e':'#ef4444')+';border:1px solid '+(p.disponible!==false?'#22c55e33':'#ef444433')+';border-radius:7px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer">'+(p.disponible!==false?'✅ Disponible':'🚫 Agotado')+'</button>'
         +'</div>'
         :'<div style="display:flex;align-items:center;gap:6px">'
@@ -4204,7 +4278,7 @@ function renderCarta(){
         +'<input type="hidden" id="f-emoji" value="'+esc(curEmoji)+'"/>'
       +'</div>'
       // ── Recipe section ──
-      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'        +'<div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">🧾 Receta (ingredientes que descuenta al vender)</div>'        +'<div id="receta-rows">'+recetaRows+'</div>'        +'<div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">'          +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ingrediente</div>'            +'<select class="inp inp-sm" id="rec-ing-sel"><option value="">— Selecciona —</option>'            +menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">'        +'<div style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">🧾 Receta (ingredientes que descuenta al vender)</div>'        +'<div id="receta-rows">'+recetaRows+'</div>'        +'<div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">'          +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ingrediente</div>'            +'<select class="inp inp-sm" id="rec-ing-sel"><option value="">— Selecciona —</option>'            +(ingredientes.length?'<optgroup label="🧂 Insumos">'+ingredientes.map(function(i){return'<option value="ing:'+i.id+'">🧂 '+esc(i.nombre)+' ('+i.und+')</option>';}).join('')+'</optgroup>':'')            +'<optgroup label="🍽️ Productos de la carta">'+menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
         +'<button class="btn btn-outline btn-full" onclick="cancelarProd()">Cancelar</button>'
       +'</div></div>';
   } else {
@@ -4986,7 +5060,7 @@ function agregarIngReceta(){
   var cant=parseFloat((document.getElementById('rec-ing-cant')||{}).value)||1;
   if(!sel||!sel.value){alert('Selecciona un ingrediente.');return;}
   var selVal=sel.value;
-  var pid=selVal.startsWith('ing:')?selVal:parseInt(selVal.replace('menu:',''));
+  var pid=selVal.startsWith('ing:')?selVal.slice(4):parseInt(selVal.replace('menu:',''));
   // Get current product receta
   var prod=editandoProd&&editandoProd!=='nuevo'?menu.find(function(m){return m.id===editandoProd;}):null;
   if(!prod&&editandoProd!=='nuevo'){alert('Guarda el producto primero.');return;}
@@ -7442,6 +7516,10 @@ function renderVentas(){
       var k='p_'+nombre;
       if(!porProd[k])porProd[k]={nombre:nombre,emoji:emoji,qty:0,total:0};
       porProd[k].qty+=qty;porProd[k].total+=precioItem(it)*(it.qty||1);
+      if(p&&p.costo>0){
+        var undM=it.cubeta?5:(parseInt(it.varianteUnd)||1);
+        porProd[k].utl=(porProd[k].utl||0)+(precioItem(it)*(it.qty||1)-p.costo*undM*(it.qty||1));
+      }
     });
   });
   // 🔴 Lo que está EN MESAS ahora: ya salió del inventario (se descuenta al servir), solo falta cobrarlo
@@ -7476,6 +7554,10 @@ function renderVentas(){
       if(!porProd[k])porProd[k]={nombre:nombre,emoji:emoji,qty:0,total:0};
       porProd[k].enMesa=(porProd[k].enMesa||0)+qty;
       porProd[k].enMesaTotal=(porProd[k].enMesaTotal||0)+precioItem(it)*(it.qty||1);
+      if(p&&p.costo>0){
+        var undM2=it.cubeta?5:(parseInt(it.varianteUnd)||1);
+        porProd[k].utl=(porProd[k].utl||0)+(precioItem(it)*(it.qty||1)-p.costo*undM2*(it.qty||1));
+      }
     });
   });
   var ranking=Object.values(porProd).sort(function(a,b){return (b.qty+(b.enMesa||0))-(a.qty+(a.enMesa||0));});
@@ -7508,9 +7590,11 @@ function renderVentas(){
 
   var prodRows=ranking.slice(0,10).map(function(p){
     var em=p.enMesa||0;
+    var totP=p.total+(p.enMesaTotal||0);
     return'<div class="res-row"><div><div style="font-size:12px;font-weight:600">'+p.emoji+' '+esc(p.nombre)+'</div>'
-      +'<div style="color:var(--muted);font-size:11px">'+(p.qty+em)+' und'+(em?' <span style="color:#ef4444;font-weight:700">('+p.qty+' cobradas + '+em+' en mesas)</span>':'')+'</div></div>'
-      +'<span style="color:var(--gold);font-weight:800">'+fmt(p.total+(p.enMesaTotal||0))+'</span></div>';
+      +'<div style="color:var(--muted);font-size:11px">'+(p.qty+em)+' und'+(em?' <span style="color:#ef4444;font-weight:700">('+p.qty+' cobradas + '+em+' en mesas)</span>':'')
+      +(p.utl!=null?' · <span style="color:#22c55e;font-weight:700">📈 '+fmt(p.utl)+(totP>0?' ('+Math.round(p.utl/totP*100)+'%)':'')+'</span>':'')+'</div></div>'
+      +'<span style="color:var(--gold);font-weight:800">'+fmt(totP)+'</span></div>';
   }).join('')||'<div style="color:var(--dim);text-align:center;padding:14px;font-size:13px">Sin consumo todavía</div>';
 
     var histRows=hoyV.slice().reverse().map(function(v){
