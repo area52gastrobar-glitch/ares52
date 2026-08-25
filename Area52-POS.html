@@ -18,7 +18,7 @@
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-08-19-2';
+var APP_BUILD='2026-08-24';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -3841,16 +3841,22 @@ function _precioUnitVenta(p){
   }
   return 0;
 }
+function _esComidaProd(p){
+  return p.esComida===true||/cocina|comida/i.test(String(p.cat||''));
+}
 function _valorInventario(){
-  var venta=0,costo=0,sinCosto=0,conStock=0;
+  var venta=0,costo=0,sinCosto=0,conStock=0,ventaCocina=0,costoCocina=0;
   menu.forEach(function(p){
     var st=parseInt(p.stock)||0;
     if(st<=0||p.sinStock)return;
     conStock++;
-    venta+=st*_precioUnitVenta(p);
-    if((p.costo||0)>0)costo+=st*p.costo;else sinCosto++;
+    var v=st*_precioUnitVenta(p);
+    var c=(p.costo||0)>0?st*p.costo:0;
+    if(!((p.costo||0)>0))sinCosto++;
+    if(_esComidaProd(p)){ventaCocina+=v;costoCocina+=c;}
+    else{venta+=v;costo+=c;}
   });
-  return{venta:venta,costo:costo,sinCosto:sinCosto,conStock:conStock};
+  return{venta:venta,costo:costo,sinCosto:sinCosto,conStock:conStock,ventaCocina:ventaCocina,costoCocina:costoCocina};
 }
 function renderInventario(){
   var esAdmin=puedeAjustarInv();  // 🔐 respeta el candado de inventario
@@ -3898,13 +3904,14 @@ function renderInventario(){
     +(esAdmin?(function(){
       var vi=_valorInventario();
       return'<div class="card mb12" style="border:1px solid #22c55e33">'
-        +'<div class="section-title" style="color:#22c55e">💰 Valor del inventario actual</div>'
+        +'<div class="section-title" style="color:#22c55e">💰 Valor del inventario actual <span style="font-size:10px;color:var(--muted);font-weight:600">(sin cocina)</span></div>'
         +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
-          +'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">SI SE VENDIERA TODO (precio de venta)</div><div style="color:var(--gold);font-weight:900;font-size:17px">'+fmt(vi.venta)+'</div></div>'
+          +'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">SI SE VENDIERA TODO (sin comida)</div><div style="color:var(--gold);font-weight:900;font-size:17px">'+fmt(vi.venta)+'</div></div>'
           +(vi.costo>0?'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">COSTO (precio de compra)</div><div style="color:#38bdf8;font-weight:900;font-size:17px">'+fmt(vi.costo)+'</div></div>'
           +'<div style="flex:1;min-width:130px;background:var(--bg);border-radius:9px;padding:9px 12px"><div style="color:var(--muted);font-size:10px">UTILIDAD POTENCIAL</div><div style="color:#22c55e;font-weight:900;font-size:17px">'+fmt(vi.venta-vi.costo)+'</div><div style="color:var(--muted);font-size:10px">margen '+(vi.venta>0?Math.round((vi.venta-vi.costo)/vi.venta*100):0)+'%</div></div>':'')
         +'</div>'
-        +(vi.sinCosto>0?'<div style="color:var(--muted);font-size:10.5px;margin-top:6px">💡 '+vi.sinCosto+' de '+vi.conStock+' productos con stock aún no tienen precio de compra — agrégalo editando el producto (campo "💵 Precio de COMPRA") y la utilidad se calcula sola.</div>':'')
+        +(vi.ventaCocina>0?'<div style="display:flex;justify-content:space-between;background:#f5a62310;border:1px solid #f5a62333;border-radius:9px;padding:7px 12px;margin-top:8px;font-size:12px"><span style="color:#f5a623;font-weight:800">🍽️ Cocina (aparte)</span><span><b style="color:var(--gold)">'+fmt(vi.ventaCocina)+'</b>'+(vi.costoCocina>0?' <span style="color:var(--muted);font-size:10.5px">· costo '+fmt(vi.costoCocina).replace(/\u00A0/g,' ')+'</span>':'')+'</span></div>':'')
+        +(vi.sinCosto>0?'<div style="color:var(--muted);font-size:10.5px;margin-top:6px">💡 '+vi.sinCosto+' de '+vi.conStock+' productos con stock aún no tienen precio de compra — agrégalo editando el producto o al registrar la próxima compra.</div>':'')
       +'</div>';
     })():'')
     +'<div style="display:flex;gap:8px;margin-bottom:14px">'
@@ -4427,6 +4434,7 @@ function confirmarEditStock(id, esIng){
 }
 
 function abrirMercanciaModal(id, esIng){
+  window._mercModo='unidad';
   var item=esIng?ingredientes.find(function(x){return x.id===id;}):menu.find(function(m){return m.id===parseInt(id);});
   if(!item)return;
   modal2('<div style="text-align:center;margin-bottom:16px">'
@@ -4441,9 +4449,13 @@ function abrirMercanciaModal(id, esIng){
       +'</div>'
     +'</div>'
     +(!esIng?'<div style="margin-bottom:14px">'
-      +'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">💵 ¿A cómo compraste cada '+esc(item.und||'unidad')+'? <span style="font-size:10px">(opcional — actualiza el costo del producto)</span></div>'
-      +'<input class="inp money" id="merc-costo" type="text" inputmode="numeric" placeholder="'+(item.costo?'Último: '+moneyFmt(item.costo):'Precio de compra por unidad')+'"/>'
-      +(item.costo?'<div style="color:var(--muted);font-size:10px;margin-top:3px">Costo actual registrado: '+fmt(item.costo).replace(/\u00A0/g,' ')+' — si esta compra vino a otro precio, se promedia con lo que hay en stock.</div>':'<div style="color:var(--muted);font-size:10px;margin-top:3px">Este producto aún no tiene costo: el precio que pongas queda como su costo desde ahora.</div>')
+      +'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">💵 Precio de compra <span style="font-size:10px">(opcional — actualiza el costo)</span></div>'
+      +'<div style="display:flex;gap:6px;margin-bottom:6px">'
+        +'<button id="merc-modo-und" onclick="window._mercModo=\'unidad\';this.style.background=\'#22c55e\';this.style.color=\'#fff\';var t=document.getElementById(\'merc-modo-tot\');t.style.background=\'var(--bg)\';t.style.color=\'var(--muted)\'" style="flex:1;background:#22c55e;color:#fff;border:1px solid #22c55e;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer">Por '+esc(item.und||'unidad')+'</button>'
+        +'<button id="merc-modo-tot" onclick="window._mercModo=\'total\';this.style.background=\'#22c55e\';this.style.color=\'#fff\';var u=document.getElementById(\'merc-modo-und\');u.style.background=\'var(--bg)\';u.style.color=\'var(--muted)\'" style="flex:1;background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer">TOTAL de la compra</button>'
+      +'</div>'
+      +'<input class="inp money" id="merc-costo" type="text" inputmode="numeric" placeholder="'+(item.costo?'Último costo: '+moneyFmt(item.costo)+' por '+esc(item.und||'und'):'Ej: lo que pagaste')+'"/>'
+      +'<div style="color:var(--muted);font-size:10px;margin-top:3px">💡 Si la canasta trae <b>regalos (ñapa)</b>: usa "TOTAL de la compra", pon lo que pagaste y arriba la cantidad COMPLETA que llegó (compradas + regaladas) — el costo por unidad sale solo.'+(item.costo?' Con costo previo se promedia con lo del stock.':'')+'</div>'
     +'</div>':'')
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
@@ -4461,7 +4473,10 @@ function confirmarMercancia(id, esIng){
   } else {
     var p=menu.find(function(m){return m.id===parseInt(id);});
     if(p){
-      var costoCompra=moneyVal('merc-costo')||0;
+      var valorDigitado=moneyVal('merc-costo')||0;
+      var esTotal=(window._mercModo==='total');
+      window._mercModo='unidad';
+      var costoCompra=esTotal?Math.round(valorDigitado/cant):valorDigitado;
       var motivo='📦 Llegó mercancía';
       if(costoCompra>0){
         var stAnt=Math.max(0,parseInt(p.stock)||0);
@@ -4475,7 +4490,7 @@ function confirmarMercancia(id, esIng){
           nuevoCosto=costoCompra;
         }
         p.costo=nuevoCosto;
-        motivo+=' (a '+fmt(costoCompra).replace(/\u00A0/g,' ')+' c/u'+(nuevoCosto!==costoCompra?' · costo promedio: '+fmt(nuevoCosto).replace(/\u00A0/g,' '):'')+')';
+        motivo+=' ('+(esTotal?fmt(valorDigitado).replace(/\u00A0/g,' ')+' total por '+cant+' → ':'a ')+fmt(costoCompra).replace(/\u00A0/g,' ')+' c/u'+(nuevoCosto!==costoCompra?' · costo promedio: '+fmt(nuevoCosto).replace(/\u00A0/g,' '):'')+')';
         var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
       }
       cambiarStock('p',p.id,cant,motivo);
