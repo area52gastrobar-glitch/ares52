@@ -7694,7 +7694,19 @@ function ventasPorCategoria(desde,hasta){
     its.forEach(function(it){
       var cat,nombre,emoji;
       if(it.isCustom){cat='Personalizados';nombre=it.customNombre||'Personalizado';emoji='✏️';}
-      else if(it.isCombo){cat='Combos';nombre=it.comboNombre||'Combo';emoji='🎁';}
+      else if(it.isCombo){
+        // 🎁 Cada componente del combo cuenta en su categoría real (cervezas, licores...)
+        _comboReparto(it).forEach(function(cp){
+          var catC=cp.p.cat||'Sin categoría';
+          if(!cats[catC])cats[catC]={qty:0,total:0,prods:{}};
+          cats[catC].qty+=cp.cant*(it.qty||1);
+          cats[catC].total+=cp.rev*(it.qty||1);
+          if(!cats[catC].prods[cp.p.nombre])cats[catC].prods[cp.p.nombre]={qty:0,total:0,emoji:cp.p.emoji};
+          cats[catC].prods[cp.p.nombre].qty+=cp.cant*(it.qty||1);
+          cats[catC].prods[cp.p.nombre].total+=cp.rev*(it.qty||1);
+        });
+        return;
+      }
       else if(it.isCubetazoMix){
         var d0=(it.cubMixDetalle||[])[0];
         var p0=d0?menu.find(function(m){return Number(m.id)===Number(d0.prodId);}):null;
@@ -7720,7 +7732,18 @@ function ventasPorCategoria(desde,hasta){
       (pedidos[mid]||[]).forEach(function(it){
         if(it.isCustom)return;
         var cat,nombre,emoji;
-        if(it.isCombo){cat='Combos';nombre=it.comboNombre||'Combo';emoji='🎁';}
+        if(it.isCombo){
+          _comboReparto(it).forEach(function(cp){
+            var catC=cp.p.cat||'Sin categoría';
+            if(!cats[catC])cats[catC]={qty:0,total:0,prods:{}};
+            cats[catC].enMesa=(cats[catC].enMesa||0)+cp.cant*(it.qty||1);
+            cats[catC].enMesaTotal=(cats[catC].enMesaTotal||0)+cp.rev*(it.qty||1);
+            if(!cats[catC].prods[cp.p.nombre])cats[catC].prods[cp.p.nombre]={qty:0,total:0,emoji:cp.p.emoji};
+            cats[catC].prods[cp.p.nombre].enMesa=(cats[catC].prods[cp.p.nombre].enMesa||0)+cp.cant*(it.qty||1);
+            cats[catC].prods[cp.p.nombre].enMesaTotal=(cats[catC].prods[cp.p.nombre].enMesaTotal||0)+cp.rev*(it.qty||1);
+          });
+          return;
+        }
         else if(it.isCubetazoMix){
           var d0=(it.cubMixDetalle||[])[0];
           var p0=d0?menu.find(function(m){return Number(m.id)===Number(d0.prodId);}):null;
@@ -7782,6 +7805,29 @@ function exportarVentasCatExcel(){
   showToast('📥 Resumen por categoría exportado ('+etiqueta+')','#22c55e');
 }
 
+function _comboComponentes(it){
+  var ings=it.comboIngredientes?(Array.isArray(it.comboIngredientes)?it.comboIngredientes:Object.values(it.comboIngredientes)):[];
+  if(!ings.length){
+    var cc=combos.find(function(x){return String(x.id)===String(it.comboId||it.pid);});
+    if(cc)ings=cc.ingredientes||[];
+  }
+  return ings.filter(function(g){return g&&g.prodId!=null;});
+}
+function _comboReparto(it){
+  // [{p,cant,rev}]: el precio del combo repartido según el valor de lista de cada componente
+  var comps=_comboComponentes(it);
+  if(!comps.length)return[];
+  var conP=comps.map(function(g){
+    var p=menu.find(function(m){return Number(m.id)===Number(g.prodId);});
+    return{p:p,cant:(g.cantidad||1),lista:p?(p.precio||0)*(g.cantidad||1):0};
+  }).filter(function(x){return x.p;});
+  if(!conP.length)return[];
+  var base=conP.reduce(function(a,x){return a+x.lista;},0);
+  var precioCombo=it.comboPrecio||0;
+  return conP.map(function(x){
+    return{p:x.p,cant:x.cant,rev:base>0?precioCombo*(x.lista/base):(precioCombo/conP.length)};
+  });
+}
 function renderVentas(){
   var puedeExcel=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='cajero');
   var hoyV=ventasTurno();
@@ -7800,9 +7846,14 @@ function renderVentas(){
     its.forEach(function(it){
       if(it.isCustom)return;
       if(it.isCombo){
-        var kc='combo_'+(it.comboNombre||'Combo');
-        if(!porProd[kc])porProd[kc]={nombre:it.comboNombre||'Combo',emoji:'🎁',qty:0,total:0};
-        porProd[kc].qty+=(it.qty||1);porProd[kc].total+=(it.comboPrecio||0)*(it.qty||1);
+        // 🎁 Explotar el combo: cada cerveza y licor cuenta en su producto real
+        _comboReparto(it).forEach(function(cp){
+          var kc='p_'+cp.p.nombre;
+          if(!porProd[kc])porProd[kc]={nombre:cp.p.nombre,emoji:cp.p.emoji,qty:0,total:0};
+          porProd[kc].qty+=cp.cant*(it.qty||1);
+          porProd[kc].total+=cp.rev*(it.qty||1);
+          if(cp.p.costo>0)porProd[kc].utl=(porProd[kc].utl||0)+(cp.rev-cp.p.costo*cp.cant)*(it.qty||1);
+        });
         return;
       }
       if(it.isCubetazoMix){
@@ -7836,10 +7887,13 @@ function renderVentas(){
       if(it.isCustom)return;
       enMesasItems+=(it.qty||1);
       if(it.isCombo){
-        var kc='combo_'+(it.comboNombre||'Combo');
-        if(!porProd[kc])porProd[kc]={nombre:it.comboNombre||'Combo',emoji:'🎁',qty:0,total:0};
-        porProd[kc].enMesa=(porProd[kc].enMesa||0)+(it.qty||1);
-        porProd[kc].enMesaTotal=(porProd[kc].enMesaTotal||0)+(it.comboPrecio||0)*(it.qty||1);
+        _comboReparto(it).forEach(function(cp){
+          var kc2='p_'+cp.p.nombre;
+          if(!porProd[kc2])porProd[kc2]={nombre:cp.p.nombre,emoji:cp.p.emoji,qty:0,total:0};
+          porProd[kc2].enMesa=(porProd[kc2].enMesa||0)+cp.cant*(it.qty||1);
+          porProd[kc2].enMesaTotal=(porProd[kc2].enMesaTotal||0)+cp.rev*(it.qty||1);
+          if(cp.p.costo>0)porProd[kc2].utl=(porProd[kc2].utl||0)+(cp.rev-cp.p.costo*cp.cant)*(it.qty||1);
+        });
         return;
       }
       if(it.isCubetazoMix){
@@ -7872,7 +7926,14 @@ function renderVentas(){
       // 📈 Utilidad estimada del turno (solo si hay costos cargados)
       var utl=0,ventaConCosto=0,sinCostoQty=0;
       var addU=function(it){
-        if(it.isCustom||it.isCombo||it.isCubetazoMix){sinCostoQty+=(it.qty||1);return;}
+        if(it.isCombo){
+          _comboReparto(it).forEach(function(cp){
+            if(cp.p.costo>0){utl+=(cp.rev-cp.p.costo*cp.cant)*(it.qty||1);ventaConCosto+=cp.rev*(it.qty||1);}
+            else sinCostoQty+=cp.cant*(it.qty||1);
+          });
+          return;
+        }
+        if(it.isCustom||it.isCubetazoMix){sinCostoQty+=(it.qty||1);return;}
         var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});
         if(!p||!(p.costo>0)){sinCostoQty+=(it.qty||1);return;}
         var undM=it.cubeta?5:(parseInt(it.varianteUnd)||1);
