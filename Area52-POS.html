@@ -18,7 +18,7 @@
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-08-28';
+var APP_BUILD='2026-08-28b';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -1547,7 +1547,7 @@ function renderPanelPedido(){
     +'</div>'
     +'<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center" class="mb8">'+pills
   +'<button onclick="abrirItemPersonalizado()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✏️ Otro</button>'
-  +'<button onclick="abrirCubetazoMixto()" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo mixto</button>'+'<button onclick="abrirCubetazoNacional()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo nacional</button>'
+  +'<button onclick="abrirCubetazoMixto()" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo mixto</button>'+'<button onclick="abrirCubetazoNacional()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo nacional</button>'+'<button onclick="abrirCubetazoMitica()" style="background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo Mítica</button>'
   +'</div>'
     +(busqActiva?busqBlock
       :(masPedidosHtml
@@ -2801,6 +2801,32 @@ function abrirCubetazoNacional(){
   });
 }
 
+var CUBE_MITICA_NOMBRES=['mitica'];   // coincide con Mítica y Mítica ligera (sin tildes)
+function abrirCubetazoMitica(){
+  if(!mesaActiva)return;
+  var cervezas=menu.filter(function(m){
+    var n=(m.nombre||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return CUBE_MITICA_NOMBRES.some(function(x){return n.indexOf(x)>=0;})&&(ventaSinStock||m.stock>0);
+  });
+  if(!cervezas.length){alert('No hay cervezas Mítica disponibles.');return;}
+  // Precio del balde: si alguna tiene promo de cubeta VIGENTE, se usa la promo más baja; si no, su precio de cubeta normal
+  var precioBalde=null,esPromo=false;
+  cervezas.forEach(function(p){
+    var pr=promoVigente(p.id,'cubeta');
+    var v=pr?pr.valor:(p.cubeta||CUBE_MIX_PRECIO);
+    if(precioBalde===null||v<precioBalde){precioBalde=v;esPromo=!!pr;}
+  });
+  if(!precioBalde)precioBalde=CUBE_MIX_PRECIO;
+  abrirDistribucion({
+    titulo:'Cubetazo Mítica '+fmt(precioBalde)+(esPromo?' 🏷️ PROMO':'')+' (elige '+CUBE_MIX_TAM+')',
+    emoji:'🪣',
+    total:CUBE_MIX_TAM,
+    productos:cervezas.map(function(p){return {id:p.id,nombre:p.nombre,emoji:p.emoji,precio:Math.round(precioBalde/CUBE_MIX_TAM),stock:p.stock};}),
+    onConfirm:function(cantidades){
+      confirmarCubetazoMixto(cantidades,CUBE_MIX_TAM,precioBalde,'Cubetazo Mítica'+(esPromo?' 🏷️':''));
+    }
+  });
+}
 function abrirCubetazoMixto(){
   if(!mesaActiva)return;
   // Solo Heineken, Sol y Miller
