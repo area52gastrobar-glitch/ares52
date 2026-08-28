@@ -18,7 +18,7 @@
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-08-24';
+var APP_BUILD='2026-08-28';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -8729,6 +8729,55 @@ function saldoActualFP(fpId){
 }
 
 /* ═══ Mover dinero entre medios de pago (Nequi→Bre-B, Efectivo→Bre-B, etc.) ═══ */
+function _tarjetaPorDia(nDias){
+  // Recibido con tarjeta por día calendario (todas las ventas, no solo el turno)
+  var porDia={};
+  ventas.forEach(function(v){
+    var pagos=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+    pagos.forEach(function(p){
+      if(p.fp!=='tarjeta')return;
+      var d=_concilDia(new Date(v.ts));
+      porDia[d]=(porDia[d]||0)+(p.monto||0);
+    });
+  });
+  var dias=Object.keys(porDia).sort().reverse().slice(0,nDias||8);
+  return dias.map(function(d){return{dia:d,monto:porDia[d]};});
+}
+function _tarjetaPendienteTraslado(){
+  var rec=0;
+  ventas.forEach(function(v){
+    var pagos=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+    pagos.forEach(function(p){if(p.fp==='tarjeta')rec+=(p.monto||0);});
+  });
+  var tra=0;
+  trasladosFP.forEach(function(t){if(t.de==='tarjeta')tra+=(t.monto||0);});
+  return rec-tra;
+}
+function _actividadTurno(){
+  // Primera y última acción de cada persona en el turno (cobros, pedidos, novedades, gastos, traslados)
+  if(window._actCache&&Date.now()-window._actCache.ts<5000)return window._actCache.map;
+  var desde=turnoInicio||0;
+  var map={};
+  var marca=function(nombre,ts){
+    if(!nombre||!ts||ts<desde)return;
+    if(!map[nombre])map[nombre]={min:ts,max:ts,n:0};
+    if(ts<map[nombre].min)map[nombre].min=ts;
+    if(ts>map[nombre].max)map[nombre].max=ts;
+    map[nombre].n++;
+  };
+  ventasTurno().forEach(function(v){
+    marca(v.uidNombre,v.ts);
+    (v.abonos?(Array.isArray(v.abonos)?v.abonos:Object.values(v.abonos)):[]).forEach(function(a){marca(a.nombre,a.ts);});
+  });
+  Object.keys(pedidoLog||{}).forEach(function(mid){
+    (pedidoLog[mid]||[]).forEach(function(l){marca(l.uidNombre,l.ts);});
+  });
+  novedades.forEach(function(n){marca(n.uidNombre,n.ts);});
+  gastosTurno().forEach(function(g){marca(g.uidNombre,g.ts);});
+  trasladosFP.forEach(function(t){marca(t.uidNombre,t.ts);});
+  window._actCache={ts:Date.now(),map:map};
+  return map;
+}
 function abrirTrasladoFP(){
   var chips=FPAGO.map(function(f){
     return f.emoji+' '+f.label+': <b style="color:'+f.color+'">'+fmt(saldoActualFP(f.id))+'</b>';
@@ -8743,9 +8792,31 @@ function abrirTrasladoFP(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">🔄 Mover dinero entre medios</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">'+chips+'</div>'
     +'<div style="display:flex;gap:8px;margin-bottom:10px">'
-      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de</div><select class="inp" id="tfp-de">'+opts('nequi')+'</select></div>'
-      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Entra a</div><select class="inp" id="tfp-a">'+opts('breb')+'</select></div>'
+      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de</div><select class="inp" id="tfp-de" onchange="window._tfpDe=this.value;window._tfpA=(document.getElementById(\'tfp-a\')||{}).value;abrirTrasladoFP();">'+opts(window._tfpDe||'nequi')+'</select></div>'
+      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Entra a</div><select class="inp" id="tfp-a">'+opts(window._tfpA||'breb')+'</select></div>'
     +'</div>'
+    +((window._tfpDe||'nequi')==='tarjeta'?(function(){
+      var dias=_tarjetaPorDia(8);
+      var pend=_tarjetaPendienteTraslado();
+      if(!dias.length)return'';
+      var DIASN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+      return'<div style="background:#f5a62310;border:1px solid #f5a62333;border-radius:10px;padding:9px 12px;margin-bottom:10px">'
+        +'<div style="font-size:11px;font-weight:800;color:#f5a623;margin-bottom:2px">💳 Recibido con tarjeta por día</div>'
+        +'<div style="color:var(--muted);font-size:10px;margin-bottom:6px">El datáfono consigna al día siguiente: pasa a Bre-B solo los días que ya te ingresaron al banco. Toca un día para usar su monto.</div>'
+        +dias.map(function(x){
+          var f=new Date(x.dia+'T12:00:00');
+          var et=x.dia;
+          return'<div onclick="var i=document.getElementById(\'tfp-monto\');if(i){i.value=\''+moneyFmt(x.monto)+'\';}" style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer">'
+            +'<span style="font-size:11.5px;font-weight:700">'+DIASN[f.getDay()]+' '+('0'+f.getDate()).slice(-2)+'/'+('0'+(f.getMonth()+1)).slice(-2)+' <span style="color:var(--muted);font-size:9.5px">(consigna el día siguiente)</span></span>'
+            +'<span style="font-weight:800;color:#f5a623;font-size:12px">'+fmt(x.monto)+'</span>'
+          +'</div>';
+        }).join('')
+        +'<div onclick="var i=document.getElementById(\'tfp-monto\');if(i){i.value=\''+moneyFmt(Math.max(0,pend))+'\';}" style="display:flex;justify-content:space-between;padding:5px 0 1px;cursor:pointer">'
+          +'<span style="font-size:11px;font-weight:900;color:var(--text)">PENDIENTE POR TRASLADAR (todo)</span>'
+          +'<span style="font-weight:900;color:#22c55e;font-size:13px">'+fmt(Math.max(0,pend))+'</span>'
+        +'</div>'
+      +'</div>';
+    })():'')
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto</div>'
     +'<input class="inp money" id="tfp-monto" type="text" inputmode="numeric" placeholder="0"/></div>'
     +'<button class="btn btn-green btn-full" onclick="confirmarTrasladoFP()">🔄 Mover el dinero</button>'
@@ -10023,10 +10094,27 @@ function verMovEmpleado(movId){
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button class="btn btn-full" onclick="borrarMovEmpleado(\''+movId+'\');closeModal1();" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;margin-top:8px">🗑️ Eliminar este movimiento</button>':''));
 }
 
+function _cierreAproxDia(fechaKey){
+  // Último cobro de la JORNADA de ese día: desde las 6:00 am de la fecha hasta las 5:59 am del día siguiente
+  var d0=new Date(fechaKey+'T06:00:00').getTime();
+  var d1=d0+24*3600000;
+  var ult=0;
+  ventas.forEach(function(v){if(v.ts>=d0&&v.ts<d1&&v.ts>ult)ult=v.ts;});
+  if(!ult)return null;
+  var medianocheSig=new Date(fechaKey+'T00:00:00').getTime()+24*3600000;
+  var madrugada=ult>=medianocheSig;
+  return{ts:ult,txt:fmtTime(ult)+(madrugada?' (madrugada del día siguiente)':'')};
+}
 function abrirPagoDiaVariable(key,emp){
   var sugerido=parseInt(emp.pagoDiario)||0;
+  var fechaKey=key.split('_').slice(1).join('_');
+  var cierre=_cierreAproxDia(fechaKey);
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📅 Pago de este día</div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(emp.nombre)+'</div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:8px">'+esc(emp.nombre)+' · '+fechaKey+'</div>'
+    +'<div style="background:#38bdf812;border:1px solid #38bdf833;border-radius:9px;padding:8px 12px;margin-bottom:14px;font-size:12px">'
+      +(cierre?'🌙 Cierre aproximado del bar: <b style="color:#38bdf8">'+cierre.txt+'</b><br><span style="color:var(--muted);font-size:10px">Hora del último cobro de esa jornada — referencia de hasta qué horas trabajaron.</span>'
+             :'🌙 <span style="color:var(--muted)">Sin cobros registrados en esa jornada.</span>')
+    +'</div>'
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Cuánto se le paga por este día? (COP)</div>'
     +'<input class="inp money" id="dia-valor" type="text" inputmode="numeric" value="'+(sugerido?moneyFmt(sugerido):'')+'" placeholder="0" autofocus/></div>'
     +'<button class="btn btn-green btn-full" onclick="confirmarPagoDiaVariable(\''+key+'\')">✓ Marcar día</button>');
