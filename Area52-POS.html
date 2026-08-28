@@ -8743,6 +8743,29 @@ function _tarjetaPorDia(nDias){
   var dias=Object.keys(porDia).sort().reverse().slice(0,nDias||8);
   return dias.map(function(d){return{dia:d,monto:porDia[d]};});
 }
+function _tarjetaDiasPend(){
+  // Por día: recibido y cuánto queda pendiente (lo ya trasladado cubre primero los días más viejos)
+  var porDia={};
+  ventas.forEach(function(v){
+    var pagos=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+    pagos.forEach(function(p){
+      if(p.fp!=='tarjeta')return;
+      var d=_concilDia(new Date(v.ts));
+      porDia[d]=(porDia[d]||0)+(p.monto||0);
+    });
+  });
+  var tra=0;
+  trasladosFP.forEach(function(t){if(t.de==='tarjeta')tra+=(t.monto||0);});
+  var dias=Object.keys(porDia).sort();   // viejo → nuevo
+  var out=[];
+  dias.forEach(function(d){
+    var rec=porDia[d];
+    var cubre=Math.min(rec,tra);
+    tra-=cubre;
+    out.push({dia:d,recibido:rec,pendiente:rec-cubre});
+  });
+  return out.reverse().slice(0,10);      // nuevo → viejo, últimos 10 días
+}
 function _tarjetaPendienteTraslado(){
   var rec=0;
   ventas.forEach(function(v){
@@ -8796,31 +8819,60 @@ function abrirTrasladoFP(){
       +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Entra a</div><select class="inp" id="tfp-a">'+opts(window._tfpA||'breb')+'</select></div>'
     +'</div>'
     +((window._tfpDe||'nequi')==='tarjeta'?(function(){
-      var dias=_tarjetaPorDia(8);
+      var dias=_tarjetaDiasPend();
       var pend=_tarjetaPendienteTraslado();
-      if(!dias.length)return'';
+      if(!dias.length)return'<div style="background:#f5a62310;border:1px solid #f5a62333;border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:11px;color:var(--muted)">💳 Aún no hay pagos con tarjeta registrados.</div>';
       var DIASN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
       return'<div style="background:#f5a62310;border:1px solid #f5a62333;border-radius:10px;padding:9px 12px;margin-bottom:10px">'
-        +'<div style="font-size:11px;font-weight:800;color:#f5a623;margin-bottom:2px">💳 Recibido con tarjeta por día</div>'
-        +'<div style="color:var(--muted);font-size:10px;margin-bottom:6px">El datáfono consigna al día siguiente: pasa a Bre-B solo los días que ya te ingresaron al banco. Toca un día para usar su monto.</div>'
+        +'<div style="font-size:11px;font-weight:800;color:#f5a623;margin-bottom:2px">💳 Tarjeta por día — recibido y pendiente por pasar</div>'
+        +'<div style="color:var(--muted);font-size:10px;margin-bottom:6px">El datáfono consigna al día siguiente. Toca "→ pasar" en el día que ya te ingresó al banco.</div>'
         +dias.map(function(x){
           var f=new Date(x.dia+'T12:00:00');
-          var et=x.dia;
-          return'<div onclick="var i=document.getElementById(\'tfp-monto\');if(i){i.value=\''+moneyFmt(x.monto)+'\';}" style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer">'
-            +'<span style="font-size:11.5px;font-weight:700">'+DIASN[f.getDay()]+' '+('0'+f.getDate()).slice(-2)+'/'+('0'+(f.getMonth()+1)).slice(-2)+' <span style="color:var(--muted);font-size:9.5px">(consigna el día siguiente)</span></span>'
-            +'<span style="font-weight:800;color:#f5a623;font-size:12px">'+fmt(x.monto)+'</span>'
+          var fecha=DIASN[f.getDay()]+' '+('0'+f.getDate()).slice(-2)+'/'+('0'+(f.getMonth()+1)).slice(-2);
+          var estado=x.pendiente<=0
+            ?'<span style="color:#22c55e;font-size:10px;font-weight:800">✅ trasladado</span>'
+            :(x.pendiente<x.recibido?'<span style="color:#f5a623;font-size:10px;font-weight:800">falta '+fmt(x.pendiente)+'</span>':'');
+          var btn=x.pendiente>0
+            ?'<button onclick="trasladarTarjetaDia(\''+x.dia+'\','+x.pendiente+')" style="background:#22c55e;color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:10.5px;font-weight:900;cursor:pointer;white-space:nowrap">→ pasar '+fmt(x.pendiente)+'</button>'
+            :'';
+          return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+            +'<div style="flex:1;min-width:0"><div style="font-size:11.5px;font-weight:700">'+fecha+' <span style="color:var(--muted);font-weight:600">'+fmt(x.recibido)+'</span></div>'+(estado?'<div>'+estado+'</div>':'')+'</div>'
+            +btn
           +'</div>';
         }).join('')
-        +'<div onclick="var i=document.getElementById(\'tfp-monto\');if(i){i.value=\''+moneyFmt(Math.max(0,pend))+'\';}" style="display:flex;justify-content:space-between;padding:5px 0 1px;cursor:pointer">'
-          +'<span style="font-size:11px;font-weight:900;color:var(--text)">PENDIENTE POR TRASLADAR (todo)</span>'
+        +'<div style="display:flex;justify-content:space-between;padding:6px 0 1px">'
+          +'<span style="font-size:11px;font-weight:900;color:var(--text)">TOTAL PENDIENTE</span>'
           +'<span style="font-weight:900;color:#22c55e;font-size:13px">'+fmt(Math.max(0,pend))+'</span>'
         +'</div>'
       +'</div>';
-    })():'')
+    })():(function(){
+      var pend=_tarjetaPendienteTraslado();
+      if(pend<=0)return'';
+      return'<div onclick="window._tfpDe=\'tarjeta\';window._tfpA=(document.getElementById(\'tfp-a\')||{}).value||\'breb\';abrirTrasladoFP();" style="background:#f5a62315;border:1px dashed #f5a62366;border-radius:9px;padding:7px 11px;margin-bottom:10px;font-size:11px;cursor:pointer">💳 Tienes <b style="color:#f5a623">'+fmt(pend)+'</b> de tarjeta pendientes por pasar — toca aquí para verlos por día</div>';
+    })())
     +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto</div>'
     +'<input class="inp money" id="tfp-monto" type="text" inputmode="numeric" placeholder="0"/></div>'
     +'<button class="btn btn-green btn-full" onclick="confirmarTrasladoFP()">🔄 Mover el dinero</button>'
     +(ultimos?'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:14px 0 4px">ÚLTIMOS TRASLADOS</div>'+ultimos:''));
+}
+function trasladarTarjetaDia(dia,monto){
+  var a=(document.getElementById('tfp-a')||{}).value||'breb';
+  if(a==='tarjeta'){alert('Elige otro destino (arriba en "Entra a").');return;}
+  monto=parseInt(monto)||0;
+  if(monto<=0)return;
+  var f=new Date(dia+'T12:00:00');
+  var DIASN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var fA=FPAGO.find(function(x){return x.id===a;});
+  if(!confirm('¿Pasar '+fmt(monto).replace(/\u00A0/g,' ')+' de 💳 Tarjeta a '+(fA?fA.emoji+' '+fA.label:a)+'?\n(recibido el '+DIASN[f.getDay()]+' '+('0'+f.getDate()).slice(-2)+'/'+('0'+(f.getMonth()+1)).slice(-2)+')'))return;
+  cajaHoy['ini_tarjeta']=(cajaHoy['ini_tarjeta']||0)-monto;
+  cajaHoy['ini_'+a]=(cajaHoy['ini_'+a]||0)+monto;
+  fbSet('cajaHoy',cajaHoy);
+  var reg={ts:Date.now(),de:'tarjeta',a:a,monto:monto,dia:dia,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  trasladosFP.push(reg);
+  var r=ref('trasladosFP');if(r)r.push(reg);else fbSet('trasladosFP',trasladosFP);
+  showToast('💳 '+fmt(monto)+' pasados a '+(fA?fA.emoji+' '+fA.label:a)+'<br><span style="font-size:12px;opacity:.85">tarjeta del '+dia+'</span>','#22c55e');
+  abrirTrasladoFP();
+  render();
 }
 function confirmarTrasladoFP(){
   var de=(document.getElementById('tfp-de')||{}).value;
