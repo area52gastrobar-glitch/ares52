@@ -3032,10 +3032,18 @@ function renderNovedadForm(){
   }).join('');
   var vMonto=(document.getElementById('nov-monto')||{}).value||'';
   var vNota=(document.getElementById('nov-nota')||{}).value||'';
+  var totMesaNov=mesaActiva?totalPedido(mesaActiva.id):0;
+  var esVolo=window._novTipo==='volo'&&mesaActiva&&(pedidos[mesaActiva.id]||[]).length>0;
+  if(window._novCerrarPerdida===undefined)window._novCerrarPerdida=true;
+  var voloExtra=esVolo?('<div onclick="window._novCerrarPerdida=!window._novCerrarPerdida;renderNovedadForm()" style="background:'+(window._novCerrarPerdida?'#ef444415':'var(--bg)')+';border:1px solid '+(window._novCerrarPerdida?'#ef444455':'var(--border)')+';border-radius:9px;padding:9px 11px;margin-bottom:10px;cursor:pointer;font-size:12px">'
+      +'<span style="font-size:15px">'+(window._novCerrarPerdida?'☑️':'⬜')+'</span> <b>Cerrar la mesa como pérdida ('+fmt(totMesaNov).replace(/\u00A0/g,' ')+')</b>'
+      +'<div style="color:var(--muted);font-size:10px;margin-top:3px">La mesa se vacía SIN devolver el inventario (lo consumido se perdió) y la caja NO espera ese dinero — así el cierre y el conteo cuadran. El admin acepta la pérdida en el cierre de caja.</div>'
+    +'</div>'):'';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📝 Novedad · '+esc(mesaTxt)+'</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Queda registrada con tu nombre y la hora, para que el administrador la vea al revisar la caja.</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:4px">¿Qué pasó?</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+chips+'</div>'
+    +voloExtra
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Monto (si aplica: lo que se perdió, descontó o regaló)</div>'
     +'<input class="inp money" id="nov-monto" type="text" inputmode="numeric" placeholder="Opcional" value="'+esc(vMonto)+'" style="margin-bottom:10px"/>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Detalle</div>'
@@ -3054,9 +3062,45 @@ function guardarNovedad(){
     tipo:tipo.id,tipoLabel:tipo.emoji+' '+tipo.label,
     monto:monto,nota:nota,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  // 🏃 Cerrar la mesa como pérdida: vacía sin devolver stock, sin venta (la caja no espera esa plata)
+  var esVoloCierre=tipo.id==='volo'&&window._novCerrarPerdida&&mesaActiva&&(pedidos[mesaActiva.id]||[]).length>0;
+  if(esVoloCierre){
+    var idM=mesaActiva.id;
+    var itemsDet=(pedidos[idM]||[]).map(function(it){
+      return{nombre:nombreItemPed(it).replace(/<[^>]*>/g,''),qty:it.qty||1,valor:precioItem(it)*(it.qty||1)};
+    });
+    var totM=totalPedido(idM);
+    if(!reg.monto)reg.monto=totM;
+    reg.esPerdida=true;
+    reg.estado='pendiente';
+    reg.items=itemsDet;
+    pedidos[idM]=[];
+    fbSet('pedidos/'+idM,[]);
+    logPedido(idM,'🏃 Mesa cerrada como PÉRDIDA ('+fmt(totM).replace(/\u00A0/g,' ')+') — inventario consumido, sin cobro',null);
+  }
   fbPush('novedades',reg);
   closeModal1();
-  showToast('📝 Novedad guardada<br><span style="font-size:12px;opacity:.85">'+tipo.emoji+' '+esc(reg.mesa)+(monto?' · '+fmt(monto):'')+' · el admin la verá en Caja</span>','#f5a623');
+  if(esVoloCierre){
+    showToast('🏃 Mesa cerrada como pérdida<br><span style="font-size:12px;opacity:.85">'+fmt(reg.monto)+' · inventario descontado · el admin la acepta en el cierre</span>','#ef4444');
+    render();
+  }else{
+    showToast('📝 Novedad guardada<br><span style="font-size:12px;opacity:.85">'+tipo.emoji+' '+esc(reg.mesa)+(monto?' · '+fmt(monto):'')+' · el admin la verá en Caja</span>','#f5a623');
+  }
+}
+function aceptarPerdida(nid){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador acepta pérdidas.');return;}
+  var n=novedades.find(function(x){return x.id===nid;});
+  if(!n||!n._fbkey)return;
+  fbSet('novedades/'+n._fbkey+'/estado','aceptada');
+  fbSet('novedades/'+n._fbkey+'/aceptadaPor',usuarioActivo.nombre);
+  fbSet('novedades/'+n._fbkey+'/aceptadaTs',Date.now());
+  n.estado='aceptada';n.aceptadaPor=usuarioActivo.nombre;
+  showToast('✔️ Pérdida aceptada<br><span style="font-size:12px;opacity:.85">'+(n.tipoLabel||'')+' '+esc(n.mesa||'')+' · '+fmt(n.monto||0)+'</span>','#22c55e');
+  abrirCierre();
+}
+function _perdidasTurno(){
+  var desde=turnoInicio||0;
+  return novedades.filter(function(n){return n.ts>=desde&&(n.esPerdida||n.tipo==='volo'||n.tipo==='perdida')&&(n.monto>0);});
 }
 function eliminarNovedad(nid){
   if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
@@ -7522,6 +7566,26 @@ function abrirCierre(){
     +'<div style="font-size:18px;font-weight:900;color:var(--gold)">Cierre de turno</div>'
     +'<div style="color:var(--muted);font-size:12px">'+todayStr()+'</div></div>'
     +(mesasOcup>0?'<div class="alert-box alert-red mb12">⚠️ Hay '+mesasOcup+' mesa(s) con pedidos abiertos. Se recomienda cobrarlas antes del cierre.</div>':'')
+    +(function(){
+      var per=_perdidasTurno();
+      if(!per.length)return'';
+      var pend=per.filter(function(n){return n.estado==='pendiente';});
+      var totPer=per.reduce(function(a,n){return a+(n.monto||0);},0);
+      return'<div style="background:#ef444410;border:1px solid #ef444440;border-radius:11px;padding:10px 12px;margin-bottom:12px">'
+        +'<div style="font-weight:900;font-size:13px;color:#ef4444;margin-bottom:6px">💀 Pérdidas del turno · '+fmt(totPer)+(pend.length?' · <span style="color:#f5a623">'+pend.length+' por aceptar</span>':'')+'</div>'
+        +per.map(function(n){
+          var pendiente=n.estado==='pendiente';
+          return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+            +'<div style="flex:1;min-width:0">'
+              +'<div style="font-size:11.5px;font-weight:700">'+(n.tipoLabel||'💀')+' '+esc(n.mesa||'')+' · <span style="color:#ef4444">'+fmt(n.monto||0)+'</span></div>'
+              +'<div style="color:var(--muted);font-size:9.5px">'+fmtTime(n.ts)+' · '+esc(n.uidNombre||'')+(n.items?' · '+n.items.map(function(x){return x.qty+'× '+esc(x.nombre);}).join(', '):'')+(n.estado==='aceptada'?' · <span style="color:#22c55e;font-weight:800">✔ aceptada por '+esc(n.aceptadaPor||'')+'</span>':'')+'</div>'
+            +'</div>'
+            +(pendiente?'<button onclick="aceptarPerdida(\''+n.id+'\')" style="background:#22c55e;color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:10.5px;font-weight:900;cursor:pointer;white-space:nowrap">✔ Aceptar</button>':'')
+          +'</div>';
+        }).join('')
+        +'<div style="color:var(--muted);font-size:9.5px;margin-top:5px">El inventario de estas pérdidas ya quedó descontado y la caja no espera ese dinero — aceptar deja constancia de que el admin las revisó.</div>'
+      +'</div>';
+    })()
     +'<div class="cierre-card">'
     +'<div class="cierre-row"><span>Caja inicial</span><span style="color:var(--gold);font-weight:700">'+fmt(cajaHoy.cajaInicial)+'</span></div>'
     +'<div class="cierre-row"><span>Total ventas</span><span style="color:#22c55e;font-weight:700">'+fmt(totalV)+'</span></div>'
@@ -7567,6 +7631,8 @@ function confirmarCierre(){
     porFP:porFP,gastosPorFP:gastosPorFP,
     utilidad:cajaHoy.cajaInicial+totalV-totalG,
     numVentas:hoyV.length,numGastos:hoyG.length,
+    perdidas:_perdidasTurno().reduce(function(a,n){return a+(n.monto||0);},0),
+    numPerdidas:_perdidasTurno().length,
     uid:usuarioActivo.id
   };
   fbPush('cierres',cierre);
@@ -8064,6 +8130,21 @@ function renderVentas(){
     +kpis
     +'<div class="res-grid">'
     +'<div class="res-card"><div class="section-title">Por forma de pago — turno</div>'+pagoRows+'</div>'
+    +(function(){
+      var per=_perdidasTurno();
+      if(!per.length)return'';
+      var pend=per.filter(function(n){return n.estado==='pendiente';}).length;
+      var totPer=per.reduce(function(a,n){return a+(n.monto||0);},0);
+      return'<div class="res-card" style="border-color:#ef444440">'
+        +'<div class="section-title" style="color:#ef4444">💀 Pérdidas del turno · '+fmt(totPer)+(pend?' <span style="background:#f5a62322;color:#f5a623;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:900">'+pend+' por aceptar en el cierre</span>':'')+'</div>'
+        +per.map(function(n){
+          return'<div style="padding:5px 0;border-bottom:1px solid var(--border)">'
+            +'<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700"><span>'+(n.tipoLabel||'💀')+' '+esc(n.mesa||'')+'</span><span style="color:#ef4444">'+fmt(n.monto||0)+'</span></div>'
+            +'<div style="color:var(--muted);font-size:10px">'+fmtTime(n.ts)+' · '+esc(n.uidNombre||'')+(n.items?' · '+n.items.map(function(x){return x.qty+'× '+esc(x.nombre);}).join(', '):'')+(n.nota?' · '+esc(n.nota):'')+' · '+(n.estado==='aceptada'?'<span style="color:#22c55e;font-weight:800">✔ aceptada</span>':n.estado==='pendiente'?'<span style="color:#f5a623;font-weight:800">⏳ pendiente</span>':'')+'</div>'
+          +'</div>';
+        }).join('')
+      +'</div>';
+    })()
     +'<div class="res-card"><div class="section-title">🔥 Consumo del turno — cobrado + 🔴 en mesas</div>'+prodRows+'</div>'
     +(function(){
       var abiertoVC=!!_secOpen.ventasCat;
