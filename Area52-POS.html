@@ -7725,14 +7725,52 @@ function verCierre(id){
 }
 
 /* ═══════════════ VENTAS ═══════════════ */
+function _desgloseProductosVentas(vs){
+  // Unidades y plata por producto de un conjunto de ventas — con combos, cubetazos y 2x1 explotados
+  var porProd={};
+  var add=function(key,nombre,emoji,qty,total){
+    if(!porProd[key])porProd[key]={nombre:nombre,emoji:emoji,qty:0,total:0};
+    porProd[key].qty+=qty;porProd[key].total+=total;
+  };
+  vs.forEach(function(v){
+    var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    its.forEach(function(it){
+      var q=it.qty||1;
+      if(it.isCustom){if(it.esAsumeSocio)return;add('cu_'+(it.customNombre||''),it.customNombre||'Personalizado','✏️',q,(it.customPrecio||0)*q);return;}
+      if(it.isCombo){
+        _comboReparto(it).forEach(function(cp){add('p_'+cp.p.nombre,cp.p.nombre,cp.p.emoji,cp.cant*q,cp.rev*q);});
+        return;
+      }
+      if(it.isCubetazoMix){
+        var det=it.cubMixDetalle?(Array.isArray(it.cubMixDetalle)?it.cubMixDetalle:Object.values(it.cubMixDetalle)):[];
+        var tot=det.reduce(function(a,dd){return a+(dd.cantidad||0);},0)||1;
+        det.forEach(function(dd){
+          var pp=menu.find(function(m){return Number(m.id)===Number(dd.pid);});
+          add('p_'+(pp?pp.nombre:dd.nombre||'?'),pp?pp.nombre:(dd.nombre||'?'),pp?pp.emoji:'🍺',(dd.cantidad||0)*q,(it.cubMixPrecio||0)*q*((dd.cantidad||0)/tot));
+        });
+        return;
+      }
+      var p=menu.find(function(m){return m.id==it.pid;});
+      var nom=(p?p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'');
+      var und=(it.varianteUnd||1)*q;
+      add('p_'+nom+(it.es2x1Gratis?'':''),nom,p?p.emoji:'📦',und,precioItem(it)*q);
+    });
+  });
+  return Object.values(porProd).sort(function(a,b){return b.total-a.total||b.qty-a.qty;});
+}
+function toggleDesgloseDia(fecha){
+  window._diaAbierto=(window._diaAbierto===fecha)?null:fecha;
+  render();
+}
 function ventasDiariasHTML(){
   if(!ventas.length)return '<div style="color:var(--dim);text-align:center;padding:16px;font-size:13px">Sin ventas registradas</div>';
   // Agrupar por día de negocio
   var dias={};
   ventas.forEach(function(v){
     var k=diaNegocioStr(v.ts);
-    if(!dias[k])dias[k]={fecha:k,ts:fechaNegocio(v.ts).getTime(),total:0,n:0,porPago:{}};
+    if(!dias[k])dias[k]={fecha:k,ts:fechaNegocio(v.ts).getTime(),total:0,n:0,porPago:{},ventas:[]};
     dias[k].total+=v.total;dias[k].n++;
+    dias[k].ventas.push(v);
     if(v.pagos&&v.pagos.length){v.pagos.forEach(function(p){dias[k].porPago[p.fp]=(dias[k].porPago[p.fp]||0)+p.monto;});}
     else{dias[k].porPago[v.fp]=(dias[k].porPago[v.fp]||0)+v.total;}
   });
@@ -7741,16 +7779,34 @@ function ventasDiariasHTML(){
   var hoyNeg=hoyNegocioStr();
   return lista.map(function(d){
     var esHoy=(d.fecha===hoyNeg);
+    var abierto=window._diaAbierto===d.fecha;
     var pagosTxt=FPAGO.filter(function(f){return d.porPago[f.id];}).map(function(f){
       return '<span style="display:inline-flex;align-items:center;gap:3px;margin-right:10px;font-size:11px;color:var(--muted)">'+f.emoji+' '+fmt(d.porPago[f.id])+'</span>';
     }).join('');
-    return '<div style="background:'+(esHoy?'#f5a62312':'var(--bg)')+';border:1px solid '+(esHoy?'#f5a62344':'var(--border)')+';border-radius:11px;padding:12px 14px;margin-bottom:8px">'
+    var desglose='';
+    if(abierto){
+      var prods=_desgloseProductosVentas(d.ventas);
+      var totUnd=prods.reduce(function(a,p){return a+p.qty;},0);
+      desglose='<div style="margin-top:9px;padding-top:8px;border-top:1px solid var(--border)">'
+        +'<div style="font-size:11px;font-weight:800;color:#22c55e;margin-bottom:4px">🍽 Qué se vendió · '+totUnd+' unidades</div>'
+        +prods.map(function(p){
+          return'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">'
+            +'<span style="font-size:11.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.emoji+' '+esc(p.nombre)+'</span>'
+            +'<span style="font-size:11px;font-weight:900;color:#22c55e;margin:0 8px;white-space:nowrap">'+p.qty+' und</span>'
+            +'<span style="font-size:11px;font-weight:700;color:var(--gold);white-space:nowrap">'+fmt(p.total)+'</span>'
+          +'</div>';
+        }).join('')
+        +'<div style="color:var(--muted);font-size:9.5px;margin-top:4px">Combos, cubetazos y 2x1 aparecen explotados en sus productos reales; la plata del combo se reparte proporcional.</div>'
+      +'</div>';
+    }
+    return '<div onclick="toggleDesgloseDia(\''+d.fecha+'\')" style="background:'+(esHoy?'#f5a62312':'var(--bg)')+';border:1px solid '+(esHoy?'#f5a62344':'var(--border)')+';border-radius:11px;padding:12px 14px;margin-bottom:8px;cursor:pointer">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
-        +'<div style="font-weight:800;font-size:14px">'+(esHoy?'🟢 Hoy · ':'📅 ')+d.fecha+'</div>'
+        +'<div style="font-weight:800;font-size:14px">'+(abierto?'▼ ':'')+(esHoy?'🟢 Hoy · ':'📅 ')+d.fecha+'</div>'
         +'<div style="color:var(--gold);font-weight:900;font-size:17px">'+fmt(d.total)+'</div>'
       +'</div>'
-      +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">'+d.n+' cobros</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">'+d.n+' cobros · <span style="color:#38bdf8;font-weight:700">'+(abierto?'ocultar detalle':'toca para ver qué se vendió')+'</span></div>'
       +'<div style="display:flex;flex-wrap:wrap">'+pagosTxt+'</div>'
+      +desglose
     +'</div>';
   }).join('');
 }
