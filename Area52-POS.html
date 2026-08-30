@@ -6163,7 +6163,7 @@ function abrirConcilBanco(){
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<span style="color:var(--muted);font-size:11px">Diferencia máxima de hora:</span>'
-        +'<select class="inp" id="sms-tol" onchange="analizarSmsBanco()" style="flex:1;padding:7px"><option value="1" selected>±1 minuto</option><option value="3">±3 minutos</option><option value="10">±10 minutos</option><option value="60">±60 minutos</option><option value="120">±120 minutos</option></select>'
+        +'<select class="inp" id="sms-tol" onchange="analizarSmsBanco()" style="flex:1;padding:7px"><option value="1">±1 minuto</option><option value="3">±3 minutos</option><option value="10" selected>±10 minutos</option><option value="60">±60 minutos</option><option value="120">±120 minutos</option></select>'
       +'</div>'
       +'<button class="btn btn-full" onclick="analizarSmsBanco()" style="background:#a855f7;color:#fff;border:none;font-weight:800">🔍 Contrastar mensajes</button>'
       +'<div style="display:flex;gap:6px;margin-top:6px">'
@@ -6479,6 +6479,32 @@ function _cruceConGrupos(pagos,movs,TOL){
   });
   // 4) FIADOS: la transferencia llega cuando el cliente quiere y el pago se registra
   //    horas después → cruce por monto exacto + MISMO DÍA, sin exigir la hora.
+  // 4) 💠 Cifras parecidas: el cliente redondeó el pago (160.000 por 158.500, o 158.000 por 158.500)
+  var parecidos=[];
+  var _cifraParecida=function(pagado,cobrado){
+    var dif=pagado-cobrado;
+    var abs=Math.abs(dif);
+    if(abs===0)return false;
+    if(abs<=2000)return true;                                    // hasta $2.000 en cualquier dirección
+    if(dif>0&&abs<=5000&&pagado%500===0&&cobrado>=100000)return true; // pagó de más redondeando, solo en cuentas grandes (≥$100.000)
+    return false;
+  };
+  pagos.forEach(function(p,pi){
+    if(usadoP[pi])return;
+    var mejor=-1,mejorScore=Infinity;
+    movs.forEach(function(mv,mi){
+      if(usadoM[mi])return;
+      if(!_cifraParecida(p.monto,mv.monto))return;
+      var dt=Math.abs(mv.ts-p.ts);
+      if(dt>TOL)return;
+      var score=Math.abs(p.monto-mv.monto)*1000000+dt;           // primero la menor diferencia de plata, luego la de hora
+      if(score<mejorScore){mejor=mi;mejorScore=score;}
+    });
+    if(mejor>=0){
+      usadoM[mejor]=true;usadoP[pi]=true;
+      parecidos.push({pago:p,mov:movs[mejor],dif:p.monto-movs[mejor].monto,difMin:Math.round(Math.abs(movs[mejor].ts-p.ts)/60000)});
+    }
+  });
   var fiadoDia=[];
   movs.forEach(function(mv,mi){
     if(usadoM[mi])return;
@@ -6497,7 +6523,7 @@ function _cruceConGrupos(pagos,movs,TOL){
       fiadoDia.push({pago:pagos[mejor],mov:mv,difMin:Math.round(mejorDif/60000)});
     }
   });
-  return{ok:ok,grupos:grupos,fiadoDia:fiadoDia,
+  return{ok:ok,grupos:grupos,parecidos:parecidos,fiadoDia:fiadoDia,
     pagosSin:pagos.filter(function(p,pi){return !usadoP[pi];}),
     movsSin:movs.filter(function(mv,mi){return !usadoM[mi];})};
 }
@@ -6853,21 +6879,22 @@ function analizarSmsBanco(){
   var movs=_movsDigitales(diasSet).filter(function(mv){
     return mv.ts>=rango.desde&&(!rango.hasta||mv.ts<=rango.hasta);
   });
-  var TOL=(parseInt((document.getElementById('sms-tol')||{}).value)||1)*60000;
+  var TOL=(parseInt((document.getElementById('sms-tol')||{}).value)||10)*60000;
   var cruce=_cruceConGrupos(sms,movs,TOL);
   var ok=cruce.ok.map(function(x){return{sms:x.pago,mov:x.mov,difMin:x.difMin};});
   var gruposS=cruce.grupos;
+  var parecidosS=cruce.parecidos||[];
   var fiadoDiaS=cruce.fiadoDia||[];
   var smsSin=cruce.pagosSin;
   var sinSms=cruce.movsSin;
-  window._smsDiag={sms:sms,movs:movs,ok:ok,grupos:gruposS,fiadoDia:fiadoDiaS,smsSin:smsSin,sinSms:sinSms,TOL:TOL};
+  window._smsDiag={sms:sms,movs:movs,ok:ok,grupos:gruposS,parecidos:parecidosS,fiadoDia:fiadoDiaS,smsSin:smsSin,sinSms:sinSms,TOL:TOL};
   var fpN=function(fp){var f=FPAGO.find(function(x){return x.id===fp;});return f?f.emoji+' '+f.label:fp;};
   var hhmm=function(ts){var d=new Date(ts);return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);};
   var totSmsSin=smsSin.reduce(function(a,m){return a+m.monto;},0);
   var totSinSms=sinSms.reduce(function(a,m){return a+m.monto;},0);
   res.innerHTML=
     '<div style="background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:8px;font-size:12px">'
-      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados'+(gruposS.length?' · 🧩 '+gruposS.length+' agrupados':'')+(fiadoDiaS.length?' · 📒 '+fiadoDiaS.length+' fiados por día':'')+' · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
+      +'📱 '+sms.length+' mensajes · ✅ '+ok.length+' cruzados'+(gruposS.length?' · 🧩 '+gruposS.length+' agrupados':'')+(parecidosS.length?' · 💠 '+parecidosS.length+' con redondeo':'')+(fiadoDiaS.length?' · 📒 '+fiadoDiaS.length+' fiados por día':'')+' · 📥 '+smsSin.length+' sin registro · 📤 '+sinSms.length+' sin mensaje'
     +'</div>'
     +(ok.length?'<div style="font-weight:800;font-size:12px;color:#22c55e;margin-bottom:3px">✅ Cruzados al minuto</div>'
       +ok.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#22c55e">'+fmt(x.sms.monto)+'</b> · SMS '+hhmm(x.sms.ts)+(x.sms.de?' de '+esc(x.sms.de):'')+' ↔ '+x.mov.ref+' ('+fpN(x.mov.fp)+') · Δ'+x.difMin+' min</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
@@ -6876,13 +6903,20 @@ function analizarSmsBanco(){
         if(g.tipo==='pagos→cobro')return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+g.pagos.map(function(p){return fmt(p.monto);}).join(' + ')+'</b> ('+g.pagos.length+' transferencias) ↔ '+g.mov.ref+' <b>'+fmt(g.mov.monto)+'</b> · Δmáx '+g.dMaxMin+' min</div>';
         return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(g.pago.monto)+'</b> (1 transferencia) ↔ '+g.movs.map(function(m){return m.ref+' '+fmt(m.monto);}).join(' + ')+' · Δmáx '+g.dMaxMin+' min</div>';
       }).join('')+'<div style="margin-bottom:8px"></div>':'')
+    +(parecidosS.length?'<div style="font-weight:800;font-size:12px;color:#38bdf8;margin-bottom:3px">💠 Cifras parecidas (el cliente redondeó el pago)</div>'
+      +parecidosS.map(function(x){
+        var deMas=x.dif>0;
+        return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#38bdf8">'+fmt(x.pago.monto)+'</b> recibido · '+hhmm(x.pago.ts)+(x.pago.de?' de '+esc(x.pago.de):'')+' ↔ '+x.mov.ref+' <b>'+fmt(x.mov.monto)+'</b> ('+fpN(x.mov.fp)+') · '
+          +(deMas?'<span style="color:#22c55e;font-weight:800">pagó '+fmt(x.dif)+' de más 🎁</span>':'<span style="color:#ef4444;font-weight:800">pagó '+fmt(-x.dif)+' de MENOS ⚠️</span>')
+          +' · Δ'+x.difMin+' min</div>';
+      }).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(fiadoDiaS.length?'<div style="font-weight:800;font-size:12px;color:#a855f7;margin-bottom:3px">📒 Fiados cruzados por monto y día (la plata llegó antes del registro)</div>'
       +fiadoDiaS.map(function(x){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><b style="color:#a855f7">'+fmt(x.pago.monto)+'</b> · llegó '+hhmm(x.pago.ts)+(x.pago.de?' de '+esc(x.pago.de):'')+' ↔ registrado '+hhmm(x.mov.ts)+' · '+x.mov.ref+'</div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(smsSin.length?'<div style="font-weight:800;font-size:12px;color:#ef4444;margin-bottom:3px">📥 Llegó plata al banco SIN registro en el sistema · '+fmt(totSmsSin)+'</div>'
       +smsSin.map(function(m,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagSmsSin('+i+')" style="cursor:pointer"><b style="color:#ef4444">'+fmt(m.monto)+'</b> · '+hhmm(m.ts)+(m.de?' · de '+esc(m.de):'')+' <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-r'+i+'" style="display:none"></div></div>';}).join('')+'<div style="margin-bottom:8px"></div>':'')
     +(sinSms.length?'<div style="font-weight:800;font-size:12px;color:#f5a623;margin-bottom:3px">📤 Registrado en el sistema SIN mensaje del banco · '+fmt(totSinSms)+'</div>'
       +sinSms.map(function(mv,i){return'<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><div onclick="diagMovSin('+i+')" style="cursor:pointer"><b style="color:#f5a623">'+fmt(mv.monto)+'</b> · '+hhmm(mv.ts)+' · '+mv.ref+' ('+fpN(mv.fp)+') <span style="color:var(--muted)">▸ ¿por qué?</span></div><div id="sdiag-m'+i+'" style="display:none"></div></div>';}).join(''):'')
-    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Periodo: <b>'+rango.label+'</b>'+(fueraRango?' · '+fueraRango+' mensajes de otras fechas ignorados':'')+' · Mensajes Y cobros se revisan dentro de la misma ventana de tiempo · Cruce por monto exacto y hora (±'+(TOL/60000)+' min). Ojo: si no llegan TODOS los avisos del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
+    +'<div style="color:var(--muted);font-size:10px;margin-top:6px">Periodo: <b>'+rango.label+'</b>'+(fueraRango?' · '+fueraRango+' mensajes de otras fechas ignorados':'')+' · Mensajes Y cobros se revisan dentro de la misma ventana de tiempo · Cruce por monto exacto y hora (±'+(TOL/60000)+' min), y por cifras parecidas: hasta $2.000 de diferencia, o hasta $5.000 si pagaron de más con cifra redonda. Ojo: si no llegan TODOS los avisos del banco, la sección 📤 puede mostrar cobros legítimos.</div>';
 }
 function _concilDia(d){
   // Normaliza cualquier formato de fecha a 'YYYY-MM-DD'
