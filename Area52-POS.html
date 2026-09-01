@@ -10750,10 +10750,13 @@ function agregarConsumoSocio(pid,esCubeta,cantidad){
   var p=menu.find(function(m){return m.id===pid;});
   if(!p)return;
   var qty=cantidad||1;
-  var precioBase=esCubeta?(p.cubeta||p.precio*5):p.precio;
-  var precioSocio=Math.round(precioBase*0.9);
-  var nombre=(esCubeta?'🪣 Cubetazo ':'')+''+p.nombre;
-  var item={pid:pid,qty:qty,cubeta:!!esCubeta,nombre:nombre,emoji:p.emoji,precioBase:precioBase,precioSocio:precioSocio};
+  var precioLista=esCubeta?(p.cubeta||p.precio*5):p.precio;
+  // 🏷️ Si el producto está en promoción vigente, el socio parte del precio de promo
+  var prS=promoVigente(p.id,esCubeta?'cubeta':'unidad');
+  var precioBase=prS?prS.valor:precioLista;
+  var precioSocio=Math.round(precioBase*0.9);   // y encima el 10% de descuento de socio
+  var nombre=(esCubeta?'🪣 Cubetazo ':'')+''+p.nombre+(prS?' 🏷️':'');
+  var item={pid:pid,qty:qty,cubeta:!!esCubeta,nombre:nombre,emoji:p.emoji,precioBase:precioBase,precioLista:precioLista,esPromo:!!prS,precioSocio:precioSocio};
   // Detalle de stock descontado (para poder devolverlo si se elimina el registro)
   var stockDetalle=[];
   var cantStock=esCubeta?qty*5:qty;
@@ -10772,7 +10775,7 @@ function agregarConsumoSocio(pid,esCubeta,cantidad){
   aplicarStockDetalle(stockDetalle,-1,'Consumo socio '+_socioActivo+': '+nombre);
   var totalSocio=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+c.total;},0);
   var colorS=_socioActivo==='CARLOS'?'#38bdf8':'#a855f7';
-  showToast('✅ '+qty+'× '+p.emoji+' '+esc(nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">Total '+_socioActivo+': '+fmt(totalSocio)+'</span>',colorS);
+  showToast('✅ '+qty+'× '+p.emoji+' '+esc(nombre)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.8">'+(prS?'🏷️ promo '+fmt(precioBase)+' + 10% socio = '+fmt(precioSocio)+' c/u · ':'10% socio: '+fmt(precioSocio)+' c/u · ')+'Total '+_socioActivo+': '+fmt(totalSocio)+'</span>',colorS);
   render();
 }
 
