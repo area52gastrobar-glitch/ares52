@@ -8454,14 +8454,27 @@ function rankingTotalProductos(){
     its.forEach(function(it){
       var nombre,emoji,key,cat,qty=it.qty||1;
       if(it.isCustom){return;}
-      if(it.isCombo){nombre=it.comboNombre||'Combo';emoji='🎁';cat='🎁 Combos';key='combo_'+nombre;}
+      if(it.isCombo){
+        // 🎁 El combo cuenta por sus productos reales: 10 cervezas del combo = 10 unidades de esa cerveza
+        _comboReparto(it).forEach(function(cp){
+          var kc='p_'+cp.p.nombre;
+          if(!porProd[kc])porProd[kc]={nombre:cp.p.nombre,emoji:cp.p.emoji,cat:cp.p.cat||'Otros',qty:0,total:0};
+          porProd[kc].qty+=cp.cant*qty;
+          porProd[kc].total+=cp.rev*qty;
+        });
+        return;
+      }
       else if(it.isCubetazoMix){
-        (it.cubMixDetalle||[]).forEach(function(dd){
-          var pp=menu.find(function(m){return Number(m.id)===Number(dd.prodId);});
-          var cat2=pp?pp.cat:'Cerveza';
-          var k='p_'+dd.nombre;
-          if(!porProd[k])porProd[k]={nombre:dd.nombre,emoji:dd.emoji||'🍺',cat:cat2,qty:0,total:0};
-          porProd[k].qty+=dd.cantidad*qty;
+        var detCM=it.cubMixDetalle?(Array.isArray(it.cubMixDetalle)?it.cubMixDetalle:Object.values(it.cubMixDetalle)):[];
+        var totCM=detCM.reduce(function(a,dd){return a+(dd.cantidad||0);},0)||1;
+        detCM.forEach(function(dd){
+          var pp=menu.find(function(m){return Number(m.id)===Number(dd.prodId!=null?dd.prodId:dd.pid);});
+          var cat2=pp?pp.cat:'Cervezas';
+          var nomCM=pp?pp.nombre:(dd.nombre||'?');
+          var k='p_'+nomCM;
+          if(!porProd[k])porProd[k]={nombre:nomCM,emoji:(pp?pp.emoji:dd.emoji)||'🍺',cat:cat2,qty:0,total:0};
+          porProd[k].qty+=(dd.cantidad||0)*qty;
+          porProd[k].total+=(it.cubMixPrecio||0)*qty*((dd.cantidad||0)/totCM);
         });
         return;
       }
