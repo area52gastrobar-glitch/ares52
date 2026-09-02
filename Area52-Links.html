@@ -354,6 +354,25 @@ body{
 @keyframes promoPulse{0%,100%{box-shadow:0 0 14px rgba(255,94,200,.4)}50%{box-shadow:0 0 32px rgba(240,192,64,.8)}}
 .promo-head{background:linear-gradient(90deg,#f0c040,var(--nk),var(--np),#f0c040);-webkit-background-clip:text;background-clip:text;color:transparent;}
 .promo-week{border-color:rgba(168,85,247,.45);background:rgba(168,85,247,.06);box-shadow:0 0 12px rgba(168,85,247,.12);}
+/* 📸→ Instagram real con "Síguenos" */
+.ig-btn{
+  display:inline-flex;align-items:center;gap:9px;
+  padding:8px 16px 8px 12px;border-radius:99px;text-decoration:none;
+  background:rgba(217,46,127,.08);
+  border:1.5px solid rgba(217,46,127,.55);
+  box-shadow:0 0 14px rgba(217,46,127,.25), inset 0 0 16px rgba(155,54,183,.08);
+  transition:all .25s;
+  animation:igGlow 2.6s ease-in-out infinite;
+}
+@keyframes igGlow{
+  0%,100%{box-shadow:0 0 12px rgba(217,46,127,.25)}
+  50%{box-shadow:0 0 24px rgba(241,82,69,.5)}
+}
+.ig-btn:active{transform:scale(.96);}
+.ig-ico{display:flex;align-items:center;filter:drop-shadow(0 0 6px rgba(217,46,127,.6));}
+.ig-txt{display:flex;flex-direction:column;line-height:1.15;text-align:left;}
+.ig-txt b{font-size:13px;color:#fff;letter-spacing:.6px;text-shadow:0 0 8px rgba(217,46,127,.7);}
+.ig-txt small{font-size:9.5px;color:rgba(255,255,255,.55);letter-spacing:.4px;}
 </style>
 </head>
 <body>
@@ -447,7 +466,24 @@ body{
 
   <!-- Socials -->
   <div class="socials">
-    <a href="https://instagram.com/area52.gastrobar" class="soc-btn" target="_blank">📸</a>
+    <a href="https://instagram.com/area52.gastrobar" class="ig-btn" target="_blank" aria-label="Instagram @area52.gastrobar">
+      <span class="ig-ico">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <defs>
+            <linearGradient id="igGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#FED373"/>
+              <stop offset="26%" stop-color="#F15245"/>
+              <stop offset="61%" stop-color="#D92E7F"/>
+              <stop offset="100%" stop-color="#9B36B7"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="20" height="20" rx="5.5" fill="none" stroke="url(#igGrad)" stroke-width="2"/>
+          <circle cx="12" cy="12" r="4.6" fill="none" stroke="url(#igGrad)" stroke-width="2"/>
+          <circle cx="17.4" cy="6.6" r="1.4" fill="url(#igGrad)"/>
+        </svg>
+      </span>
+      <span class="ig-txt"><b>Síguenos</b><small>@area52.gastrobar</small></span>
+    </a>
     <a href="https://wa.me/573213502772" class="soc-btn" target="_blank">💬</a>
     <a href="mailto:Area52.gastrobar@gmail.com" class="soc-btn" target="_blank">✉️</a>
   </div>
