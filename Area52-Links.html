@@ -354,25 +354,37 @@ body{
 @keyframes promoPulse{0%,100%{box-shadow:0 0 14px rgba(255,94,200,.4)}50%{box-shadow:0 0 32px rgba(240,192,64,.8)}}
 .promo-head{background:linear-gradient(90deg,#f0c040,var(--nk),var(--np),#f0c040);-webkit-background-clip:text;background-clip:text;color:transparent;}
 .promo-week{border-color:rgba(168,85,247,.45);background:rgba(168,85,247,.06);box-shadow:0 0 12px rgba(168,85,247,.12);}
-/* 📸→ Instagram real con "Síguenos" */
+/* Instagram: banner grande protagonista */
+.socials{display:flex;flex-direction:column;align-items:stretch;gap:12px;}
+.socials .soc-btn{align-self:center;}
 .ig-btn{
-  display:inline-flex;align-items:center;gap:9px;
-  padding:8px 16px 8px 12px;border-radius:99px;text-decoration:none;
-  background:rgba(217,46,127,.08);
-  border:1.5px solid rgba(217,46,127,.55);
-  box-shadow:0 0 14px rgba(217,46,127,.25), inset 0 0 16px rgba(155,54,183,.08);
-  transition:all .25s;
-  animation:igGlow 2.6s ease-in-out infinite;
+  display:flex;align-items:center;gap:14px;width:100%;
+  padding:16px 18px;border-radius:18px;text-decoration:none;box-sizing:border-box;
+  background:linear-gradient(135deg,rgba(254,211,115,.10),rgba(241,82,69,.12),rgba(217,46,127,.14),rgba(155,54,183,.12));
+  background-size:200% 200%;
+  border:2.5px solid rgba(217,46,127,.85);
+  animation:igGlow 2s ease-in-out infinite, igShine 4s ease infinite, igBorde 3s linear infinite;
+  transition:transform .2s;
 }
 @keyframes igGlow{
-  0%,100%{box-shadow:0 0 12px rgba(217,46,127,.25)}
-  50%{box-shadow:0 0 24px rgba(241,82,69,.5)}
+  0%,100%{box-shadow:0 0 16px rgba(217,46,127,.45)}
+  50%{box-shadow:0 0 38px rgba(241,82,69,.85), 0 0 60px rgba(155,54,183,.35)}
 }
-.ig-btn:active{transform:scale(.96);}
-.ig-ico{display:flex;align-items:center;filter:drop-shadow(0 0 6px rgba(217,46,127,.6));}
-.ig-txt{display:flex;flex-direction:column;line-height:1.15;text-align:left;}
-.ig-txt b{font-size:13px;color:#fff;letter-spacing:.6px;text-shadow:0 0 8px rgba(217,46,127,.7);}
-.ig-txt small{font-size:9.5px;color:rgba(255,255,255,.55);letter-spacing:.4px;}
+@keyframes igShine{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes igBorde{0%{border-color:#FED373}30%{border-color:#F15245}60%{border-color:#D92E7F}85%{border-color:#9B36B7}100%{border-color:#FED373}}
+.ig-btn:active{transform:scale(.97);}
+.ig-ico{display:flex;align-items:center;flex-shrink:0;filter:drop-shadow(0 0 12px rgba(217,46,127,.9));animation:igLatido 2s ease-in-out infinite;}
+@keyframes igLatido{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.ig-txt{display:flex;flex-direction:column;line-height:1.2;text-align:left;flex:1;}
+.ig-txt b{
+  font-size:24px;letter-spacing:2.5px;font-weight:900;
+  background:linear-gradient(90deg,#FED373,#F15245,#D92E7F,#9B36B7);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 10px rgba(217,46,127,.6));
+}
+.ig-txt small{font-size:13px;color:rgba(255,255,255,.85);letter-spacing:.8px;font-weight:700;margin-top:2px;}
+.ig-arrow{font-size:30px;color:#D92E7F;font-weight:900;flex-shrink:0;text-shadow:0 0 12px rgba(217,46,127,.8);animation:igFlecha 1.2s ease-in-out infinite;}
+@keyframes igFlecha{0%,100%{transform:translateX(0)}50%{transform:translateX(6px)}}
 </style>
 </head>
 <body>
@@ -468,7 +480,7 @@ body{
   <div class="socials">
     <a href="https://instagram.com/area52.gastrobar" class="ig-btn" target="_blank" aria-label="Instagram @area52.gastrobar">
       <span class="ig-ico">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="44" height="44" aria-hidden="true">
           <defs>
             <linearGradient id="igGrad" x1="0%" y1="100%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#FED373"/>
@@ -482,7 +494,8 @@ body{
           <circle cx="17.4" cy="6.6" r="1.4" fill="url(#igGrad)"/>
         </svg>
       </span>
-      <span class="ig-txt"><b>Síguenos</b><small>@area52.gastrobar</small></span>
+      <span class="ig-txt"><b>¡SÍGUENOS!</b><small>@area52.gastrobar</small></span>
+      <span class="ig-arrow">›</span>
     </a>
     <a href="https://wa.me/573213502772" class="soc-btn" target="_blank">💬</a>
     <a href="mailto:Area52.gastrobar@gmail.com" class="soc-btn" target="_blank">✉️</a>
