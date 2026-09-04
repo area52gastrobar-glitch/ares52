@@ -11888,7 +11888,7 @@ function imprimirPrecuenta(){
     if(it.isCustom){nombre='✏️ '+esc(it.customNombre||'');pr=it.customPrecio||0;}
     else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
     else if(it.isCubetazoMix){nombre='🪣 '+(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
-    else{var p=menu.find(function(m){return m.id===it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||'?');pr=it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0);}
+    else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+esc(it.varianteNombre)+')':'')+(it.cubeta?' x5':'')+(it.es2x1Gratis?' [2x1 GRATIS]':'');pr=precioItem(it);}
     return'<tr><td>'+nombre+'</td><td align="center">'+it.qty+'</td><td align="right">'+fmt(pr*it.qty)+'</td></tr>';
   }).join('');
   var w=window.open('','_blank','width=340,height=600');
