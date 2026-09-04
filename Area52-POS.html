@@ -379,7 +379,8 @@ var ROLES={
   admin:   {label:'Administrador',  color:'#f5a623',tabs:['mesas','inventario','carta','combos','caja','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina','admin']},
   subadmin:{label:'Subadministrador',color:'#38bdf8',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
   cajero:  {label:'Cajero',         color:'#a855f7',tabs:['mesas','inventario','carta','combos','gastos','ventas','rappi','socios','empleados','creditos','saneamiento','cocina']},
-  mesero:  {label:'Mesero',         color:'#22c55e',tabs:['mesas','inventario','gastos','socios','cocina']}
+  mesero:  {label:'Mesero',         color:'#22c55e',tabs:['mesas','inventario','gastos','socios','cocina']},
+  cocinero:{label:'Cocinero',       color:'#f97316',tabs:['cocina','inventario','mesas']}
 };
 var TAB_LABELS={mesas:'🛸 Mesas',inventario:'📦 Inventario',carta:'🍽️ Carta',combos:'🎁 Combos',
   caja:'💰 Caja',gastos:'📋 Gastos',ventas:'📊 Ventas',rappi:'🛵 Rappi',socios:'🤝 Socios',empleados:'👷 Empleados',creditos:'📒 Fiados',saneamiento:'🧼 Saneamiento',cocina:'👨‍🍳 Cocina',admin:'⚙️ Admin'};
@@ -440,7 +441,9 @@ var cajaHoy={cajaInicial:0};  // caja inicial del turno
 var turnoInicio=Date.now();    // timestamp del inicio del turno (se resetea en cada cierre)
 var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
-var novedades=[];  // 📝 novedades de mesas: descuentos, clientes que se volaron, cortesías...
+var novedades=[];
+var comprasCocina=[];   // 🛒 lista de faltantes que anota la cocina
+var serviciosPublicos={};  // 🧾 agua, luz, gas, internet  // 📝 novedades de mesas: descuentos, clientes que se volaron, cortesías...
 var smsBanco=[];  // 📡 SMS del banco empujados desde el celular {texto,ts} → contraste automático
 var pelotasMesa={};  // 🐸 pelotas de bolirrana prestadas por mesa {mesaId:{qty,ts,uidNombre}}
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
@@ -732,6 +735,12 @@ function iniciarSync(){
     if(Array.isArray(v)){consumoEmpleados=v;return;}
     consumoEmpleados=Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;});
   });
+  fbOn('comprasCocina',function(v){
+    comprasCocina=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];
+    comprasCocina.sort(function(a,b){return (a.comprado?1:0)-(b.comprado?1:0)||b.ts-a.ts;});
+    if(tabActual==='cocina')render();
+  });
+  fbOn('serviciosPublicos',function(v){serviciosPublicos=v||{};});
   fbOn('novedades',function(v){
     novedades=v?Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;}):[];
     novedades.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
@@ -5813,6 +5822,204 @@ function guardarCombo(){
 }
 
 /* ═══════════════ GASTOS ═══════════════ */
+var _SERV_DEF={
+  agua:    {emoji:'💧',label:'Agua',    unidad:'m³', frecuencia:'bimestral'},
+  luz:     {emoji:'⚡',label:'Luz',     unidad:'kWh',frecuencia:'mensual'},
+  gas:     {emoji:'🔥',label:'Gas',     unidad:'m³', frecuencia:'mensual'},
+  internet:{emoji:'🌐',label:'Internet',unidad:'',   frecuencia:'mensual'}
+};
+function _servSeedAgua(){
+  // Históricos de la factura del Acueducto (AC 53 85H-10, bimestral)
+  if(serviciosPublicos.agua&&serviciosPublicos.agua.recibos&&Object.keys(serviciosPublicos.agua.recibos).length)return;
+  serviciosPublicos.agua={
+    diaRecibo:2,diaSuspension:22,frecuencia:'bimestral',
+    recibos:{
+      r1:{id:'r1',ts:new Date(2026,1,15).getTime(),periodo:'ENE-FEB 2026',valor:235892,consumo:17},
+      r2:{id:'r2',ts:new Date(2026,3,15).getTime(),periodo:'FEB-ABR 2026',valor:259979,consumo:19},
+      r3:{id:'r3',ts:new Date(2026,5,15).getTime(),periodo:'ABR-JUN 2026',valor:407369,consumo:31},
+      r4:{id:'r4',ts:new Date(2026,8,2).getTime(), periodo:'JUN-AGO 2026',valor:302920,consumo:21,limite:'2026-09-17',suspension:'2026-09-22'}
+    }
+  };
+  fbSet('serviciosPublicos/agua',serviciosPublicos.agua);
+}
+function _servSeedGas(){
+  // Factura Vanti (cuenta 62219304, uso comercial) — Jul-Ago 2026
+  if(serviciosPublicos.gas&&serviciosPublicos.gas.recibos&&Object.keys(serviciosPublicos.gas.recibos).length)return;
+  serviciosPublicos.gas={
+    diaRecibo:11,diaSuspension:25,frecuencia:'mensual',factor:0.90529,
+    recibos:{
+      g1:{id:'g1',ts:new Date(2026,7,11).getTime(),periodo:'JUL-AGO 2026',valor:1149540,consumo:417,limite:'2026-08-24',suspension:'2026-08-25',lecturaIni:15320,lecturaFin:15781}
+    },
+    lecturas:{
+      l1:{id:'l1',ts:new Date(2026,6,7).getTime(),fecha:'2026-07-07',valor:15320,uidNombre:'Vanti (factura)'},
+      l2:{id:'l2',ts:new Date(2026,7,7).getTime(),fecha:'2026-08-07',valor:15781,uidNombre:'Vanti (factura)'}
+    }
+  };
+  fbSet('serviciosPublicos/gas',serviciosPublicos.gas);
+}
+function _servSeedLuz(){
+  // Factura Enel (cliente 2692722-8, comercial) — Oct-Nov 2025
+  if(serviciosPublicos.luz&&serviciosPublicos.luz.recibos&&Object.keys(serviciosPublicos.luz.recibos).length)return;
+  serviciosPublicos.luz={
+    diaRecibo:8,diaSuspension:21,frecuencia:'mensual',factor:1,
+    recibos:{
+      e1:{id:'e1',ts:new Date(2025,10,8).getTime(),periodo:'OCT-NOV 2025',valor:460070,consumo:467,limite:'2025-11-19',suspension:'2025-11-21',lecturaIni:41335,lecturaFin:41802}
+    },
+    lecturas:{
+      k1:{id:'k1',ts:new Date(2025,9,4).getTime(),fecha:'2025-10-04',valor:41335,uidNombre:'Enel (factura)'},
+      k2:{id:'k2',ts:new Date(2025,10,4).getTime(),fecha:'2025-11-04',valor:41802,uidNombre:'Enel (factura)'}
+    }
+  };
+  fbSet('serviciosPublicos/luz',serviciosPublicos.luz);
+}
+function abrirServiciosPublicos(){
+  _servSeedAgua();
+  _servSeedGas();
+  _servSeedLuz();
+  if(!window._servSel)window._servSel='agua';
+  var sk=window._servSel;
+  var def=_SERV_DEF[sk];
+  var sv=serviciosPublicos[sk]||{};
+  var chips=Object.keys(_SERV_DEF).map(function(k){
+    var sel=k===sk;
+    return'<button onclick="window._servSel=\''+k+'\';abrirServiciosPublicos()" style="flex:1;background:'+(sel?'#06b6d4':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'#06b6d4':'var(--border)')+';border-radius:9px;padding:9px 0;font-weight:900;font-size:12px;cursor:pointer">'+_SERV_DEF[k].emoji+' '+_SERV_DEF[k].label+'</button>';
+  }).join('');
+  var recibos=sv.recibos?Object.values(sv.recibos).sort(function(a,b){return b.ts-a.ts;}):[];
+  var filas=recibos.map(function(r,i){
+    var ant=recibos[i+1];
+    var xU=r.consumo>0?Math.round(r.valor/r.consumo):null;
+    var xUant=ant&&ant.consumo>0?Math.round(ant.valor/ant.consumo):null;
+    var varTxt='';
+    if(ant){
+      var dv=r.valor-ant.valor;
+      varTxt='<span style="color:'+(dv>0?'#ef4444':'#22c55e')+';font-weight:800;font-size:10px">'+(dv>0?'▲':'▼')+' '+fmt(Math.abs(dv))+' vs anterior</span>';
+    }
+    var xUvar='';
+    if(xU!=null&&xUant!=null){
+      var dU=xU-xUant;
+      xUvar=' <span style="color:'+(dU>0?'#ef4444':'#22c55e')+';font-size:9.5px;font-weight:800">('+(dU>0?'+':'')+fmt(dU)+')</span>';
+    }
+    return'<div style="padding:7px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:800">'+esc(r.periodo||'')+'</span>'
+        +'<span style="font-weight:900;color:var(--gold);font-size:14px">'+fmt(r.valor)+'</span>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1px">'
+        +'<span style="color:var(--muted);font-size:10px">'+(r.consumo?r.consumo+' '+def.unidad+' · <b style="color:#06b6d4">'+fmt(xU)+'/'+def.unidad+'</b>'+xUvar:'sin consumo')+(r.suspension?' · corte '+r.suspension.slice(5):'')+'</span>'
+        +varTxt
+      +'</div>'
+      +(usuarioActivo&&usuarioActivo.rol==='admin'?'<div onclick="eliminarReciboServ(\''+sk+'\',\''+r.id+'\')" style="color:#ef4444;font-size:9.5px;cursor:pointer;margin-top:2px">✕ eliminar</div>':'')
+    +'</div>';
+  }).join('')||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin recibos registrados</div>';
+  var ult=recibos[0];
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:10px">🧾 Servicios públicos</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:12px">'+chips+'</div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:9px 12px;margin-bottom:10px">'
+      +'<div style="font-size:11px;font-weight:800;color:#06b6d4;margin-bottom:6px">'+def.emoji+' '+def.label+' · configuración</div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Día que llega el recibo</div><input class="inp inp-sm" id="sv-dia" type="number" min="1" max="31" value="'+(sv.diaRecibo||'')+'" placeholder="Ej: 2"/></div>'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Día de suspensión</div><input class="inp inp-sm" id="sv-susp" type="number" min="1" max="31" value="'+(sv.diaSuspension||'')+'" placeholder="Ej: 22"/></div>'
+        +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Frecuencia</div><select class="inp inp-sm" id="sv-frec"><option value="mensual"'+((sv.frecuencia||def.frecuencia)==='mensual'?' selected':'')+'>Mensual</option><option value="bimestral"'+((sv.frecuencia||def.frecuencia)==='bimestral'?' selected':'')+'>Bimestral</option></select></div>'
+      +'</div>'
+      +'<button onclick="guardarConfigServ(\''+sk+'\')" style="width:100%;background:#06b6d422;color:#06b6d4;border:1px solid #06b6d444;border-radius:8px;padding:7px;font-weight:800;font-size:11px;cursor:pointer;margin-top:8px">💾 Guardar configuración</button>'
+    +'</div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:9px 12px;margin-bottom:10px">'
+      +'<div style="font-size:11px;font-weight:800;color:#22c55e;margin-bottom:6px">➕ Registrar recibo nuevo</div>'
+      +'<input class="inp inp-sm" id="sv-per" placeholder="Periodo (Ej: AGO-OCT 2026)" style="margin-bottom:7px"/>'
+      +'<div style="display:flex;gap:8px;margin-bottom:7px">'
+        +'<input class="inp inp-sm money" id="sv-valor" type="text" inputmode="numeric" placeholder="Valor total" style="flex:1.4"/>'
+        +(def.unidad?'<input class="inp inp-sm" id="sv-cons" type="number" step="0.1" placeholder="Consumo '+def.unidad+'" style="flex:1"/>':'')
+      +'</div>'
+      +'<button onclick="registrarReciboServ(\''+sk+'\')" style="width:100%;background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px;font-weight:900;font-size:12px;cursor:pointer">💾 Registrar</button>'
+    +'</div>'
+    +(ult&&ult.consumo?'<div style="background:#06b6d412;border:1px solid #06b6d433;border-radius:9px;padding:7px 11px;margin-bottom:8px;font-size:11px">📐 Último precio: <b style="color:#06b6d4">'+fmt(Math.round(ult.valor/ult.consumo))+' por '+def.unidad+'</b> ('+esc(ult.periodo||'')+')</div>':'')
+    +(def.unidad?(function(){
+      var lecturas=sv.lecturas?Object.values(sv.lecturas).sort(function(a,b){return b.ts-a.ts;}):[];
+      var factor=sv.factor||1;
+      var tarifaEf=(ult&&ult.consumo)?(ult.valor/ult.consumo):null;
+      var filasL=lecturas.map(function(l,i){
+        var ant=lecturas[i+1];
+        var extra='';
+        if(ant&&l.valor>=ant.valor){
+          var bruto=l.valor-ant.valor;
+          var corr=Math.round(bruto*factor);
+          var dias=Math.max(1,Math.round((l.ts-ant.ts)/86400000));
+          extra='<div style="color:var(--muted);font-size:9.5px">'+bruto+' '+def.unidad+' brutos'+(factor!==1?' × '+factor+' = <b style="color:#22c55e">'+corr+' '+def.unidad+'</b>':'')+' en '+dias+' días'
+            +(tarifaEf?' · estimado <b style="color:var(--gold)">'+fmt(Math.round(corr*tarifaEf))+'</b>':'')+'</div>';
+        }
+        return'<div style="padding:5px 0;border-bottom:1px solid var(--border)">'
+          +'<div style="display:flex;justify-content:space-between;font-size:11.5px"><span style="font-weight:700">📏 '+esc(l.fecha||'')+'</span><span style="font-weight:900;color:#06b6d4">'+l.valor+'</span></div>'
+          +extra
+          +'<div style="color:var(--muted);font-size:9px">'+esc(l.uidNombre||'')
+          +(usuarioActivo&&usuarioActivo.rol==='admin'?' · <span onclick="eliminarLecturaServ(\''+sk+'\',\''+l.id+'\')" style="color:#ef4444;cursor:pointer">✕</span>':'')+'</div>'
+        +'</div>';
+      }).join('');
+      return'<div style="background:var(--bg);border-radius:10px;padding:9px 12px;margin-bottom:10px">'
+        +'<div style="font-size:11px;font-weight:800;color:#a855f7;margin-bottom:2px">📏 Lecturas del medidor (tu control)</div>'
+        +'<div style="color:var(--muted);font-size:9.5px;margin-bottom:7px">Anota la lectura del medidor cuando quieras: el sistema calcula el consumo'+(factor!==1?' (con factor de corrección '+factor+')':'')+' y estima el valor con la tarifa del último recibo — así verificas que no se equivoquen.</div>'
+        +'<div style="display:flex;gap:7px;margin-bottom:7px">'
+          +'<input class="inp inp-sm" id="sv-lect" type="number" step="1" placeholder="Lectura (Ej: 15900)" style="flex:1"/>'
+          +'<button onclick="guardarLecturaServ(\''+sk+'\')" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:0 14px;font-weight:900;font-size:12px;cursor:pointer">📏</button>'
+        +'</div>'
+        +(filasL||'<div style="color:var(--dim);font-size:11px;text-align:center;padding:4px">Sin lecturas anotadas</div>')
+      +'</div>';
+    })():'')
+    +'<div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:4px">📜 Historial</div>'
+    +filas
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
+}
+function guardarConfigServ(sk){
+  if(!serviciosPublicos[sk])serviciosPublicos[sk]={};
+  serviciosPublicos[sk].diaRecibo=parseInt((document.getElementById('sv-dia')||{}).value)||null;
+  serviciosPublicos[sk].diaSuspension=parseInt((document.getElementById('sv-susp')||{}).value)||null;
+  serviciosPublicos[sk].frecuencia=(document.getElementById('sv-frec')||{}).value||'mensual';
+  fbSet('serviciosPublicos/'+sk,serviciosPublicos[sk]);
+  showToast('💾 Configuración de '+_SERV_DEF[sk].label+' guardada','#06b6d4');
+}
+function registrarReciboServ(sk){
+  var per=((document.getElementById('sv-per')||{}).value||'').trim();
+  var valor=moneyVal('sv-valor')||0;
+  var cons=parseFloat((document.getElementById('sv-cons')||{}).value)||0;
+  if(!per||valor<=0){alert('Escribe el periodo y el valor del recibo.');return;}
+  if(!serviciosPublicos[sk])serviciosPublicos[sk]={};
+  if(!serviciosPublicos[sk].recibos)serviciosPublicos[sk].recibos={};
+  var id='r'+Date.now();
+  serviciosPublicos[sk].recibos[id]={id:id,ts:Date.now(),periodo:per,valor:valor,consumo:cons||null};
+  fbSet('serviciosPublicos/'+sk+'/recibos/'+id,serviciosPublicos[sk].recibos[id]);
+  showToast('🧾 '+_SERV_DEF[sk].emoji+' '+esc(per)+': '+fmt(valor)+(cons?' · '+fmt(Math.round(valor/cons))+'/'+_SERV_DEF[sk].unidad:''),'#22c55e');
+  abrirServiciosPublicos();
+}
+function guardarLecturaServ(sk){
+  var v=parseFloat((document.getElementById('sv-lect')||{}).value);
+  if(!v&&v!==0){alert('Escribe la lectura del medidor.');return;}
+  if(!serviciosPublicos[sk])serviciosPublicos[sk]={};
+  if(!serviciosPublicos[sk].lecturas)serviciosPublicos[sk].lecturas={};
+  var lecturas=Object.values(serviciosPublicos[sk].lecturas);
+  var ultima=lecturas.sort(function(a,b){return b.ts-a.ts;})[0];
+  if(ultima&&v<ultima.valor){
+    if(!confirm('⚠️ La lectura ('+v+') es MENOR que la última anotada ('+ultima.valor+').\n¿Seguro? Los medidores solo suben.'))return;
+  }
+  var hoyF=new Date();
+  var fecha=hoyF.getFullYear()+'-'+('0'+(hoyF.getMonth()+1)).slice(-2)+'-'+('0'+hoyF.getDate()).slice(-2);
+  var id='l'+Date.now();
+  serviciosPublicos[sk].lecturas[id]={id:id,ts:Date.now(),fecha:fecha,valor:v,uidNombre:usuarioActivo?usuarioActivo.nombre:''};
+  fbSet('serviciosPublicos/'+sk+'/lecturas/'+id,serviciosPublicos[sk].lecturas[id]);
+  showToast('📏 Lectura anotada: '+v,'#a855f7');
+  abrirServiciosPublicos();
+}
+function eliminarLecturaServ(sk,lid){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  if(serviciosPublicos[sk]&&serviciosPublicos[sk].lecturas)delete serviciosPublicos[sk].lecturas[lid];
+  fbSet('serviciosPublicos/'+sk+'/lecturas/'+lid,null);
+  abrirServiciosPublicos();
+}
+function eliminarReciboServ(sk,rid){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  if(!confirm('¿Eliminar este recibo del historial?'))return;
+  if(serviciosPublicos[sk]&&serviciosPublicos[sk].recibos)delete serviciosPublicos[sk].recibos[rid];
+  fbSet('serviciosPublicos/'+sk+'/recibos/'+rid,null);
+  abrirServiciosPublicos();
+}
 function renderGastos(){
   var hoy=gastosTurno();
   var totalH=hoy.reduce(function(a,g){return a+g.valor;},0);
@@ -5842,6 +6049,7 @@ function renderGastos(){
   }
 
   var form='<div class="card2 mb12">'
+    +((usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))?'<button onclick="abrirServiciosPublicos()" style="width:100%;background:#06b6d418;color:#06b6d4;border:1px solid #06b6d444;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:12px">🧾 Servicios públicos — agua · luz · gas · internet</button>':'')
     +'<div style="color:var(--gold);font-weight:800;font-size:14px;margin-bottom:12px">📋 Registrar gasto / compra</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Concepto *</div>'
@@ -8601,6 +8809,38 @@ function histTodasVentas(){
     +'</div>';
   }).join('');
 }
+function agregarCompraCocina(){
+  if(!usuarioActivo||['admin','subadmin','cajero','cocinero'].indexOf(usuarioActivo.rol)<0)return;
+  var i=document.getElementById('cc-item');
+  var txt=(i&&i.value||'').trim();
+  if(!txt)return;
+  fbPush('comprasCocina',{ts:Date.now(),texto:txt,uidNombre:usuarioActivo.nombre,comprado:false});
+  if(i)i.value='';
+  showToast('🛒 Anotado: '+esc(txt),'#f97316');
+}
+function toggleCompraCocina(k){
+  if(!usuarioActivo||['admin','subadmin','cajero','cocinero'].indexOf(usuarioActivo.rol)<0)return;
+  var c=comprasCocina.find(function(x){return x._fbkey===k;});
+  if(!c)return;
+  var nuevo=!c.comprado;
+  fbSet('comprasCocina/'+k+'/comprado',nuevo);
+  fbSet('comprasCocina/'+k+'/compradoPor',nuevo?usuarioActivo.nombre:null);
+  c.comprado=nuevo;c.compradoPor=nuevo?usuarioActivo.nombre:null;
+  render();
+}
+function eliminarCompraCocina(k){
+  if(!usuarioActivo||(usuarioActivo.rol!=='admin'&&usuarioActivo.rol!=='subadmin'))return;
+  fbSet('comprasCocina/'+k,null);
+  comprasCocina=comprasCocina.filter(function(x){return x._fbkey!==k;});
+  render();
+}
+function limpiarComprasListas(){
+  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;
+  if(!confirm('¿Borrar todos los ítems ya comprados de la lista?'))return;
+  comprasCocina.filter(function(c){return c.comprado;}).forEach(function(c){fbSet('comprasCocina/'+c._fbkey,null);});
+  comprasCocina=comprasCocina.filter(function(c){return !c.comprado;});
+  render();
+}
 function renderCocina(){
   // Collect all pending comida items across all mesas
   var pendientes=[];
@@ -8655,7 +8895,37 @@ function renderCocina(){
     return(r.item.qty-(cocinaEntregados[r.key]||0))>0;
   }).length;
 
+  var puedeCompras=usuarioActivo&&['admin','subadmin','cajero','cocinero'].indexOf(usuarioActivo.rol)>=0;
+  var comprasCard=(function(){
+    var pend=comprasCocina.filter(function(c){return !c.comprado;});
+    var listas=comprasCocina.filter(function(c){return c.comprado;});
+    var fila=function(c){
+      return'<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--border)">'
+        +(puedeCompras?'<span onclick="toggleCompraCocina(\''+c._fbkey+'\')" style="font-size:19px;cursor:pointer">'+(c.comprado?'☑️':'⬜')+'</span>':'<span style="font-size:19px">'+(c.comprado?'☑️':'⬜')+'</span>')
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:700;'+(c.comprado?'text-decoration:line-through;color:var(--muted)':'')+'">'+esc(c.texto)+'</div>'
+          +'<div style="color:var(--muted);font-size:9.5px">'+esc(c.uidNombre||'')+' · '+fmtTime(c.ts)+(c.comprado&&c.compradoPor?' · ✔ compró '+esc(c.compradoPor):'')+'</div>'
+        +'</div>'
+        +(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')?'<span onclick="eliminarCompraCocina(\''+c._fbkey+'\')" style="color:#ef4444;cursor:pointer;font-size:14px">✕</span>':'')
+      +'</div>';
+    };
+    return'<div class="card" style="margin-bottom:14px;border-color:#f9731644">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<div style="font-weight:900;font-size:14px;color:#f97316">🛒 Falta por comprar</div>'
+        +(pend.length?'<span style="background:#f9731622;color:#f97316;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:900">'+pend.length+' pendiente'+(pend.length!==1?'s':'')+'</span>':'<span style="color:#22c55e;font-size:11px;font-weight:800">✔ al día</span>')
+      +'</div>'
+      +(puedeCompras
+        ?'<div style="display:flex;gap:7px;margin-bottom:8px">'
+          +'<input class="inp" id="cc-item" placeholder="Ej: 5 kg de carne, aceite, servilletas..." style="flex:1" onkeydown="if(event.key===\'Enter\')agregarCompraCocina()"/>'
+          +'<button onclick="agregarCompraCocina()" style="background:#f97316;color:#fff;border:none;border-radius:9px;padding:0 16px;font-weight:900;font-size:13px;cursor:pointer">＋</button>'
+        +'</div>'
+        :'<div style="color:var(--muted);font-size:10.5px;margin-bottom:6px">Solo cocinero, cajero y administración pueden anotar.</div>')
+      +(comprasCocina.length?pend.map(fila).join('')+listas.map(fila).join(''):'<div style="color:var(--dim);text-align:center;padding:8px;font-size:12px">Nada anotado — la cocina está completa 👌</div>')
+      +(listas.length&&usuarioActivo&&usuarioActivo.rol==='admin'?'<div onclick="limpiarComprasListas()" style="color:var(--muted);font-size:10.5px;text-align:center;padding-top:7px;cursor:pointer">🧹 Borrar los '+listas.length+' ya comprados</div>':'')
+    +'</div>';
+  })();
   return'<div>'
+    +comprasCard
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
       +'<div><div style="color:var(--gold);font-weight:900;font-size:16px">👨‍🍳 Cocina</div>'
       +'<div style="color:var(--muted);font-size:11px">Platos de la categoría Comidas</div></div>'
