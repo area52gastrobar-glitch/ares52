@@ -239,6 +239,7 @@ select.inp{cursor:pointer}
 #sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite}
 @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes alertaMesaPulso{0%,100%{opacity:1}50%{opacity:.55}}
 
 /* ── MISC ── */
 .alert-box{border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px}
@@ -1184,11 +1185,40 @@ function dimMesa(forma,ori,sz){
   if(forma==='cuadrada')return{w:s,h:s,r:'10px'};
   return ori==='vertical'?{w:Math.round(s*0.82),h:Math.round(s*1.27),r:'10px'}:{w:Math.round(s*1.34),h:Math.round(s*0.82),r:'10px'};
 }
+function _mesaSinPedirMin(mid){
+  // Minutos desde el último producto agregado a la mesa (solo mesas con pedido abierto)
+  if(!pedidos[mid]||!pedidos[mid].length)return null;
+  var logs=pedidoLog[mid]||[];
+  var ult=0;
+  logs.forEach(function(l){if(l.ts>ult)ult=l.ts;});
+  if(!ult)return null;
+  return Math.floor((Date.now()-ult)/60000);
+}
+function _nivelAlertaMesa(min){
+  if(min==null)return null;
+  if(min>=120)return{c:'#ef4444',emoji:'🚨',txt:'+2 h sin pedir',pulso:true,nivel:3};
+  if(min>=60)return{c:'#ef4444',emoji:'🔴',txt:Math.floor(min/60)+' h '+(min%60)+' m sin pedir',pulso:true,nivel:2};
+  if(min>=30)return{c:'#f5a623',emoji:'⏰',txt:min+' min sin pedir',pulso:false,nivel:1};
+  return null;
+}
+if(!window._alertaMesaTimer){window._alertaMesaTimer=setInterval(function(){if(typeof tabActual!=='undefined'&&tabActual==='mesas'&&!document.hidden)render();},60000);}
 function renderMesas(){
   var zona=ZONAS.find(function(z){return z.id===zonaActual;});
   var ms=mesas.filter(function(m){return m.zona===zonaActual;});
   var puedeEditar=usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='cajero');
 
+  var _alertasMesas=mesas.filter(function(m){return pedidos[m.id]&&pedidos[m.id].length;}).map(function(m){
+    var min=_mesaSinPedirMin(m.id);
+    var al=_nivelAlertaMesa(min);
+    return al?{m:m,min:min,al:al}:null;
+  }).filter(Boolean).sort(function(a,b){return b.min-a.min;});
+  var alertaBanner=_alertasMesas.length?'<div style="background:'+(_alertasMesas[0].al.nivel>=2?'#ef444414':'#f5a62314')+';border:1px solid '+(_alertasMesas[0].al.nivel>=2?'#ef444455':'#f5a62355')+';border-radius:10px;padding:8px 12px;margin-bottom:10px'+(_alertasMesas[0].al.nivel>=2?';animation:alertaMesaPulso 1.6s ease-in-out infinite':'')+'">'
+    +'<div style="font-size:11.5px;font-weight:900;color:'+(_alertasMesas[0].al.nivel>=2?'#ef4444':'#f5a623')+';margin-bottom:2px">⏰ Mesas sin pedir hace rato — ¡que las atiendan!</div>'
+    +'<div style="font-size:11px;color:var(--text)">'+_alertasMesas.map(function(x){
+      var t=x.min>=60?Math.floor(x.min/60)+' h '+(x.min%60)+' m':x.min+' min';
+      return'<span onclick="var el=document.getElementById(\'mn-'+x.m.id+'\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'center\'});" style="display:inline-block;background:'+x.al.c+'22;color:'+x.al.c+';border-radius:7px;padding:2px 8px;margin:2px 4px 2px 0;font-weight:800;cursor:pointer">'+x.al.emoji+' '+esc(x.m.nombre||('Mesa '+x.m.num))+' · '+t+'</span>';
+    }).join('')+'</div>'
+  +'</div>':'';
   var zonaBtns=ZONAS.map(function(z){
     var ocp=mesas.filter(function(m){return m.zona===z.id&&pedidos[m.id]&&pedidos[m.id].length>0;}).length;
     var act=z.id===zonaActual;
@@ -1234,6 +1264,11 @@ function renderMesas(){
       +'<div style="color:var(--muted);font-size:10px">👤'+m.cap+'</div>'
       +(its>0?'<div style="color:'+c+';font-size:10px;font-weight:700">'+its+' itm</div>':'')
       +(pelotasMesa[m.id]?'<div style="position:absolute;top:-7px;right:-7px;background:#22c55e;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:900;box-shadow:0 0 6px #22c55e88">🐸'+pelotasMesa[m.id].qty+'</div>':'')
+      +(function(){
+        var al=_nivelAlertaMesa(_mesaSinPedirMin(m.id));
+        if(!al)return'';
+        return'<div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);background:'+al.c+';color:#fff;border-radius:9px;padding:1px 7px;font-size:9px;font-weight:900;white-space:nowrap;box-shadow:0 0 8px '+al.c+'99'+(al.pulso?';animation:alertaMesaPulso 1.2s ease-in-out infinite':'')+'">'+al.emoji+' '+(al.nivel>=3?'+2h':al.nivel===2?Math.floor(_mesaSinPedirMin(m.id)/60)+'h'+(_mesaSinPedirMin(m.id)%60)+'m':_mesaSinPedirMin(m.id)+'m')+'</div>';
+      })()
       +'</div>';
   }).join('');
 
@@ -1312,6 +1347,7 @@ function renderMesas(){
   }
 
   return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vistaToggle+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
+    +alertaBanner
     +'<div class="flex">'+zonaBtns+'</div>'
     +ctrlBtns+'</div>'
     +(modoEdicion?'<div class="alert-box alert-gold mb12">💡 Arrastra para mover · Doble clic para editar nombre, forma o eliminar</div>':'')
@@ -3839,6 +3875,15 @@ function confirmarCobro(){
 var MODO_IMPRESION=(localStorage.getItem('a52_modo_impresion')||'estacion');  // por dispositivo: 'estacion' = envía a la estación · 'local' = imprime directo en ESTE equipo
 function setModoImpresion(m){MODO_IMPRESION=m;localStorage.setItem('a52_modo_impresion',m);if(tabActual==='admin')render();showToast(m==='local'?'🖨️ Este equipo imprime DIRECTO':'📡 Este equipo ENVÍA a la estación','#38bdf8');}
 
+function _promoNotaTicket(it){
+  // Para ítems con promo congelada: devuelve ' PROMO (antes $X)' con el precio normal
+  if(!it||!it.precioPromo)return'';
+  var p=menu.find(function(m){return m.id==it.pid;});
+  if(!p)return' PROMO';
+  var normal=it.cubeta?(p.cubeta||((p.precio||0)*5)):(it.variantePrecio||p.precio||0);
+  if(normal<=it.precioPromo)return' PROMO';
+  return' PROMO (antes '+fmt(normal).replace(/\u00A0/g,' ')+')';
+}
 function enviarAImpresora(mesa,ped,total,pagosList,abonos){
   // Construir items en formato simple para la estación
   var items=(ped||[]).map(function(it){
@@ -3848,7 +3893,7 @@ function enviarAImpresora(mesa,ped,total,pagosList,abonos){
     else if(it.isCubetazoMix){nombre=(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
     else{
       var p=menu.find(function(m){return m.id==it.pid;});
-      nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'');
+      nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'')+(it.es2x1Gratis?' [2x1 GRATIS]':'')+_promoNotaTicket(it);
       pr=precioItem(it);
     }
     return {nombre:nombre,qty:it.qty||1,total:pr*(it.qty||1)};
@@ -11927,7 +11972,7 @@ function imprimirPrecuenta(){
       if(it.isCustom){nombre='✏️ '+(it.customNombre||'');pr=it.customPrecio||0;}
       else if(it.isCombo){nombre='🎁 '+(it.comboNombre||'Combo');pr=it.comboPrecio||0;}
       else if(it.isCubetazoMix){nombre='🪣 '+(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
-      else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'');pr=precioItem(it);}
+      else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' x5':'')+(it.es2x1Gratis?' [2x1 GRATIS]':'')+_promoNotaTicket(it);pr=precioItem(it);}
       return {nombre:nombre,qty:it.qty||1,total:pr*(it.qty||1)};
     });
     var r=ref('impresion');
@@ -11942,7 +11987,7 @@ function imprimirPrecuenta(){
     if(it.isCustom){nombre='✏️ '+esc(it.customNombre||'');pr=it.customPrecio||0;}
     else if(it.isCombo){nombre='🎁 '+esc(it.comboNombre||'');pr=it.comboPrecio||0;}
     else if(it.isCubetazoMix){nombre='🪣 '+(it.cubMixNombre||'Cubetazo mixto');pr=it.cubMixPrecio||0;}
-    else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+esc(it.varianteNombre)+')':'')+(it.cubeta?' x5':'')+(it.es2x1Gratis?' [2x1 GRATIS]':'');pr=precioItem(it);}
+    else{var p=menu.find(function(m){return m.id==it.pid;});nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+esc(it.varianteNombre)+')':'')+(it.cubeta?' x5':'')+(it.es2x1Gratis?' <b>[2x1 GRATIS]</b>':'');var notaPre=_promoNotaTicket(it);if(notaPre)nombre+='<br><span style="font-size:.82em">🏷️'+esc(notaPre)+'</span>';pr=precioItem(it);}
     return'<tr><td>'+nombre+'</td><td align="center">'+it.qty+'</td><td align="right">'+fmt(pr*it.qty)+'</td></tr>';
   }).join('');
   var w=window.open('','_blank','width=340,height=600');
@@ -12249,19 +12294,24 @@ function imprimirTicket(mesa,ped,total,fpId,abonos){
   var fp=pagosList?null:FPAGO.find(function(f){return f.id===fpId;});
   var zona=ZONAS.find(function(z){return z.id===mesa.zona;});
   var rows=ped.map(function(it){
-    var nombre,pr;
+    var nombre,pr,nota='';
     if(it.isCustom){
       nombre=esc(it.customNombre||'Personalizado');
       pr=it.customPrecio||0;
     } else if(it.isCombo){
       nombre=it.comboEmoji+' '+esc(it.comboNombre||'Combo');
       pr=it.comboPrecio||0;
+    } else if(it.isCubetazoMix){
+      nombre='🪣 '+esc(it.cubMixNombre||'Cubetazo mixto');
+      pr=it.cubMixPrecio||0;
     } else {
-      var p=menu.find(function(m){return m.id===it.pid;});
-      nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||'?')+(it.cubeta?' x5':'');
-      pr=it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0);
+      var p=menu.find(function(m){return m.id==it.pid;});
+      nombre=(it.cubeta?'[Cubetazo] ':'')+esc((p&&p.nombre)||it.nombre||'?')+(it.varianteNombre?' ('+esc(it.varianteNombre)+')':'')+(it.cubeta?' x5':'')+(it.es2x1Gratis?' <b>[2x1 GRATIS]</b>':'');
+      pr=precioItem(it);
+      var notaP=_promoNotaTicket(it);
+      if(notaP)nota='<br><span style="font-size:.82em">🏷️'+esc(notaP)+'</span>';
     }
-    return'<tr><td>'+nombre+'</td><td align="center">'+it.qty+'</td><td align="right">'+fmt(pr*it.qty)+'</td></tr>';
+    return'<tr><td>'+nombre+nota+'</td><td align="center">'+it.qty+'</td><td align="right">'+fmt(pr*it.qty)+'</td></tr>';
   }).join('');
   var w=window.open('','_blank','width=340,height=700');
   var fs=ticketConfig.fontSize||14;
