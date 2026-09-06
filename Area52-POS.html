@@ -5794,10 +5794,7 @@ function renderCombos(){
         +'</optgroup>':'');
 
     // Costo aproximado
-    var costoAprox=(_comboTemp.ingredientes||[]).reduce(function(a,ing){
-      var p=menu.find(function(m){return m.id===ing.prodId;});
-      return a+(p?p.precio*ing.cantidad:0);
-    },0);
+    var costoAprox=(_comboTemp.ingredientes||[]).reduce(function(a,ing){return a+_precioIngCombo(ing);},0);
     var precio=parseInt(c.precio)||0;
 
     formHtml='<div class="card2" style="border-color:var(--accent)44;margin-bottom:16px">'
@@ -5941,6 +5938,28 @@ function _capturarCombo(){
   var e=document.getElementById('cb-emoji');if(e)_comboTemp.emoji=e.value;
 }
 
+function _precioIngCombo(ing){
+  // Precio de lista real de una línea del combo (para el costo aproximado)
+  if(ing.ingId!=null)return 0;   // insumos de cocina no tienen precio de venta
+  var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+  if(ing.tipo==='categoria'){
+    // Promedio de la categoría como aproximación
+    var cat=menu.filter(function(m){return m.cat===ing.cat||m.subcat===ing.cat;});
+    if(!cat.length)return 0;
+    var prom=cat.reduce(function(a,m){return a+(m.precio||0);},0)/cat.length;
+    return Math.round(prom)*ing.cantidad;
+  }
+  if(!p)return 0;
+  if(ing.varianteNombre){
+    var v=(p.variantes||[]).find(function(x){return x.nombre===ing.varianteNombre;});
+    if(v&&v.precio)return v.precio*ing.cantidad;      // 🎯 precio de la variante fijada (Alitas x16 = 40.000)
+  }
+  if(ing.varElegir){
+    var precios=(p.variantes||[]).map(function(x){return x.precio||0;}).filter(Boolean);
+    if(precios.length)return Math.min.apply(null,precios)*ing.cantidad;  // el menor, como piso
+  }
+  return (p.precio||0)*ing.cantidad;
+}
 function abrirVarianteIngCombo(prodId,cant){
   var p=menu.find(function(m){return m.id===prodId;});if(!p)return;
   var btns=(p.variantes||[]).map(function(v,vi){
@@ -5965,7 +5984,7 @@ function elegirVarianteIngCombo(prodId,vi,cant){
   }else{
     var v=(p.variantes||[])[vi];if(!v)return;
     _comboTemp.ingredientes.push({tipo:'producto',prodId:Number(prodId),cantidad:cant,
-      varianteNombre:v.nombre,varianteUnd:parseInt(v.und)||1,
+      varianteNombre:v.nombre,varianteUnd:parseInt(v.und)||1,variantePrecio:v.precio||0,
       nombre:p.nombre+' ('+v.nombre+')',emoji:p.emoji,und:p.und||'und'});
   }
   closeModal2();
@@ -6044,10 +6063,7 @@ function actualizarInfoCombo(){
   var costoEl=document.getElementById('cb-costo');
   var ahorroEl=document.getElementById('cb-ahorro');
   if(costoEl){
-    var costoAprox=_comboTemp.ingredientes.reduce(function(a,ing){
-      var p=menu.find(function(m){return m.id===ing.prodId;});
-      return a+(p?p.precio*ing.cantidad:0);
-    },0);
+    var costoAprox=_comboTemp.ingredientes.reduce(function(a,ing){return a+_precioIngCombo(ing);},0);
     costoEl.textContent=fmt(costoAprox);
     if(ahorroEl)ahorroEl.textContent=fmt(Math.max(0,costoAprox-precio));
   }
