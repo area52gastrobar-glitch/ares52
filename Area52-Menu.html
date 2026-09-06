@@ -187,8 +187,16 @@ body.cliente-mode #doc{
 
 /* Items grid */
 .items-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:2px 20px;
-  margin-bottom:4px;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 20px;
+  margin-bottom:4px;width:100%;
+}
+.menu-item{min-width:0;}
+.item-name{overflow-wrap:break-word;min-width:0;}
+/* 📱 En celular: una sola columna para que todo se vea */
+@media(max-width:640px){
+  .items-grid{grid-template-columns:1fr;gap:2px 0;}
+  .item-name{font-size:17px;}
+  .item-price{font-size:15px;}
 }
 .menu-item{
   display:flex;align-items:baseline;gap:6px;
