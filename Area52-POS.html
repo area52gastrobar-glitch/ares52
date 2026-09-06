@@ -4413,8 +4413,8 @@ function renderInventario(){
           +'</div>'
           +(usuarioActivo&&(usuarioActivo.rol==='admin')
             ?'<div style="display:flex;flex-direction:column;gap:5px">'
-              +'<button data-act="ing-recuperar" data-iid="'+ing.id+'" style="background:#22c55e;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer">♻️ Recuperar</button>'
-              +'<button data-act="ing-del" data-iid="'+ing.id+'" style="background:#ef4444;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer">🗑 Eliminar</button>'
+              +'<button onclick="recuperarIngrediente(\''+String(ing.id).replace(/'/g,'')+'\')" style="background:#22c55e;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer">♻️ Recuperar</button>'
+              +'<button onclick="eliminarIngrediente(\''+String(ing.id).replace(/'/g,'')+'\')" style="background:#ef4444;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer">🗑 Eliminar</button>'
             +'</div>'
             :'')
         +'</div>';
@@ -5140,12 +5140,12 @@ function abrirEditIngrediente(iid){
 }
 
 function eliminarIngrediente(iid){
-  var ing=ingredientes.find(function(x){return x.id===iid;});
-  if(!ing)return;
+  var ing=ingredientes.find(function(x){return String(x.id)===String(iid);});
+  if(!ing){alert('No encontré ese insumo (id '+iid+'). Recarga la página e intenta de nuevo.');return;}
   var usanReceta=menu.filter(function(m){return m.receta&&m.receta.some(function(r){return String(r.pid)===String(iid);});});
   var aviso=usanReceta.length?'\n\n⚠️ OJO: lo usan las recetas de: '+usanReceta.map(function(m){return m.nombre;}).join(', ')+'. Esas recetas quedarán con un ingrediente roto.':'';
-  if(!confirm('¿Eliminar el ingrediente "'+ing.nombre+'"?'+aviso))return;
-  ingredientes=ingredientes.filter(function(x){return x.id!==iid;});
+  if(!confirm('¿Eliminar el ingrediente "'+(ing.nombre||'(sin nombre · dañado)')+'"?'+aviso))return;
+  ingredientes=ingredientes.filter(function(x){return String(x.id)!==String(iid);});
   var obj={};ingredientes.forEach(function(i){obj[i.id]=i;});
   fbSet('ingredientes',ingredientes.length?obj:null);
   closeModal2();
@@ -12652,8 +12652,7 @@ document.addEventListener('click',function(e){
     if(act2==='ing-plus'){cambiarStock('i',ing.id,1,'✏️ Ajuste manual (+1)');}
     else if(act2==='ing-minus'){cambiarStock('i',ing.id,-1,'✏️ Ajuste manual (−1)');}
     else if(act2==='ing-edit'){abrirEditIngrediente(iid);}
-    else if(act2==='ing-del'){eliminarIngrediente(iid);}
-    else if(act2==='ing-recuperar'){recuperarIngrediente(iid);}
+
     render();return;
   }
   // Quick value buttons in item personalizado
