@@ -5487,8 +5487,10 @@ function agregarComboAPedido(cbId){
 
   // All specific products - check stock and add directly
   var ok=cb.ingredientes.every(function(ing){
+    if(ing.prodId==null)return true;
     var p=menu.find(function(m){return m.id===ing.prodId;});
-    return p&&(p.sinStock||p.stock>=ing.cantidad);
+    var necesita=ing.cantidad*(parseInt(ing.varianteUnd)||1);
+    return p&&(p.sinStock||ventaSinStock||p.stock>=necesita);
   });
   if(!ok){alert('Stock insuficiente para este combo.');return;}
   confirmarComboEnPedido(cb, []);
@@ -5940,6 +5942,36 @@ function _capturarCombo(){
   var e=document.getElementById('cb-emoji');if(e)_comboTemp.emoji=e.value;
 }
 
+function abrirVarianteIngCombo(prodId,cant){
+  var p=menu.find(function(m){return m.id===prodId;});if(!p)return;
+  var btns=(p.variantes||[]).map(function(v,vi){
+    return'<button onclick="elegirVarianteIngCombo('+prodId+','+vi+','+cant+')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:12px 15px;margin-bottom:8px;cursor:pointer;color:var(--text)">'
+      +'<span style="font-weight:800;font-size:14px">'+(p.emoji||'🍽')+' '+esc(v.nombre)+'</span>'
+      +'<span style="color:var(--muted);font-size:11px">'+(v.und||1)+' und'+(v.precio?' · '+fmt(v.precio).replace(/\u00A0/g,' '):'')+'</span>'
+    +'</button>';
+  }).join('');
+  modal2('<div style="text-align:center;margin-bottom:10px">'
+      +'<div style="font-size:24px">'+(p.emoji||'🍽')+'</div>'
+      +'<div style="font-weight:800;font-size:15px">'+esc(p.nombre)+' al combo'+(cant>1?' (×'+cant+')':'')+'</div>'
+      +'<div style="color:var(--muted);font-size:11.5px;margin-top:3px">¿De qué tamaño va en este combo?</div>'
+    +'</div>'
+    +btns
+    +'<button onclick="elegirVarianteIngCombo('+prodId+',-1,'+cant+')" style="width:100%;background:#a855f715;border:1px dashed #a855f766;border-radius:11px;padding:11px;margin-top:4px;cursor:pointer;color:#a855f7;font-weight:800;font-size:12.5px">🎚 Que el cliente elija el tamaño al pedirlo</button>');
+}
+function elegirVarianteIngCombo(prodId,vi,cant){
+  var p=menu.find(function(m){return m.id==prodId;});if(!p)return;
+  if(vi<0){
+    _comboTemp.ingredientes.push({tipo:'producto',prodId:Number(prodId),cantidad:cant,varElegir:true,
+      nombre:p.nombre,emoji:p.emoji,und:p.und||'und'});
+  }else{
+    var v=(p.variantes||[])[vi];if(!v)return;
+    _comboTemp.ingredientes.push({tipo:'producto',prodId:Number(prodId),cantidad:cant,
+      varianteNombre:v.nombre,varianteUnd:parseInt(v.und)||1,
+      nombre:p.nombre+' ('+v.nombre+')',emoji:p.emoji,und:p.und||'und'});
+  }
+  closeModal2();
+  render();
+}
 function agregarIngCombo(){
   _capturarCombo();
   var prodSel=document.getElementById('cb-prod-sel');
@@ -5969,20 +6001,16 @@ function agregarIngCombo(){
       var prodId=parseInt(prodVal.replace('prod:',''));
       if(!prodId){alert('Selecciona un producto válido.');return;}
       var p=menu.find(function(m){return m.id===prodId;});
-      var varElegir=false;
       if(p&&p.variantes&&p.variantes.length){
-        varElegir=confirm('🎚 "'+p.nombre+'" tiene tamaños ('+p.variantes.map(function(v){return v.nombre;}).join(' · ')+').\n\n¿El CLIENTE elige el tamaño al pedir el combo?\n\nAceptar = a elección del cliente\nCancelar = tamaño base fijo');
+        // 🎚 El producto tiene tamaños: TÚ eliges cuál va en el combo (o lo dejas a elección del cliente)
+        abrirVarianteIngCombo(prodId,cant);
+        return;
       }
-      if(varElegir){
-        _comboTemp.ingredientes.push({tipo:'producto',prodId:prodId,cantidad:cant,varElegir:true,
-          nombre:p.nombre,emoji:p.emoji,und:p.und||'und'});
-      } else {
-        var existe=_comboTemp.ingredientes.findIndex(function(i){return i.tipo==='producto'&&i.prodId===prodId&&!i.varElegir;});
-        if(existe>=0){_comboTemp.ingredientes[existe].cantidad+=cant;}
-        else{
-          _comboTemp.ingredientes.push({tipo:'producto',prodId:prodId,cantidad:cant,
-            nombre:p?p.nombre:'?',emoji:p?p.emoji:'?',und:p?p.und:'und'});
-        }
+      var existe=_comboTemp.ingredientes.findIndex(function(i){return i.tipo==='producto'&&i.prodId===prodId&&!i.varElegir&&!i.varianteNombre;});
+      if(existe>=0){_comboTemp.ingredientes[existe].cantidad+=cant;}
+      else{
+        _comboTemp.ingredientes.push({tipo:'producto',prodId:prodId,cantidad:cant,
+          nombre:p?p.nombre:'?',emoji:p?p.emoji:'?',und:p?p.und:'und'});
       }
     }
   } else {
