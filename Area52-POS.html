@@ -690,7 +690,16 @@ function iniciarSync(){
   fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
-  fbOn('ingredientes',function(v){ingredientes=v?Object.values(v):[];ingredientes.forEach(function(i){if(i.stock==null||isNaN(parseInt(i.stock)))i.stock=0;else i.stock=parseInt(i.stock);});if(tabActual==='inventario'||tabActual==='cocina')render();});
+  fbOn('ingredientes',function(v){
+    ingredientes=v?Object.keys(v).map(function(k){
+      var o=v[k];
+      if(typeof o!=='object'||o===null)o={stock:parseInt(o)||0};   // nodo aún más dañado (solo un número)
+      if(o.id==null||o.id==='')o.id=k;                              // rescatar la llave de Firebase como id
+      return o;
+    }):[];
+    ingredientes.forEach(function(i){if(i.stock==null||isNaN(parseInt(i.stock)))i.stock=0;else i.stock=parseInt(i.stock);});
+    if(tabActual==='inventario'||tabActual==='cocina')render();
+  });
   fbOn('mesas',function(v){if(v)mesas=Object.values(v);if(tabActual==='mesas')render();});
   fbOn('configBar',function(v){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
@@ -2457,7 +2466,8 @@ function confirmarConsumoEmp(pid,qty,esCubeta){
     p.receta.forEach(function(ri){
       if(ri.grupo)return;
       var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
-      stockDetalle.push({t:enMenu?'p':'i',id:ri.pid,cant:ri.cantidad*unds});
+      var cantR=ri.porCada>0?Math.round(ri.cantidad*unds/ri.porCada):ri.cantidad*unds;
+      if(cantR)stockDetalle.push({t:enMenu?'p':'i',id:ri.pid,cant:cantR});
     });
   }
   stockDetalle.forEach(function(d){
@@ -2612,8 +2622,21 @@ function ajustarStockItem(item,delta,motivo){
     }
     var signoC=delta<0?-1:1;
     ingsCombo.forEach(function(ing){
-      var cant=(ing.cantidad||1)*Math.abs(delta);
-      if(ing.prodId!=null)cambiarStock('p',ing.prodId,cant*signoC,mot+' (combo '+(item.comboNombre||'')+')');
+      var multV=parseInt(ing.varianteUnd)||1;
+      var cant=(ing.cantidad||1)*Math.abs(delta)*multV;
+      if(ing.prodId!=null){
+        cambiarStock('p',ing.prodId,cant*signoC,mot+' (combo '+(item.comboNombre||'')+(ing.varianteNombre?' · '+ing.varianteNombre:'')+')');
+        // Cascada de receta del producto (papas, insumos...) — con "por cada" incluido
+        var pC=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+        if(pC&&pC.receta&&pC.receta.length){
+          pC.receta.forEach(function(ri){
+            if(ri.grupo)return;
+            var enMenuC=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
+            var cantRC=ri.porCada>0?Math.round(ri.cantidad*cant/ri.porCada):ri.cantidad*cant;
+            if(cantRC)cambiarStock(enMenuC?'p':'i',ri.pid,cantRC*signoC,mot+' (receta de '+pC.nombre+' en combo)');
+          });
+        }
+      }
       if(ing.ingId!=null)cambiarStock('i',ing.ingId,cant*signoC,mot+' (combo '+(item.comboNombre||'')+')');
     });
     return;
@@ -2639,7 +2662,9 @@ function ajustarStockItem(item,delta,motivo){
         return;
       }
       var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
-      cambiarStock(enMenu?'p':'i',ri.pid,ri.cantidad*Math.abs(delta)*mult*s,mot+' (receta de '+p.nombre+')');
+      var undsTot=Math.abs(delta)*mult;
+      var cantR=ri.porCada>0?Math.round(ri.cantidad*undsTot/ri.porCada):ri.cantidad*undsTot;
+      if(cantR)cambiarStock(enMenu?'p':'i',ri.pid,cantR*s,mot+' (receta de '+p.nombre+(ri.porCada?' · 1 por cada '+ri.porCada:'')+')');
     });
   }
 }
@@ -4667,7 +4692,7 @@ function renderCarta(){
         var insumo=!ing?ingredientes.find(function(i){return String(i.id)===String(ri.pid);}):null;
         var emj=ing?ing.emoji:(insumo?'🧂':'?');
         var nom=ing?ing.nombre:(insumo?insumo.nombre:'Eliminado');
-        return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'          +'<span style="font-size:16px">'+emj+'</span>'          +'<span style="flex:1;font-size:12px;font-weight:600">'+esc(nom)+(insumo?' <span style="color:var(--muted);font-size:10px;font-weight:500">(insumo · '+esc(insumo.und||'und')+')</span>':'')+'</span>'          +'<span style="color:var(--muted);font-size:11px">×'+ri.cantidad+'</span>'          +'<button data-act="del-rec" data-ridx="'+rIdx+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px">✕</button>'          +'</div>';
+        return'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">'          +'<span style="font-size:16px">'+emj+'</span>'          +'<span style="flex:1;font-size:12px;font-weight:600">'+esc(nom)+(insumo?' <span style="color:var(--muted);font-size:10px;font-weight:500">(insumo · '+esc(insumo.und||'und')+')</span>':'')+'</span>'          +'<span style="color:var(--muted);font-size:11px">×'+ri.cantidad+(ri.porCada?' <b style="color:#38bdf8">por cada '+ri.porCada+' und</b>':'')+'</span>'          +'<button data-act="del-rec" data-ridx="'+rIdx+'" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:12px">✕</button>'          +'</div>';
       }).join('')
     :'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Sin ingredientes — producto simple</div>';
     var emojiButtons=EMOJIS.map(function(e,i){
@@ -4734,7 +4759,7 @@ function renderCarta(){
               return grpOpts+Object.keys(gm).sort().map(function(g){
                 return'<optgroup label="🧂 '+esc(g)+'">'+gm[g].map(function(i){return'<option value="ing:'+i.id+'">🧂 '+esc(i.nombre)+' ('+i.und+')</option>';}).join('')+'</optgroup>';
               }).join('');
-            })():'')            +'<optgroup label="🍽️ Productos de la carta">'+menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'            +'</select></div>'          +'<div style="width:70px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cantidad</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender este producto se descontarán estos ingredientes del inventario automáticamente</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
+            })():'')            +'<optgroup label="🍽️ Productos de la carta">'+menu.filter(function(m){return m.id!==editandoProd;}).map(function(m){return'<option value="'+m.id+'">'+m.emoji+' '+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'            +'</select></div>'          +'<div style="width:62px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Cant.</div>'            +'<input class="inp inp-sm" id="rec-ing-cant" type="number" min="0.1" step="0.1" value="1"/></div>'          +'<div style="width:78px"><div style="color:var(--muted);font-size:10px;margin-bottom:3px">por cada</div>'            +'<input class="inp inp-sm" id="rec-ing-porcada" type="number" min="1" step="1" placeholder="— und"/></div>'          +'<button class="btn btn-sm btn-blue" onclick="agregarIngReceta()">+ Agregar</button>'        +'</div>'        +'<div style="color:var(--muted);font-size:10px;margin-top:6px">💡 Al vender se descuentan automáticamente. <b>"Por cada"</b> hace que escale con la variante: 1 porción de papa <b>por cada 8</b> alitas → x8 descuenta 1, x16 descuenta 2, x24 descuenta 3.</div>'      +'</div>'      +'<div style="display:flex;gap:8px">'        +'<button class="btn btn-green btn-full" onclick="guardarProd()">💾 Guardar producto</button>'
         +'<button class="btn btn-outline btn-full" onclick="cancelarProd()">Cancelar</button>'
       +'</div></div>';
   } else {
@@ -5454,24 +5479,59 @@ function agregarComboAPedido(cbId){
 
   // Check if any ingredient is "categoria" type - need to ask customer choice
   var catIngs=cb.ingredientes.filter(function(i){return i.tipo==='categoria';});
-  if(catIngs.length>0){
-    abrirSelectorCombo(cb, catIngs, 0, []);
+  var varIngs=cb.ingredientes.filter(function(i){return i.varElegir;});
+  if(catIngs.length>0||varIngs.length>0){
+    abrirSelectorCombo(cb, catIngs, 0, [], varIngs, {});
     return;
   }
 
   // All specific products - check stock and add directly
   var ok=cb.ingredientes.every(function(ing){
     var p=menu.find(function(m){return m.id===ing.prodId;});
-    return p&&p.stock>=ing.cantidad;
+    return p&&(p.sinStock||p.stock>=ing.cantidad);
   });
   if(!ok){alert('Stock insuficiente para este combo.');return;}
   confirmarComboEnPedido(cb, []);
 }
+// 🎚 Elegir tamaño (variante) de un producto dentro del combo
+function _comboVarStep(cb, selecciones, varIngs, stepV, varSel){
+  if(stepV>=varIngs.length){
+    confirmarComboEnPedido(cb, selecciones, varSel);
+    return;
+  }
+  var ing=varIngs[stepV];
+  var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+  var vars=(p&&p.variantes)?p.variantes:[];
+  if(!vars.length){varSel[stepV]=null;_comboVarStep(cb,selecciones,varIngs,stepV+1,varSel);return;}
+  var btns=vars.map(function(v,vi){
+    return'<button data-act="combo-var-pick" data-vi="'+vi+'" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid #a855f755;border-radius:11px;padding:13px 15px;margin-bottom:8px;cursor:pointer;color:var(--text)">'
+      +'<span style="font-weight:800;font-size:14px">'+(p.emoji||'🍽')+' '+esc(v.nombre)+'</span>'
+      +'<span style="color:var(--muted);font-size:11px">'+(v.und||1)+' und'+(v.desc?' · '+esc(v.desc):'')+'</span>'
+    +'</button>';
+  }).join('');
+  window._comboVarCtx={cb:cb,selecciones:selecciones,varIngs:varIngs,stepV:stepV,varSel:varSel,vars:vars};
+  modal2('<div style="text-align:center;margin-bottom:10px">'
+      +'<div style="font-size:24px">'+(cb.emoji||'🎁')+'</div>'
+      +'<div style="font-weight:800;font-size:15px">'+esc(cb.nombre)+'</div>'
+      +'<div style="color:#a855f7;font-size:12px;font-weight:700;margin-top:3px">🎚 ¿De qué tamaño va "'+esc(ing.nombre)+'"?'+(ing.cantidad>1?' (×'+ing.cantidad+')':'')+'</div>'
+    +'</div>'+btns);
+  setTimeout(function(){
+    document.querySelectorAll('[data-act="combo-var-pick"]').forEach(function(b){
+      b.onclick=function(){
+        var c=window._comboVarCtx;if(!c)return;
+        c.varSel[c.stepV]=c.vars[parseInt(this.getAttribute('data-vi'))];
+        _comboVarStep(c.cb,c.selecciones,c.varIngs,c.stepV+1,c.varSel);
+      };
+    });
+  },50);
+}
 
 // Opens a modal to select specific products for each "categoria" ingredient
-function abrirSelectorCombo(cb, catIngs, step, selecciones){
+function abrirSelectorCombo(cb, catIngs, step, selecciones, varIngs, varSel){
+  varIngs=varIngs||[];varSel=varSel||{};
   if(step>=catIngs.length){
-    confirmarComboEnPedido(cb, selecciones);
+    if(varIngs.length){_comboVarStep(cb, selecciones, varIngs, 0, varSel);}
+    else confirmarComboEnPedido(cb, selecciones);
     return;
   }
   var ing=catIngs[step];
@@ -5489,16 +5549,31 @@ function abrirSelectorCombo(cb, catIngs, step, selecciones){
     productos:disponibles.map(function(p){return {id:p.id,nombre:p.nombre,emoji:p.emoji,precio:p.precio,stock:p.stock};}),
     onConfirm:function(cantidades){
       selecciones.push({catIng:ing, distribucion:cantidades});
-      abrirSelectorCombo(cb, catIngs, step+1, selecciones);
+      abrirSelectorCombo(cb, catIngs, step+1, selecciones, varIngs, varSel);
     }
   });
 }
 
-function confirmarComboEnPedido(cb, selecciones){
-  // Build final ingredient list (expandiendo distribución de categorías)
+function confirmarComboEnPedido(cb, selecciones, varSel){
+  varSel=varSel||{};
+  // Build final ingredient list (expandiendo distribución de categorías y variantes elegidas)
   var finalIngs=[];
   var selIdx=0;
+  var varIdx=0;
   cb.ingredientes.forEach(function(ing){
+    if(ing.varElegir){
+      var vSel=varSel[varIdx++];
+      var pV=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+      if(vSel){
+        finalIngs.push({tipo:'producto',prodId:ing.prodId,cantidad:ing.cantidad,
+          varianteNombre:vSel.nombre,varianteUnd:parseInt(vSel.und)||1,
+          nombre:(pV?pV.nombre:'?')+' ('+vSel.nombre+')',emoji:pV?pV.emoji:'?',und:pV?pV.und:'und'});
+      }else{
+        finalIngs.push({tipo:'producto',prodId:ing.prodId,cantidad:ing.cantidad,
+          nombre:pV?pV.nombre:'?',emoji:pV?pV.emoji:'?',und:pV?pV.und:'und'});
+      }
+      return;
+    }
     if(ing.tipo==='categoria'){
       var sel=selecciones[selIdx++];
       if(sel&&sel.distribucion){
@@ -5523,7 +5598,8 @@ function confirmarComboEnPedido(cb, selecciones){
   var ok=finalIngs.every(function(ing){
     if(ing.prodId==null)return true;
     var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
-    return p&&(ventaSinStock||(parseInt(p.stock)||0)>=ing.cantidad);
+    var necesita=ing.cantidad*(parseInt(ing.varianteUnd)||1);
+    return p&&(p.sinStock||ventaSinStock||(parseInt(p.stock)||0)>=necesita);
   });
   if(!ok){alert('Stock insuficiente para alguno de los productos elegidos.');return;}
 
@@ -5584,9 +5660,10 @@ function agregarIngReceta(){
   var prod=editandoProd&&editandoProd!=='nuevo'?menu.find(function(m){return m.id===editandoProd;}):null;
   if(!prod&&editandoProd!=='nuevo'){alert('Guarda el producto primero.');return;}
   var receta=prod?((prod.receta||[]).slice()):[_recetaTemp.slice()][0]||[];
+  var porCada=parseInt((document.getElementById('rec-ing-porcada')||{}).value)||0;
   var exist=receta.findIndex(function(r){return r.pid===pid;});
-  if(exist>=0) receta[exist].cantidad+=cant;
-  else receta.push({pid:pid,cantidad:cant});
+  if(exist>=0){receta[exist].cantidad+=cant;if(porCada)receta[exist].porCada=porCada;}
+  else{var linR={pid:pid,cantidad:cant};if(porCada)linR.porCada=porCada;receta.push(linR);}
   if(prod){
     prod.receta=receta;
     var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
@@ -5672,7 +5749,7 @@ function renderCombos(){
         +'<span style="font-size:18px">'+emoji+'</span>'
         +'<div style="flex:1">'
           +'<div style="font-size:13px;font-weight:600">'+label+'</div>'
-          +'<span style="background:'+tagColor+'20;color:'+tagColor+';border:1px solid '+tagColor+'33;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">'+(esCat?'A elección':'Específico')+'</span>'
+          +'<span style="background:'+tagColor+'20;color:'+tagColor+';border:1px solid '+tagColor+'33;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">'+(esCat?'A elección':(typeof ing!=='undefined'&&ing&&ing.varElegir?'🎚 Tamaño a elección':'Específico'))+'</span>'
         +'</div>'
         +'<div style="display:flex;align-items:center;gap:5px">'
         +'<span style="color:var(--muted);font-size:11px">×</span>'
@@ -5891,12 +5968,21 @@ function agregarIngCombo(){
       // Specific product: value = "prod:ID"
       var prodId=parseInt(prodVal.replace('prod:',''));
       if(!prodId){alert('Selecciona un producto válido.');return;}
-      var existe=_comboTemp.ingredientes.findIndex(function(i){return i.tipo==='producto'&&i.prodId===prodId;});
-      if(existe>=0){_comboTemp.ingredientes[existe].cantidad+=cant;}
-      else{
-        var p=menu.find(function(m){return m.id===prodId;});
-        _comboTemp.ingredientes.push({tipo:'producto',prodId:prodId,cantidad:cant,
-          nombre:p?p.nombre:'?',emoji:p?p.emoji:'?',und:p?p.und:'und'});
+      var p=menu.find(function(m){return m.id===prodId;});
+      var varElegir=false;
+      if(p&&p.variantes&&p.variantes.length){
+        varElegir=confirm('🎚 "'+p.nombre+'" tiene tamaños ('+p.variantes.map(function(v){return v.nombre;}).join(' · ')+').\n\n¿El CLIENTE elige el tamaño al pedir el combo?\n\nAceptar = a elección del cliente\nCancelar = tamaño base fijo');
+      }
+      if(varElegir){
+        _comboTemp.ingredientes.push({tipo:'producto',prodId:prodId,cantidad:cant,varElegir:true,
+          nombre:p.nombre,emoji:p.emoji,und:p.und||'und'});
+      } else {
+        var existe=_comboTemp.ingredientes.findIndex(function(i){return i.tipo==='producto'&&i.prodId===prodId&&!i.varElegir;});
+        if(existe>=0){_comboTemp.ingredientes[existe].cantidad+=cant;}
+        else{
+          _comboTemp.ingredientes.push({tipo:'producto',prodId:prodId,cantidad:cant,
+            nombre:p?p.nombre:'?',emoji:p?p.emoji:'?',und:p?p.und:'und'});
+        }
       }
     }
   } else {
