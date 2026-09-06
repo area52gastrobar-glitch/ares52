@@ -2292,9 +2292,15 @@ function renderConsumoEmpModal(){
   // Buscador de producto
   var q=_normTxt((window._ceBusq||'').trim());
   var matches=q?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,8):[];
-  var prodBtns=matches.map(function(p){
+  var combosMatch=q?combos.filter(function(c){return c&&c.nombre&&(_normTxt(c.nombre).indexOf(q)>=0||_normTxt('combo').indexOf(q)>=0);}).slice(0,5):[];
+  var prodBtns=combosMatch.map(function(c){
+    return'<button onclick="elegirComboConsumoEmp(\''+c.id+'\')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:#f5a62310;border:1px solid #f5a62344;border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
+      +'<span style="font-size:13px;font-weight:700">🎁 '+esc(c.nombre)+'</span>'
+      +'<span style="color:#f5a623;font-size:11px;font-weight:800">'+fmt(c.precio||0)+'</span>'
+    +'</button>';
+  }).join('')+matches.map(function(p){
     return'<button onclick="elegirProdConsumoEmp('+p.id+')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
-      +'<span style="font-size:13px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+'</span>'
+      +'<span style="font-size:13px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+(p.cubeta?' <span style="color:#f5a623;font-size:10px;font-weight:800">🪣</span>':'')+'</span>'
       +'<span style="color:'+(p.sinStock?(p.disponible!==false?'#22c55e':'#ef4444'):((parseInt(p.stock)||0)>0?'var(--muted)':'#ef4444'))+';font-size:11px;font-weight:700">'+(p.sinStock?(p.disponible!==false?'✅ disponible':'🚫 agotado'):'stock: '+(parseInt(p.stock)||0))+'</span>'
     +'</button>';
   }).join('');
@@ -2332,50 +2338,98 @@ function renderConsumoEmpModal(){
     +'<div style="max-height:30vh;overflow-y:auto;margin-bottom:12px">'+(rows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin consumos registrados todavía.</div>')+'</div>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
 }
-function elegirProdConsumoEmp(pid){
+function elegirProdConsumoEmp(pid,esCubeta){
   if(!window._ceEmp){alert('👆 Primero elige quién consume.');return;}
   var p=menu.find(function(m){return m.id===pid;});if(!p)return;
+  esCubeta=!!esCubeta;
+  var cub=esCubeta?'true':'false';
+  var modoHtml=p.cubeta?'<div style="display:flex;gap:7px;margin-bottom:10px">'
+    +'<button onclick="elegirProdConsumoEmp('+pid+',false)" style="flex:1;background:'+(!esCubeta?'#22c55e':'var(--bg)')+';color:'+(!esCubeta?'#fff':'var(--muted)')+';border:1px solid '+(!esCubeta?'#22c55e':'var(--border)')+';border-radius:9px;padding:8px 0;font-weight:900;font-size:12px;cursor:pointer">Por unidad · '+fmt(p.precio||0)+'</button>'
+    +'<button onclick="elegirProdConsumoEmp('+pid+',true)" style="flex:1;background:'+(esCubeta?'#f5a623':'var(--bg)')+';color:'+(esCubeta?'#1a1a22':'var(--muted)')+';border:1px solid '+(esCubeta?'#f5a623':'var(--border)')+';border-radius:9px;padding:8px 0;font-weight:900;font-size:12px;cursor:pointer">🪣 Cubetazo (5) · '+fmt(p.cubeta)+'</button>'
+  +'</div>':'';
   var btns=[1,2,3,4,5,6].map(function(n){
-    return'<button onclick="confirmarConsumoEmp('+pid+','+n+')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:10px;padding:16px 0;font-size:19px;font-weight:900;cursor:pointer">'+n+'</button>';
+    return'<button onclick="confirmarConsumoEmp('+pid+','+n+','+cub+')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:10px;padding:16px 0;font-size:19px;font-weight:900;cursor:pointer">'+n+'</button>';
   }).join('');
   modal2('<div style="text-align:center;margin-bottom:12px">'
-      +'<div style="font-size:26px">'+p.emoji+'</div>'
-      +'<div style="font-weight:800;font-size:15px">'+esc(p.nombre)+'</div>'
-      +'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+(p.sinStock?'Sin control de cantidad':'Stock: '+(parseInt(p.stock)||0))+' · ¿cuántas consumió?</div>'
+      +'<div style="font-size:26px">'+(esCubeta?'🪣':p.emoji)+'</div>'
+      +'<div style="font-weight:800;font-size:15px">'+(esCubeta?'Cubetazo de ':'')+esc(p.nombre)+'</div>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+(p.sinStock?'Sin control de cantidad':'Stock: '+(parseInt(p.stock)||0))+' · ¿cuánt'+(esCubeta?'os cubetazos':'as')+' consumió?</div>'
     +'</div>'
+    +modoHtml
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'+btns+'</div>'
     +'<div style="display:flex;gap:8px">'
       +'<input id="ce-qty" type="number" inputmode="numeric" min="1" placeholder="Otra..." class="inp" style="flex:1;text-align:center;font-weight:800"/>'
-      +'<button onclick="confirmarConsumoEmp('+pid+',parseInt((document.getElementById(\'ce-qty\')||{}).value)||0)" style="background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0 18px;font-weight:800;cursor:pointer">✓</button>'
+      +'<button onclick="confirmarConsumoEmp('+pid+',parseInt((document.getElementById(\'ce-qty\')||{}).value)||0,'+cub+')" style="background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0 18px;font-weight:800;cursor:pointer">✓</button>'
     +'</div>');
 }
-function confirmarConsumoEmp(pid,qty){
-  qty=parseInt(qty)||0;
-  if(qty<=0){alert('Escribe la cantidad.');return;}
-  var p=menu.find(function(m){return m.id===pid;});if(!p)return;
+function elegirComboConsumoEmp(cid){
+  if(!window._ceEmp){alert('👆 Primero elige quién consume.');return;}
+  var c=combos.find(function(x){return String(x.id)===String(cid);});if(!c)return;
+  var btns=[1,2,3].map(function(n){
+    return'<button onclick="confirmarConsumoComboEmp(\''+cid+'\','+n+')" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:10px;padding:16px 0;font-size:19px;font-weight:900;cursor:pointer">'+n+'</button>';
+  }).join('');
+  var comps=(c.ingredientes||[]).map(function(g){
+    var p=menu.find(function(m){return Number(m.id)===Number(g.prodId);});
+    return (g.cantidad||1)+'× '+(p?p.nombre:'?');
+  }).join(' · ');
+  modal2('<div style="text-align:center;margin-bottom:12px">'
+      +'<div style="font-size:26px">🎁</div>'
+      +'<div style="font-weight:800;font-size:15px">'+esc(c.nombre)+'</div>'
+      +'<div style="color:var(--muted);font-size:10.5px;margin-top:2px">'+esc(comps)+' · '+fmt(c.precio||0)+'</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'+btns+'</div>');
+}
+function confirmarConsumoComboEmp(cid,qty){
+  qty=parseInt(qty)||0;if(qty<=0)return;
+  var c=combos.find(function(x){return String(x.id)===String(cid);});if(!c)return;
   var emp=empleados.find(function(e){return e.id===window._ceEmp;});
   if(!emp){alert('👆 Elige quién consume.');return;}
-  if(!p.sinStock&&!ventaSinStock&&(parseInt(p.stock)||0)<qty){
-    if(!confirm('Stock insuficiente ('+(parseInt(p.stock)||0)+' und). ¿Registrar de todas formas? El stock quedará en negativo.'))return;
-  }
-  // Detalle para poder devolver si se elimina el registro
-  var stockDetalle=[{t:'p',id:p.id,cant:qty}];
-  if(p.receta&&p.receta.length){
-    p.receta.forEach(function(ri){
-      var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
-      stockDetalle.push({t:enMenu?'p':'i',id:ri.pid,cant:ri.cantidad*qty});
-    });
-  }
-  stockDetalle.forEach(function(d){
-    cambiarStock(d.t,d.id,-d.cant,'🥤 Consumo empleado: '+emp.nombre);
+  var stockDetalle=[];
+  (c.ingredientes||[]).forEach(function(g){
+    if(g.prodId==null)return;
+    var enMenu=menu.some(function(m){return Number(m.id)===Number(g.prodId);});
+    stockDetalle.push({t:enMenu?'p':'i',id:g.prodId,cant:(g.cantidad||1)*qty});
   });
-  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:p.nombre,cantidad:qty,valorUnit:p.precio||0,valorTotal:(p.precio||0)*qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  stockDetalle.forEach(function(d){cambiarStock(d.t,d.id,-d.cant,'🥤 Consumo empleado (combo): '+emp.nombre);});
+  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:'combo_'+c.id,prodNombre:'🎁 '+c.nombre,cantidad:qty,valorUnit:c.precio||0,valorTotal:(c.precio||0)*qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   consumoEmpleados.push(reg);
   var r=ref('consumoEmpleados');
   if(r)r.push(reg);else fbSet('consumoEmpleados',consumoEmpleados);
   closeModal2();
   window._ceBusq='';
-  showToast('🥤 '+qty+'× '+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">💰 Se le descontará '+fmt((p.precio||0)*qty)+' · fuera de caja</span>','#38bdf8');
+  showToast('🎁 '+qty+'× '+esc(c.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">💰 Se le descontará '+fmt((c.precio||0)*qty)+' · componentes fuera del inventario</span>','#f5a623');
+  renderConsumoEmpModal();
+}
+function confirmarConsumoEmp(pid,qty,esCubeta){
+  qty=parseInt(qty)||0;
+  if(qty<=0){alert('Escribe la cantidad.');return;}
+  var p=menu.find(function(m){return m.id===pid;});if(!p)return;
+  var emp=empleados.find(function(e){return e.id===window._ceEmp;});
+  if(!emp){alert('👆 Elige quién consume.');return;}
+  var unds=esCubeta?qty*5:qty;   // 🪣 un cubetazo descuenta 5 unidades
+  if(!p.sinStock&&!ventaSinStock&&(parseInt(p.stock)||0)<unds){
+    if(!confirm('Stock insuficiente ('+(parseInt(p.stock)||0)+' und, se necesitan '+unds+'). ¿Registrar de todas formas? El stock quedará en negativo.'))return;
+  }
+  // Detalle para poder devolver si se elimina el registro
+  var stockDetalle=[{t:'p',id:p.id,cant:unds}];
+  if(p.receta&&p.receta.length){
+    p.receta.forEach(function(ri){
+      if(ri.grupo)return;
+      var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
+      stockDetalle.push({t:enMenu?'p':'i',id:ri.pid,cant:ri.cantidad*unds});
+    });
+  }
+  stockDetalle.forEach(function(d){
+    cambiarStock(d.t,d.id,-d.cant,'🥤 Consumo empleado: '+emp.nombre);
+  });
+  var vUnit=esCubeta?(p.cubeta||((p.precio||0)*5)):(p.precio||0);
+  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:(esCubeta?'🪣 Cubetazo ':'')+p.nombre,cantidad:qty,esCubeta:!!esCubeta,valorUnit:vUnit,valorTotal:vUnit*qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  consumoEmpleados.push(reg);
+  var r=ref('consumoEmpleados');
+  if(r)r.push(reg);else fbSet('consumoEmpleados',consumoEmpleados);
+  closeModal2();
+  window._ceBusq='';
+  showToast('🥤 '+qty+'× '+(esCubeta?'🪣 Cubetazo de ':'')+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">💰 Se le descontará '+fmt(vUnit*qty)+' · fuera de caja</span>','#38bdf8');
   renderConsumoEmpModal();
 }
 function descontarConsumosEmp(empId){
