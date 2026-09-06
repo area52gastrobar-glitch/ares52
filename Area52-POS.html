@@ -2271,7 +2271,12 @@ function cambiarStock(tipo,id,delta,motivo){
   var it=col.find(function(x){return String(x.id)===String(id);});
   // Productos "sin control de cantidad" (solo disponible/agotado): no manejan stock
   if(tipo==='p'&&it&&it.sinStock)return;
-  if(it){var a=parseInt(it.stock);if(isNaN(a))a=0;it.stock=a+delta;}
+  if(!it){
+    // ⚠️ id que ya no existe (insumo borrado o recreado): no crear registros fantasma sin nombre
+    logKardex(tipo,id,'(id inexistente)',delta,'⚠️ IGNORADO — '+(motivo||''),null);
+    return;
+  }
+  var a=parseInt(it.stock);if(isNaN(a))a=0;it.stock=a+delta;
   var d=getDb();
   if(d){
     d.ref((tipo==='p'?'menu/':'ingredientes/')+id+'/stock').transaction(function(cur){
@@ -4377,6 +4382,24 @@ function renderInventario(){
   if(invTab==='ingredientes'){
     // ── INGREDIENTES section ──────────────────────────────────────────────────
     var _ingFila=function(ing){
+      // ⚠️ Insumo fantasma: registro dañado sin nombre (queda de recetas o ediciones viejas)
+      if(!ing.nombre){
+        var usadoEn=menu.filter(function(p){return p.receta&&p.receta.some(function(ri){return String(ri.pid)===String(ing.id)&&!ri.grupo;});}).map(function(p){return p.nombre;});
+        return'<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #ef444455;background:#ef444410;border-radius:10px;margin:6px 0">'
+          +'<span style="font-size:22px">⚠️</span>'
+          +'<div style="flex:1;min-width:0">'
+            +'<div style="font-weight:800;font-size:12.5px;color:#ef4444">Insumo dañado (sin nombre)</div>'
+            +'<div style="color:var(--muted);font-size:10px">id '+esc(String(ing.id))+' · stock '+(ing.stock||0)+' '+(ing.und||'')
+            +(usadoEn.length?' · lo usan: '+esc(usadoEn.join(', ')):' · ninguna receta lo usa — se puede borrar tranquilo')+'</div>'
+          +'</div>'
+          +(usuarioActivo&&(usuarioActivo.rol==='admin')
+            ?'<div style="display:flex;flex-direction:column;gap:5px">'
+              +'<button data-act="ing-recuperar" data-iid="'+ing.id+'" style="background:#22c55e;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer">♻️ Recuperar</button>'
+              +'<button data-act="ing-del" data-iid="'+ing.id+'" style="background:#ef4444;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer">🗑 Eliminar</button>'
+            +'</div>'
+            :'')
+        +'</div>';
+      }
       return'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">'
         +'<span style="font-size:22px">🧂</span>'
         +'<div style="flex:1">'
@@ -5007,6 +5030,21 @@ function confirmarMercancia(id, esIng){
   closeModal2();render();
 }
 
+function recuperarIngrediente(iid){
+  var ing=ingredientes.find(function(x){return String(x.id)===String(iid);});
+  if(!ing)return;
+  var nombre=prompt('¿Cómo se llama este insumo? (Ej: Papa a la francesa)');
+  if(!nombre||!nombre.trim())return;
+  nombre=nombre.trim();
+  var stockTxt=prompt('Stock real actual de "'+nombre+'" (tiene '+(ing.stock||0)+' en el sistema):',String(Math.max(0,ing.stock||0)));
+  var stock=parseInt(stockTxt);
+  if(isNaN(stock))stock=ing.stock||0;
+  ing.nombre=nombre;ing.und=ing.und||'und';ing.grupo=ing.grupo||'';ing.stock=stock;
+  fbSet('ingredientes/'+iid,ing);
+  logKardex('i',iid,nombre,0,'♻️ Insumo recuperado (tenía '+(ing.stock||0)+', ajustado a '+stock+')',stock);
+  showToast('♻️ Recuperado: '+esc(nombre)+' · stock '+stock,'#22c55e');
+  render();
+}
 function guardarIngredientes(){
   var obj={};ingredientes.forEach(function(i){obj[i.id]=i;});
   fbSet('ingredientes',obj);
@@ -12485,6 +12523,8 @@ document.addEventListener('click',function(e){
     if(act2==='ing-plus'){cambiarStock('i',ing.id,1,'✏️ Ajuste manual (+1)');}
     else if(act2==='ing-minus'){cambiarStock('i',ing.id,-1,'✏️ Ajuste manual (−1)');}
     else if(act2==='ing-edit'){abrirEditIngrediente(iid);}
+    else if(act2==='ing-del'){eliminarIngrediente(iid);}
+    else if(act2==='ing-recuperar'){recuperarIngrediente(iid);}
     render();return;
   }
   // Quick value buttons in item personalizado
