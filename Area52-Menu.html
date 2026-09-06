@@ -554,14 +554,25 @@ function regenerar(){
     function _menuItem(p){
       var cubHtml=(showCubeta&&p.esCerveza&&p.cubeta)
         ?'<div style="display:inline-block;background:#f0c04022;border:1px solid #f0c04055;border-radius:4px;padding:1px 6px;margin-top:3px;font-size:11px;font-weight:700;color:#f0c040;letter-spacing:1px">🪣 CUBETAZO '+fmt(p.cubeta)+'</div>':"";
+      var vars=p.variantes?(Array.isArray(p.variantes)?p.variantes:Object.values(p.variantes)):[];
+      // 📏 Producto con tamaños (Alitas x8/x16/x24, Pizza personal/mediana...): una línea por tamaño
+      var varsHtml=vars.length?vars.map(function(v){
+        return'<div style="display:flex;align-items:baseline;gap:6px;margin-top:3px">'
+          +'<span style="font-size:15px;color:#ddd;font-weight:600;letter-spacing:.3px">'+esc(v.nombre)+'</span>'
+          +(v.desc?'<span style="font-size:12px;color:#999;font-style:italic">· '+esc(v.desc)+'</span>':'')
+          +(showPrice?'<span style="flex:1;border-bottom:1px dotted rgba(255,255,255,.15);min-width:8px;position:relative;top:-3px"></span>'
+            +'<span style="font-family:Orbitron,sans-serif;font-weight:700;font-size:14px;white-space:nowrap;color:'+color+'">'+fmt(v.precio||0)+'</span>':'')
+        +'</div>';
+      }).join(''):'';
       return'<div class="menu-item">'
         +'<span class="item-emoji">'+(p.emoji||"·")+"</span>"
-        +'<div style="flex:1">'
+        +'<div style="flex:1;min-width:0">'
         +'<span class="item-name">'+esc(p.nombre)+"</span>"
         +(p.descripcion?'<div style="font-size:14px;color:#bbb;font-style:italic;margin-top:3px;line-height:1.4">'+esc(p.descripcion)+'</div>':'')
+        +varsHtml
         +cubHtml
         +"</div>"
-        +(showPrice
+        +(showPrice&&!vars.length
           ?'<span class="item-dots"></span>'
            +'<div style="text-align:right;flex-shrink:0">'
              +'<span class="item-price" style="color:'+color+'">'+fmt(p.precio)+"</span>"
