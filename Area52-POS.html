@@ -1557,13 +1557,7 @@ function renderPanelPedido(){
 
   // Build combo items for pedido panel
   var combosItems=combos.map(function(cb){
-    var disponible=cb.ingredientes.every(function(ing){
-      if(ing.tipo==='categoria'){
-        return menu.filter(function(m){return m.cat===ing.cat||m.subcat===ing.cat;}).some(function(p){return p.stock>=ing.cantidad;});
-      }
-      var p=menu.find(function(m){return m.id===ing.prodId;});
-      return p&&p.stock>=ing.cantidad;
-    });
+    var disponible=comboDisponible(cb);
     var ingDesc=cb.ingredientes.map(function(ing){
       if(ing.tipo==='categoria') return'🗂️'+ing.cat+'×'+ing.cantidad;
       var p=menu.find(function(m){return m.id===ing.prodId;});
@@ -5472,6 +5466,25 @@ function imprimirTicketPrueba(){
 // Event delegation for combos
 function bindComboEvents(){}  // handled by document listener
 
+function comboDisponible(cb){
+  return (cb.ingredientes||[]).every(function(ing){
+    if(ing.tipo==='categoria'){
+      // Basta que ALGÚN producto de la categoría alcance
+      return menu.filter(function(m){return m.cat===ing.cat||m.subcat===ing.cat;})
+        .some(function(p){return p.sinStock?(p.disponible!==false):((parseInt(p.stock)||0)>=ing.cantidad);});
+    }
+    if(ing.ingId!=null){
+      var ii=ingredientes.find(function(x){return String(x.id)===String(ing.ingId);});
+      return !ii||((parseInt(ii.stock)||0)>=ing.cantidad);
+    }
+    if(ing.prodId==null)return true;
+    var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+    if(!p)return false;
+    if(p.sinStock)return p.disponible!==false;  // productos por receta (alitas, empanadas): solo Disponible/Agotado
+    var necesita=ing.cantidad*(parseInt(ing.varianteUnd)||1);
+    return (parseInt(p.stock)||0)>=necesita;
+  });
+}
 function agregarComboAPedido(cbId){
   if(!mesaActiva)return;
   var cb=combos.find(function(c){return c.id===cbId;});
@@ -5486,13 +5499,7 @@ function agregarComboAPedido(cbId){
   }
 
   // All specific products - check stock and add directly
-  var ok=cb.ingredientes.every(function(ing){
-    if(ing.prodId==null)return true;
-    var p=menu.find(function(m){return m.id===ing.prodId;});
-    var necesita=ing.cantidad*(parseInt(ing.varianteUnd)||1);
-    return p&&(p.sinStock||ventaSinStock||p.stock>=necesita);
-  });
-  if(!ok){alert('Stock insuficiente para este combo.');return;}
+  if(!ventaSinStock&&!comboDisponible(cb)){alert('Stock insuficiente para este combo.');return;}
   confirmarComboEnPedido(cb, []);
 }
 // 🎚 Elegir tamaño (variante) de un producto dentro del combo
@@ -5856,15 +5863,7 @@ function renderCombos(){
     ?'<div style="color:var(--dim);text-align:center;padding:24px;font-size:13px;background:var(--card);border-radius:12px;border:1px solid var(--border)">Sin combos creados aún</div>'
     :'<div class="prod-grid">'+combos.map(function(cb){
       // Check stock availability
-      var disponible=cb.ingredientes.every(function(ing){
-        if(ing.tipo==='categoria'){
-          // At least one product in category has enough stock
-          return menu.filter(function(m){return m.cat===ing.cat||m.subcat===ing.cat;})
-            .some(function(p){return p.stock>=ing.cantidad;});
-        }
-        var p=menu.find(function(m){return m.id===ing.prodId;});
-        return p&&p.stock>=ing.cantidad;
-      });
+      var disponible=comboDisponible(cb);
       var ingList=cb.ingredientes.map(function(ing){
         if(ing.tipo==='categoria'){
           return'<div style="font-size:11px;color:#38bdf8">🗂️ '+esc(ing.cat)+' ×'+ing.cantidad+' (a elección)</div>';
