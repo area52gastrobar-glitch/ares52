@@ -193,8 +193,9 @@ select.inp{cursor:pointer}
 .mesa-node{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid;transition:box-shadow .2s;cursor:pointer}
 
 /* ── PEDIDO ── */
-.carta-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
-.carta-item{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:7px 9px;cursor:pointer;transition:border-color .15s}
+.carta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;width:100%;}
+.carta-item{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:7px 9px;cursor:pointer;transition:border-color .15s;min-width:0;overflow:hidden;}
+.carta-item button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .carta-item:hover{border-color:var(--accent)}
 
 /* ── INVENTARIO ── */
@@ -254,7 +255,8 @@ select.inp{cursor:pointer}
 .grid1{display:grid;grid-template-columns:1fr}
 .mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb14{margin-bottom:14px}.mb4{margin-bottom:4px}
 .cat-title{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:5px;margin-top:14px}
-.prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:8px;width:100%}
+.prod-card{min-width:0;overflow:hidden}
 .prod-card{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:11px 13px;display:flex;gap:10px;transition:border-color .15s}
 .prod-card:hover{border-color:var(--accent)}
 .hist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
@@ -2467,14 +2469,17 @@ function confirmarConsumoEmp(pid,qty,esCubeta){
   stockDetalle.forEach(function(d){
     cambiarStock(d.t,d.id,-d.cant,'🥤 Consumo empleado: '+emp.nombre);
   });
-  var vUnit=esCubeta?(p.cubeta||((p.precio||0)*5)):(p.precio||0);
-  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:(esCubeta?'🪣 Cubetazo ':'')+p.nombre,cantidad:qty,esCubeta:!!esCubeta,valorUnit:vUnit,valorTotal:vUnit*qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  // 🏷️ Si el producto está en promoción vigente, el empleado paga el precio de promo
+  var prC=promoVigente(p.id,esCubeta?'cubeta':'unidad');
+  var vLista=esCubeta?(p.cubeta||((p.precio||0)*5)):(p.precio||0);
+  var vUnit=prC?prC.valor:vLista;
+  var reg={id:'ce_'+Date.now(),ts:Date.now(),empId:emp.id,empNombre:emp.nombre,prodId:p.id,prodNombre:(esCubeta?'🪣 Cubetazo ':'')+p.nombre+(prC?' 🏷️':''),cantidad:qty,esCubeta:!!esCubeta,valorUnit:vUnit,valorLista:vLista,esPromo:!!prC,valorTotal:vUnit*qty,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   consumoEmpleados.push(reg);
   var r=ref('consumoEmpleados');
   if(r)r.push(reg);else fbSet('consumoEmpleados',consumoEmpleados);
   closeModal2();
   window._ceBusq='';
-  showToast('🥤 '+qty+'× '+(esCubeta?'🪣 Cubetazo de ':'')+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">💰 Se le descontará '+fmt(vUnit*qty)+' · fuera de caja</span>','#38bdf8');
+  showToast('🥤 '+qty+'× '+(esCubeta?'🪣 Cubetazo de ':'')+p.emoji+' '+esc(p.nombre)+' → '+esc(emp.nombre)+'<br><span style="font-size:12px;opacity:.85">'+(prC?'🏷️ precio promo '+fmt(vUnit)+' c/u · ':'')+'💰 Se le descontará '+fmt(vUnit*qty)+' · fuera de caja</span>','#38bdf8');
   renderConsumoEmpModal();
 }
 function descontarConsumosEmp(empId){
@@ -2490,12 +2495,17 @@ function descontarConsumosEmp(empId){
     c.descontado=marca;
     if(c._fbkey)fbSet('consumoEmpleados/'+c._fbkey+'/descontado',marca);
   });
+  // 💰 Crear el descuento REAL en la nómina: entra a la semana en pantalla y baja el saldo a pagar
+  var semKeyC=_fechaKey(_sanLunes(_empSemanaOffset));
+  var movC={id:'me'+Date.now(),ts:Date.now(),empId:empId,tipo:'consumo',valor:tot,nota:'🍺 Consumos ('+und+' und)',semanaKey:semKeyC,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  movEmpleados.push(movC);
+  var rC=ref('movEmpleados');if(rC)rC.push(movC);else fbSet('movEmpleados',movEmpleados);
   // Respaldo para registros viejos sin clave de Firebase: reescribir la colección completa
   if(pend.some(function(c){return !c._fbkey;})){
     var ob={};consumoEmpleados.forEach(function(c,i){ob[c._fbkey||('ce'+i)]=c;});
     fbSet('consumoEmpleados',ob);
   }
-  showToast('✅ Consumos de '+esc(nom)+' descontados<br><span style="font-size:12px;opacity:.85">'+und+' und · '+fmt(tot)+' · contador en cero</span>','#22c55e');
+  showToast('✅ Consumos de '+esc(nom)+' descontados<br><span style="font-size:12px;opacity:.85">'+und+' und · '+fmt(tot)+' — quedó como descuento en la semana: baja el saldo a pagar</span>','#22c55e');
   render();
 }
 function eliminarConsumoEmp(cid){
@@ -10143,7 +10153,7 @@ function calcSaldoSemana(empId,semKey){
   var lunes=_lunesDeSemKey(semKey);
   var ganado=0;
   for(var i=0;i<7;i++){var d=new Date(lunes);d.setDate(d.getDate()+i);var rec=asistenciaEmp[empId+'_'+_fechaKey(d)];if(rec)ganado+=(typeof rec==='number')?rec:diario;}
-  var prest=movEmpleados.filter(function(m){return m.empId===empId&&m.tipo==='prestamo'&&!m.largoPlazo&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
+  var prest=movEmpleados.filter(function(m){return m.empId===empId&&((m.tipo==='prestamo'&&!m.largoPlazo)||m.tipo==='consumo')&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
   var pagado=movEmpleados.filter(function(m){return m.empId===empId&&m.tipo==='salario'&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
   var ajuste=movEmpleados.filter(function(m){return m.empId===empId&&m.tipo==='ajuste'&&m.semanaKey===semKey;}).reduce(function(s,m){return s+(m.valor||0);},0);
   var neto=ganado-prest+ajuste;
@@ -10667,7 +10677,7 @@ function renderEmpleados(){
   // Préstamos de ESTA semana (se descuentan del pago semanal)
   function prestamosSemana(empId){
     return movEmpleados.filter(function(m){
-      return m.empId===empId&&m.tipo==='prestamo'&&!m.largoPlazo&&m.semanaKey===semKey;
+      return m.empId===empId&&((m.tipo==='prestamo'&&!m.largoPlazo)||m.tipo==='consumo')&&m.semanaKey===semKey;
     });
   }
 
@@ -10702,7 +10712,7 @@ function renderEmpleados(){
     var largoP=saldoLargoPlazo(e.id);
 
     var prestRows=prests.map(function(m){
-      return'<div data-act="emp-vermov" data-id="'+m.id+'" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:5px 0;cursor:pointer;border-bottom:1px solid var(--border)"><span>💸 '+(m.nota?esc(m.nota):'Préstamo')+' · '+fmtTime(m.ts)+' <span style="opacity:.5">ⓘ</span></span><span style="color:#ef4444;font-weight:700">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
+      return'<div data-act="emp-vermov" data-id="'+m.id+'" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:5px 0;cursor:pointer;border-bottom:1px solid var(--border)"><span>'+(m.tipo==='consumo'?'':'💸 ')+(m.nota?esc(m.nota):'Préstamo')+' · '+fmtTime(m.ts)+' <span style="opacity:.5">ⓘ</span></span><span style="color:#ef4444;font-weight:700">-'+fmt(m.valor)+(esAdmin?' <button data-act="emp-delmov" data-id="'+m.id+'" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button>':'')+'</span></div>';
     }).join('');
     // Filas de ajustes traídos de otra semana
     var ajustes=movEmpleados.filter(function(m){return m.empId===e.id&&m.tipo==='ajuste'&&m.semanaKey===semKey;});
