@@ -265,24 +265,60 @@ function onStateDual(idx,e){
 }
 function onErrorDual(idx,e){
   if(idx===activeIdx){
-    // Marcar este video como bloqueado para no volver a ponerlo
     if(actual&&actual.videoId)_videosBloqueados[actual.videoId]=true;
-    document.getElementById('nowTitle').textContent='⚠️ Video bloqueado, pasando a la siguiente...';
-    // Liberar el seguro y saltar SIN contar la reproducción (fue error)
     _avanzando=false;
-    setTimeout(function(){saltarPorError();},400);
+    if(!actual){setTimeout(function(){saltarPorError();},400);return;}
+    // Buscar otra versión de la misma canción (audio / lyrics / letra) que sí se pueda reproducir
+    document.getElementById('nowTitle').textContent='🔎 Video bloqueado, buscando otra versión de '+actual.cancion+'...';
+    var ped=actual;
+    buscarAlternativa(ped,function(vid){
+      if(actual!==ped)return;  // el DJ ya cambió de canción mientras tanto
+      if(vid){
+        ped.videoId=vid; if(ped.key)videoCache[ped.key]=vid;
+        document.getElementById('nowTitle').textContent=(ped.auto?'🔁 ':'')+ped.cancion;
+        var p=P();
+        if(p&&p.loadVideoById){p.loadVideoById(vid);p.playVideo();}
+      } else {
+        document.getElementById('nowTitle').textContent='⚠️ Sin versión disponible, pasando a la siguiente...';
+        setTimeout(function(){saltarPorError();},600);
+      }
+    });
   } else {
-    // El bloqueado era el precargado -> descartarlo
-    if(siguientePreload&&siguientePreload.videoId)_videosBloqueados[siguientePreload.videoId]=true;
-    siguientePreload=null;
+    // El bloqueado era el precargado -> marcarlo y buscarle alternativa para que siga en la cola
+    var pre=siguientePreload; siguientePreload=null;
+    if(pre&&pre.videoId){
+      _videosBloqueados[pre.videoId]=true;
+      buscarAlternativa(pre,function(vid){ if(vid){pre.videoId=vid;if(pre.key)videoCache[pre.key]=vid;render();} });
+    }
   }
 }
-function saltarPorError(){
-  // Igual que marcarYsiguiente pero NO cuenta el video (estaba bloqueado)
-  clearInterval(_monitorFin);
-  actual=null;
-  _avanzando=false;  // nunca quedarse trabado por error
-  reproducirCola();
+// Busca en YouTube otra versión embebible de la canción (evitando los videos ya bloqueados)
+var _intentosAlt={};
+function buscarAlternativa(pedido,cb){
+  var base=((pedido.cancion||'')+' '+(pedido.artista||'')).trim();
+  if(!base||!YT_API_KEY){cb(null);return;}
+  var k=(pedido.key||base);
+  _intentosAlt[k]=(_intentosAlt[k]||0)+1;
+  if(_intentosAlt[k]>3){cb(null);return;}  // máximo 3 versiones alternativas por canción
+  var sufijos=[' audio',' lyrics',' letra',' cover'];
+  var i=0;
+  function intentar(){
+    if(i>=sufijos.length){cb(null);return;}
+    var q=encodeURIComponent(base+sufijos[i++]);
+    var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&safeSearch=moderate&maxResults=8&q='+q+'&key='+YT_API_KEY;
+    fetch(url).then(function(r){return r.json();}).then(function(data){
+      var items=(data.items||[]).filter(function(it){return it.id&&it.id.videoId&&!_videosBloqueados[it.id.videoId];});
+      if(!items.length){intentar();return;}
+      // Verificar con videos.list que realmente sean embebibles antes de cargarlos
+      var ids=items.map(function(it){return it.id.videoId;}).join(',');
+      var u2='https://www.googleapis.com/youtube/v3/videos?part=status&id='+ids+'&key='+YT_API_KEY;
+      fetch(u2).then(function(r){return r.json();}).then(function(d2){
+        var ok=(d2.items||[]).filter(function(v){return v.status&&v.status.embeddable;});
+        if(ok.length){cb(ok[0].id);}else{intentar();}
+      }).catch(function(){cb(items[0].id.videoId);});
+    }).catch(function(){intentar();});
+  }
+  intentar();
 }
 function actualizarBotonPlay(){
   var p=P();
@@ -383,10 +419,11 @@ function buscarVideo(pedido,cb){
   if(videoCache[pedido.key]){cb(videoCache[pedido.key]);return;}
   // Fallback: buscar (por si vino de una versión vieja sin videoId)
   var q=encodeURIComponent((pedido.cancion||'')+' '+(pedido.artista||''));
-  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=1&q='+q+'&key='+YT_API_KEY;
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&videoSyndicated=true&maxResults=5&q='+q+'&key='+YT_API_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
-    if(data.items&&data.items.length){
-      var vid=data.items[0].id.videoId;
+    var it=(data.items||[]).filter(function(x){return x.id&&x.id.videoId&&!_videosBloqueados[x.id.videoId];});
+    if(it.length){
+      var vid=it[0].id.videoId;
       videoCache[pedido.key]=vid;cb(vid);
     } else { cb(null); }
   }).catch(function(){cb(null);});
