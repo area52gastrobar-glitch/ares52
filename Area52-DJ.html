@@ -280,6 +280,7 @@ function onErrorDual(idx,e){
         if(p&&p.loadVideoById){p.loadVideoById(vid);p.playVideo();}
       } else {
         document.getElementById('nowTitle').textContent='⚠️ Sin versión disponible, pasando a la siguiente...';
+        descartarPedido(ped);
         setTimeout(function(){saltarPorError();},600);
       }
     });
@@ -320,6 +321,35 @@ function buscarAlternativa(pedido,cb){
   }
   intentar();
 }
+// Descarta definitivamente un pedido que no se pudo reproducir (sin contarlo en el historial)
+var _descartados={};
+function descartarPedido(ped){
+  if(!ped)return;
+  if(ped.videoId)_videosBloqueados[ped.videoId]=true;
+  if(ped.key){
+    _descartados[ped.key]=true;
+    delete videoCache[ped.key];
+    ped.played=true;
+    var enLista=pedidos.find(function(x){return x.key===ped.key;});
+    if(enLista)enLista.played=true;
+    try{db.ref('musica/'+ped.key+'/played').set(true);}catch(e){}
+  } else if(ped.auto&&ped.videoId){
+    _autoRecientes.push(ped.videoId);_guardarAutoRecientes();
+  }
+}
+var _ultSalto={key:null,n:0};
+function saltarPorError(){
+  // Igual que marcarYsiguiente pero NO cuenta el video (estaba bloqueado)
+  clearInterval(_monitorFin);
+  // Si el mismo pedido falla repetidamente, descartarlo para no quedar en bucle
+  if(actual&&actual.key){
+    if(_ultSalto.key===actual.key){_ultSalto.n++;}else{_ultSalto={key:actual.key,n:1};}
+    if(_ultSalto.n>=2)descartarPedido(actual);
+  }
+  actual=null;
+  _avanzando=false;  // nunca quedarse trabado por error
+  reproducirCola();
+}
 function actualizarBotonPlay(){
   var p=P();
   if(!p||!p.getPlayerState)return;
@@ -336,7 +366,7 @@ function togglePlay(){
 // ---------- COLA AGRUPADA POR GÉNERO ----------
 function colaOrdenada(){
   // pendientes (no sonadas y no bloqueadas)
-  var pend=pedidos.filter(function(p){return !p.played && !(p.videoId&&_videosBloqueados[p.videoId]);});
+  var pend=pedidos.filter(function(p){return !p.played && !_descartados[p.key] && !(p.videoId&&_videosBloqueados[p.videoId]) && !(p.key&&videoCache[p.key]&&_videosBloqueados[videoCache[p.key]]);});
   return _ordenarPorGenero(pend);
 }
 // Cola SOLO para decidir qué reproducir/precargar: excluye la que está sonando
@@ -416,7 +446,7 @@ function _ordenarPorGenero(pend){
 function buscarVideo(pedido,cb){
   // El cliente ya eligió el video exacto -> usarlo directo
   if(pedido.videoId){cb(pedido.videoId);return;}
-  if(videoCache[pedido.key]){cb(videoCache[pedido.key]);return;}
+  if(videoCache[pedido.key]&&!_videosBloqueados[videoCache[pedido.key]]){cb(videoCache[pedido.key]);return;}
   // Fallback: buscar (por si vino de una versión vieja sin videoId)
   var q=encodeURIComponent((pedido.cancion||'')+' '+(pedido.artista||''));
   var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&videoSyndicated=true&maxResults=5&q='+q+'&key='+YT_API_KEY;
