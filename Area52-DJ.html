@@ -82,7 +82,12 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
       </div>
     </div>
     <div class="now">
-      <div class="lbl" style="display:flex;justify-content:space-between;align-items:center">🎵 Poner música (DJ)<button onclick="reconfigurarKeys()" style="background:rgba(255,255,255,.08);color:#888;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer" title="Editar las API Keys">🔑 Llaves</button></div>
+      <div class="lbl" style="display:flex;justify-content:space-between;align-items:center;gap:6px">🎵 Poner música (DJ)<span style="display:flex;gap:5px">
+        <button onclick="exportarHistorialExcel()" style="background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Descargar el historial en Excel para corregir las cifras">⬇️ Excel</button>
+        <button onclick="document.getElementById('impExcel').click()" style="background:rgba(77,225,255,.12);color:#4de1ff;border:1px solid rgba(77,225,255,.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Subir el Excel corregido">⬆️ Subir</button>
+        <input type="file" id="impExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarHistorialExcel(this)"/>
+        <button onclick="reconfigurarKeys()" style="background:rgba(255,255,255,.08);color:#888;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer" title="Editar las API Keys">🔑 Llaves</button>
+      </span></div>
       <input id="djBusqueda" placeholder="Busca una canción para agregar a la cola" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin:8px 0" onkeydown="if(event.key==='Enter')djBuscar()">
       <select id="djGenero" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin-bottom:8px">
         <option value="auto">✨ Detectar automáticamente</option>
@@ -526,6 +531,83 @@ function marcarYsiguiente(){
 
 function limpiarTexto(s){
   return String(s||'').replace(/^🔁\s*/,'').replace(/\s*·\s*Auto \(más sonadas\)/g,'').trim();
+}
+// ═══ 📊 Corrección del historial en Excel ═══
+function _conSheetJS(cb){
+  if(window.XLSX){cb();return;}
+  var sc=document.createElement('script');
+  sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  sc.onload=cb;
+  sc.onerror=function(){alert('No se pudo cargar la librería de Excel. Revisa la conexión a internet.');};
+  document.head.appendChild(sc);
+}
+function exportarHistorialExcel(){
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId;});
+  if(!lista.length){alert('Aún no hay historial para exportar.');return;}
+  _conSheetJS(function(){
+    lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
+    var filas=lista.map(function(h){
+      return {
+        VideoId:h.videoId,
+        Cancion:h.cancion||'',
+        Artista:h.artista||'',
+        Genero:h.genero||'Otro',
+        Veces:h.veces||0,
+        UltimaVez:h.ultima?new Date(h.ultima).toLocaleString('es-CO'):''
+      };
+    });
+    var ws=XLSX.utils.json_to_sheet(filas);
+    ws['!cols']=[{wch:14},{wch:38},{wch:26},{wch:12},{wch:8},{wch:20}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Historial');
+    XLSX.writeFile(wb,'Area52-HistorialMusica.xlsx');
+    alert('⬇️ Descargado: '+filas.length+' canciones.\n\nCorrige la columna VECES (y si quieres, Cancion / Artista / Genero).\nNO borres ni cambies la columna VideoId — es la llave para volver a subir.\nCuando termines, usa ⬆️ Subir.');
+  });
+}
+function importarHistorialExcel(inp){
+  var f=inp.files&&inp.files[0];
+  if(!f)return;
+  inp.value='';
+  _conSheetJS(function(){
+    var r=new FileReader();
+    r.onload=function(){
+      var filas;
+      try{
+        var wb=XLSX.read(r.result,{type:'array'});
+        filas=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      }catch(e){alert('No pude leer el archivo: '+e.message);return;}
+      if(!filas||!filas.length){alert('El archivo está vacío.');return;}
+      var cambios=[];
+      filas.forEach(function(row){
+        var vid=String(row.VideoId||row.videoId||row.videoid||'').trim();
+        if(!vid||!historialMusica[vid])return;
+        var h=historialMusica[vid];
+        var upd={};
+        var vNum=parseInt(row.Veces!=null?row.Veces:row.veces);
+        if(!isNaN(vNum)&&vNum>=0&&vNum!==(h.veces||0))upd.veces=vNum;
+        var nCan=String(row.Cancion||row.cancion||'').trim();
+        if(nCan&&nCan!==(h.cancion||''))upd.cancion=nCan;
+        var nArt=String(row.Artista||row.artista||'').trim();
+        if(nArt&&nArt!==(h.artista||''))upd.artista=nArt;
+        var nGen=String(row.Genero||row.genero||'').trim();
+        if(nGen&&nGen!==(h.genero||''))upd.genero=nGen;
+        if(Object.keys(upd).length)cambios.push({vid:vid,nombre:h.cancion||vid,antes:h.veces||0,upd:upd});
+      });
+      if(!cambios.length){alert('No hay diferencias entre el Excel y el historial actual — nada que aplicar.');return;}
+      var muestra=cambios.slice(0,10).map(function(c){
+        return '• '+c.nombre.slice(0,34)+(c.upd.veces!=null?': '+c.antes+' → '+c.upd.veces+' veces':' (datos)');
+      }).join('\n');
+      if(!confirm('📊 Se aplicarán cambios a '+cambios.length+' canciones:\n\n'+muestra+(cambios.length>10?'\n… y '+(cambios.length-10)+' más':'')+'\n\n¿Aplicar? (El resto del historial queda intacto)'))return;
+      var pend=cambios.length;
+      cambios.forEach(function(c){
+        db.ref('historialMusica/'+c.vid).update(c.upd,function(){
+          pend--;
+          if(pend===0)alert('✅ Historial corregido: '+cambios.length+' canciones actualizadas.\nDesde ahora el top solo crece con pedidos reales — las automáticas no suman.');
+        });
+      });
+    };
+    r.readAsArrayBuffer(f);
+  });
 }
 function registrarReproduccion(p){
   if(!p||!p.videoId)return;
