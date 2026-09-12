@@ -446,7 +446,8 @@ var ticketConfig={fontSize:14,paperWidth:280,mostrarLogo:true};  // configurable
 var consumoSocios=[];  // [{id, ts, socio, items, total}]
 var novedades=[];
 var comprasCocina=[];   // 🛒 lista de faltantes que anota la cocina
-var serviciosPublicos={};  // 🧾 agua, luz, gas, internet  // 📝 novedades de mesas: descuentos, clientes que se volaron, cortesías...
+var serviciosPublicos={};  // 🧾 agua, luz, gas, internet
+var otrosConciliados=[];   // ✏️ ventas en "Otros" ya cuadradas contra el inventario  // 📝 novedades de mesas: descuentos, clientes que se volaron, cortesías...
 var smsBanco=[];  // 📡 SMS del banco empujados desde el celular {texto,ts} → contraste automático
 var pelotasMesa={};  // 🐸 pelotas de bolirrana prestadas por mesa {mesaId:{qty,ts,uidNombre}}
 var trasladosFP=[];  // movimientos de dinero entre medios de pago [{ts,de,a,monto,uid,uidNombre}]
@@ -753,6 +754,7 @@ function iniciarSync(){
     if(tabActual==='cocina')render();
   });
   fbOn('serviciosPublicos',function(v){serviciosPublicos=v||{};});
+  fbOn('otrosConciliados',function(v){otrosConciliados=v?Object.values(v):[];});
   fbOn('novedades',function(v){
     novedades=v?Object.keys(v).map(function(k){var o=v[k]||{};o._fbkey=k;return o;}):[];
     novedades.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
@@ -4383,6 +4385,7 @@ function renderInventario(){
     +'<button onclick="abrirConsumoEmpleados()" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🥤 Consumo personal</button>'
     +'<button onclick="elegirImpresionInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Imprimir inventario</button>'
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirCuadreInventario()" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">📋 Cuadre físico</button>':'')
+    +(usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')?'<button onclick="abrirVentasOtros()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">✏️ Ventas en Otros</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirSetupCocina()" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">🍔 Configurar cocina</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="abrirAutoEmojis()" style="background:#a855f718;color:#a855f7;border:1px solid #a855f733;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">🪄 Auto-iconos</button>':'')
     +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="toggleOcultarCant()" style="background:'+(invCfg.ocultarCant?'#a855f7':'var(--card)')+';color:'+(invCfg.ocultarCant?'#fff':'var(--muted)')+';border:1px solid '+(invCfg.ocultarCant?'#a855f7':'var(--border)')+';border-radius:8px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer">'+(invCfg.ocultarCant?'🙈 Cajero SIN cantidades':'👁️ Cajero ve cantidades')+'</button>':'')
@@ -12179,6 +12182,91 @@ function imprimirPrecuenta(){
 
 /* ═══ Imprimir inventario actual (solo lo que queda, sin ceros) ═══ */
 /* ═══ 📋 CUADRE FÍSICO: conteo de inventario + dinero, valoriza faltantes ═══ */
+function _resumenOtros(){
+  // Agrupar TODAS las ventas de ítems personalizados (excluye asume-socio) y restar lo ya conciliado
+  var grupos={};
+  ventas.forEach(function(v){
+    var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    its.forEach(function(it){
+      if(!it.isCustom||it.esAsumeSocio)return;
+      var nom=(it.customNombre||'Personalizado').trim();
+      var k=_normTxt(nom);
+      if(!grupos[k])grupos[k]={key:k,nombre:nom,qty:0,total:0,nVentas:0,primera:v.ts,ultima:v.ts};
+      var g=grupos[k];
+      g.qty+=(it.qty||1);
+      g.total+=(it.customPrecio||0)*(it.qty||1);
+      g.nVentas++;
+      if(v.ts<g.primera)g.primera=v.ts;
+      if(v.ts>g.ultima)g.ultima=v.ts;
+    });
+  });
+  otrosConciliados.forEach(function(c){
+    if(grupos[c.key])grupos[c.key].conciliadas=(grupos[c.key].conciliadas||0)+(c.cant||0);
+  });
+  return Object.values(grupos).map(function(g){
+    g.pendientes=Math.max(0,g.qty-(g.conciliadas||0));
+    return g;
+  }).sort(function(a,b){return b.pendientes-a.pendientes||b.total-a.total;});
+}
+function abrirVentasOtros(){
+  var lista=_resumenOtros();
+  var totPend=lista.reduce(function(a,g){return a+(g.pendientes>0?g.total*(g.pendientes/g.qty):0);},0);
+  var filas=lista.length?lista.map(function(g){
+    var listo=g.pendientes===0;
+    return'<div style="padding:8px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:800;'+(listo?'color:var(--muted)':'')+'">✏️ '+esc(g.nombre)+'</div>'
+          +'<div style="color:var(--muted);font-size:10px">'+g.qty+' und vendidas · '+fmt(g.total)+' · '+fmtFechaCorta(g.primera)+(g.ultima!==g.primera?' → '+fmtFechaCorta(g.ultima):'')
+            +(g.conciliadas?' · <span style="color:#22c55e;font-weight:800">✔ '+g.conciliadas+' cuadradas</span>':'')+'</div>'
+        +'</div>'
+        +(listo
+          ?'<span style="color:#22c55e;font-size:11px;font-weight:900;white-space:nowrap">✔ al día</span>'
+          :'<button onclick="abrirCuadrarOtro(\''+g.key+'\')" style="background:#a855f7;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap">🔗 Cuadrar '+g.pendientes+'</button>')
+      +'</div>'
+    +'</div>';
+  }).join(''):'<div style="color:var(--dim);text-align:center;padding:14px;font-size:12px">No hay ventas en "Otros" 🎉</div>';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">✏️ Ventas en Otros</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Lo que los cajeros vendieron como personalizado NO descontó inventario. Cuadra cada uno asignándolo a su producto real — y si se repite mucho, créalo en la Carta para que no vuelva a pasar.</div>'
+    +(totPend>0?'<div style="background:#ef444412;border:1px solid #ef444433;border-radius:9px;padding:7px 11px;margin-bottom:10px;font-size:12px;font-weight:800;color:#ef4444">⚠️ Pendiente por cuadrar: ~'+fmt(Math.round(totPend))+'</div>':'')
+    +filas
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
+}
+function abrirCuadrarOtro(key){
+  var g=_resumenOtros().find(function(x){return x.key===key;});
+  if(!g||!g.pendientes)return;
+  var opts=menu.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).map(function(p){
+    return'<option value="'+p.id+'">'+(p.emoji||'')+' '+esc(p.nombre)+(p.sinStock?' (por receta)':' · stock '+(parseInt(p.stock)||0))+'</option>';
+  }).join('');
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:4px">🔗 Cuadrar "'+esc(g.nombre)+'"</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">'+g.pendientes+' und pendientes · el inventario descontará como si se hubieran vendido del producto real (con su receta incluida).</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿Qué producto era en realidad?</div>'
+    +'<select class="inp" id="co-prod" style="margin-bottom:10px">'+opts+'</select>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Ventas a cuadrar</div><input class="inp" id="co-cant" type="number" min="1" max="'+g.pendientes+'" value="'+g.pendientes+'"/></div>'
+      +'<div style="flex:1"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Unidades c/u</div><input class="inp" id="co-unds" type="number" min="1" value="1"/></div>'
+    +'</div>'
+    +'<div style="color:var(--muted);font-size:9.5px;margin-bottom:10px">💡 "Unidades c/u": si cada venta en Otros era, por ejemplo, una cubeta de 5, pon 5.</div>'
+    +'<button class="btn btn-green btn-full" onclick="confirmarCuadrarOtro(\''+key+'\')">✓ Descontar del inventario</button>');
+}
+function confirmarCuadrarOtro(key){
+  var g=_resumenOtros().find(function(x){return x.key===key;});
+  if(!g)return;
+  var pid=parseInt((document.getElementById('co-prod')||{}).value);
+  var cant=parseInt((document.getElementById('co-cant')||{}).value)||0;
+  var unds=parseInt((document.getElementById('co-unds')||{}).value)||1;
+  var p=menu.find(function(m){return m.id===pid;});
+  if(!p||cant<=0||cant>g.pendientes){alert('Revisa el producto y la cantidad.');return;}
+  // Descontar como una venta real: producto + receta (usa el motor central; el delta lleva la cantidad)
+  ajustarStockItem({pid:pid,qty:1},-(cant*unds));
+  var reg={id:'oc'+Date.now(),ts:Date.now(),key:key,nombre:g.nombre,cant:cant,unds:unds,prodId:pid,prodNombre:p.nombre,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  otrosConciliados.push(reg);
+  var r=ref('otrosConciliados');if(r)r.push(reg);else fbSet('otrosConciliados',otrosConciliados);
+  logKardex('p',pid,p.nombre,-(cant*unds),'🔗 Cuadre de OTROS: "'+g.nombre+'" ('+cant+' venta'+(cant!==1?'s':'')+')',null);
+  closeModal2();
+  showToast('🔗 Cuadrado: '+cant+'× "'+esc(g.nombre)+'" → '+p.emoji+' '+esc(p.nombre)+'<br><span style="font-size:12px;opacity:.85">'+(cant*unds)+' und descontadas del inventario (receta incluida)</span>','#a855f7');
+  abrirVentasOtros();
+}
 function abrirCuadreInventario(){
   if(!usuarioActivo||usuarioActivo.rol!=='admin'){alert('Solo el administrador puede hacer el cuadre.');return;}
   window._cfVals={};window._cfDin={};window._cfBusq='';
