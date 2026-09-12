@@ -560,6 +560,61 @@ var modoParedes=false;
 var catFiltroPed='Todos';
 var _pedSubAbierta={};  // {cat|subcat: true} subcategorías desplegadas en el selector de pedido
 var _busqPed='';        // texto del buscador de productos en la mesa
+function _cartaCard(p){
+  // Productos sin control de cantidad: solo importa si están disponibles
+  if(p.sinStock){
+    var dispo=p.disponible!==false;
+    var agoSS=!dispo;
+    var okNS=dispo,okCS=dispo;
+    return _cartaCardHTML(p,agoSS,okNS,okCS,true);
+  }
+  var ago=!ventaSinStock&&p.stock<=0;
+  // El stock YA descuenta lo pedido en mesas (descuento en tiempo real al agregar):
+  // el número es la nevera física, así que la disponibilidad es directa.
+  var okN=ventaSinStock||(!ago&&p.stock>=1);
+  var okC=ventaSinStock||(!ago&&p.stock>=5);
+  return _cartaCardHTML(p,ago&&!ventaSinStock,okN,okC,false);
+}
+function _cartaCardHTML(p,mostrarAgotado,okN,okC,esSinStock){
+  return'<div class="carta-item" style="opacity:'+(mostrarAgotado?0.4:1)+'">'
+    +'<div class="flex-between"><span style="font-size:18px">'+p.emoji+'</span>'
+    +(mostrarAgotado?'<span class="tag" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;font-size:10px">AGOTADO</span>'
+         :esSinStock?'<span class="tag" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;font-size:10px">✅</span>'
+         :p.stock<=0&&ventaSinStock?'<span class="tag" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;font-size:10px">S/L</span>'
+         :p.stock<=5?'<span class="tag" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;font-size:10px">↓'+p.stock+'</span>':'')+'</div>'
+    +'<div style="color:var(--text);font-size:12px;font-weight:700;margin:3px 0 1px;line-height:1.2">'+esc(p.nombre)+'</div>'
+    +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">'+(esSinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+p.stock+' '+p.und)+'</div>'
+    +'<div style="display:flex;gap:4px">'
+    +(function(){
+      var prU=(p.variantes&&p.variantes.length)?null:promoVigente(p.id,'unidad');
+      var prC=promoVigente(p.id,'cubeta');
+      return '<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:'+(prU?'#f5a62322':'var(--accent)18')+';color:'+(prU?'#f5a623':'var(--accent)')+';border:1px solid '+(prU?'#f5a62366':'var(--accent)33')+';border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+(prU?'🏷️'+fmt(prU.valor):((p.variantes&&p.variantes.length)?'desde '+fmt(Math.min.apply(null,p.variantes.map(function(v){return v.precio;}))):fmt(p.precio)))+'</button>'
+      +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:'+(prC?'#f5a62322':'#22c55e18')+';color:'+(prC?'#f5a623':'#22c55e')+';border:1px solid '+(prC?'#f5a62366':'#22c55e33')+';border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+(prC?'🏷️'+fmt(prC.valor):fmt(p.cubeta))+'</button>':'');
+    })()
+    +'</div>'
+    +(((p.cat||'').toLowerCase().indexOf('nacional')>=0)?'<button onclick="abrirCantidadPromo('+p.id+')" '+(okN?'':'disabled')+' style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:6px;padding:4px 0;font-size:11px;font-weight:800;cursor:'+(okN?'pointer':'not-allowed')+'">⭐ Promo '+fmt(PROMO_NACIONAL_PRECIO)+'</button>':'')
+    +'</div>';
+}
+function _bpBusqHTML(){
+  var qtxt=(_busqPed||'').trim();
+  if(!qtxt)return null;
+  var q=_normTxt(qtxt);
+  var matches=menu.filter(function(m){
+    return _normTxt(m.nombre).indexOf(q)>=0||_normTxt(m.cat).indexOf(q)>=0||_normTxt(m.subcat||'').indexOf(q)>=0;
+  }).slice(0,30);
+  return '<div style="margin-top:10px">'
+    +'<div style="color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.5px;margin-bottom:6px">\ud83d\udd0d '+matches.length+' RESULTADO'+(matches.length!==1?'S':'')+' PARA "'+esc(qtxt)+'"</div>'
+    +(matches.length?'<div class="carta-grid">'+matches.map(_cartaCard).join('')+'</div>'
+      :'<div style="color:var(--muted);font-size:12px;text-align:center;padding:14px;background:var(--card2);border-radius:10px">Sin coincidencias. Revisa la ortograf\u00eda o busca por categor\u00eda.</div>')
+  +'</div>';
+}
+var _busqTimer=null;
+function _debounceBusq(fn){
+  // Mientras se escribe no se re-dibuja nada (el teclado queda quieto);
+  // 450ms después de la última tecla se actualizan los resultados.
+  clearTimeout(_busqTimer);
+  _busqTimer=setTimeout(fn,450);
+}
 function _refocusBusq(id){
   // Re-enfocar EN EL MISMO evento (sin setTimeout): así Android no cierra el teclado
   var el=document.getElementById(id);
@@ -567,6 +622,9 @@ function _refocusBusq(id){
 }
 function filtrarBusqPed(v){
   _busqPed=v;
+  var z=document.getElementById('bp-zona');
+  var htmlB=_bpBusqHTML();
+  if(z&&htmlB!=null){z.innerHTML=htmlB;return;}   // escribiendo: solo cambia la zona, el input no se toca y el teclado vive
   renderSoloPedido();
   _refocusBusq('busq-ped');
 }
@@ -981,7 +1039,7 @@ function renderSesionesModal(){
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin registros'+(f?' que coincidan':'')+'.</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">👥 Inicios de sesión</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+(window._sesCache||[]).length+' eventos: entradas, salidas, PIN fallidos y bloqueos por red</div>'
-    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;renderSesionesModal();_refocusBusq(\'ses-busq\');" style="margin-bottom:10px"/>'
+    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;_debounceBusq(function(){renderSesionesModal();_refocusBusq(\'ses-busq\');})" style="margin-bottom:10px"/>'
     +'<div style="max-height:56vh;overflow-y:auto">'+rows+'</div>');
 }
 function completarLogin(){
@@ -1410,55 +1468,9 @@ function renderPanelPedido(){
     return'<button class="pill'+(c===catFiltroPed?' active':'')+'" data-setcat="'+esc(c)+'">'+(ce?ce+' ':'')+c+'</button>';
   }).join('');
 
-  function _cartaCard(p){
-    // Productos sin control de cantidad: solo importa si están disponibles
-    if(p.sinStock){
-      var dispo=p.disponible!==false;
-      var agoSS=!dispo;
-      var okNS=dispo,okCS=dispo;
-      return _cartaCardHTML(p,agoSS,okNS,okCS,true);
-    }
-    var ago=!ventaSinStock&&p.stock<=0;
-    // El stock YA descuenta lo pedido en mesas (descuento en tiempo real al agregar):
-    // el número es la nevera física, así que la disponibilidad es directa.
-    var okN=ventaSinStock||(!ago&&p.stock>=1);
-    var okC=ventaSinStock||(!ago&&p.stock>=5);
-    return _cartaCardHTML(p,ago&&!ventaSinStock,okN,okC,false);
-  }
-  function _cartaCardHTML(p,mostrarAgotado,okN,okC,esSinStock){
-    return'<div class="carta-item" style="opacity:'+(mostrarAgotado?0.4:1)+'">'
-      +'<div class="flex-between"><span style="font-size:18px">'+p.emoji+'</span>'
-      +(mostrarAgotado?'<span class="tag" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;font-size:10px">AGOTADO</span>'
-           :esSinStock?'<span class="tag" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;font-size:10px">✅</span>'
-           :p.stock<=0&&ventaSinStock?'<span class="tag" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;font-size:10px">S/L</span>'
-           :p.stock<=5?'<span class="tag" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;font-size:10px">↓'+p.stock+'</span>':'')+'</div>'
-      +'<div style="color:var(--text);font-size:12px;font-weight:700;margin:3px 0 1px;line-height:1.2">'+esc(p.nombre)+'</div>'
-      +'<div style="color:var(--muted);font-size:10px;margin-bottom:5px">'+(esSinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+p.stock+' '+p.und)+'</div>'
-      +'<div style="display:flex;gap:4px">'
-      +(function(){
-        var prU=(p.variantes&&p.variantes.length)?null:promoVigente(p.id,'unidad');
-        var prC=promoVigente(p.id,'cubeta');
-        return '<button onclick="abrirCantidadMesa('+p.id+',false)" '+(okN?'':'disabled')+' style="flex:1;background:'+(prU?'#f5a62322':'var(--accent)18')+';color:'+(prU?'#f5a623':'var(--accent)')+';border:1px solid '+(prU?'#f5a62366':'var(--accent)33')+';border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okN?'pointer':'not-allowed')+'">'+(prU?'🏷️'+fmt(prU.valor):((p.variantes&&p.variantes.length)?'desde '+fmt(Math.min.apply(null,p.variantes.map(function(v){return v.precio;}))):fmt(p.precio)))+'</button>'
-        +(p.esCerveza&&p.cubeta?'<button onclick="abrirCantidadMesa('+p.id+',true)" '+(okC?'':'disabled')+' style="flex:1;background:'+(prC?'#f5a62322':'#22c55e18')+';color:'+(prC?'#f5a623':'#22c55e')+';border:1px solid '+(prC?'#f5a62366':'#22c55e33')+';border-radius:6px;padding:4px 0;font-size:11px;font-weight:700;cursor:'+(okC?'pointer':'not-allowed')+'">🪣'+(prC?'🏷️'+fmt(prC.valor):fmt(p.cubeta))+'</button>':'');
-      })()
-      +'</div>'
-      +(((p.cat||'').toLowerCase().indexOf('nacional')>=0)?'<button onclick="abrirCantidadPromo('+p.id+')" '+(okN?'':'disabled')+' style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:6px;padding:4px 0;font-size:11px;font-weight:800;cursor:'+(okN?'pointer':'not-allowed')+'">⭐ Promo '+fmt(PROMO_NACIONAL_PRECIO)+'</button>':'')
-      +'</div>';
-  }
   // 🔍 Buscador: si hay texto, mostrar coincidencias de TODA la carta
   var busqActiva=!!(_busqPed&&_busqPed.trim());
-  var busqBlock='';
-  if(busqActiva){
-    var q=_normTxt(_busqPed.trim());
-    var matches=menu.filter(function(m){
-      return _normTxt(m.nombre).indexOf(q)>=0||_normTxt(m.cat).indexOf(q)>=0||_normTxt(m.subcat||'').indexOf(q)>=0;
-    }).slice(0,30);
-    busqBlock='<div style="margin-top:10px">'
-      +'<div style="color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.5px;margin-bottom:6px">🔍 '+matches.length+' RESULTADO'+(matches.length!==1?'S':'')+' PARA "'+esc(_busqPed.trim())+'"</div>'
-      +(matches.length?'<div class="carta-grid">'+matches.map(_cartaCard).join('')+'</div>'
-        :'<div style="color:var(--muted);font-size:12px;text-align:center;padding:14px;background:var(--card2);border-radius:10px">Sin coincidencias. Revisa la ortografía o busca por categoría.</div>')
-    +'</div>';
-  }
+  var busqBlock=busqActiva?_bpBusqHTML():'';
 
   // ⭐ Sección "Más pedidos" (solo en la vista Todos)
   var masPedidosHtml='';
@@ -1602,9 +1614,11 @@ function renderPanelPedido(){
   +'<button onclick="abrirItemPersonalizado()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✏️ Otro</button>'
   +'<button onclick="abrirCubetazoMixto()" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo mixto</button>'+'<button onclick="abrirCubetazoNacional()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo nacional</button>'+'<button onclick="abrirCubetazoMitica()" style="background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo Mítica</button>'
   +'</div>'
+    +'<div id="bp-zona">'
     +(busqActiva?busqBlock
       :(masPedidosHtml
-        +(esCombosTab?('<div class="carta-grid" style="margin-top:10px">'+combosItems+'</div>'):('<div style="margin-top:6px">'+cartaBlock+'</div>'))));
+        +(esCombosTab?('<div class="carta-grid" style="margin-top:10px">'+combosItems+'</div>'):('<div style="margin-top:6px">'+cartaBlock+'</div>'))))
+    +'</div>';
 }
 
 function renderSoloPedido(){
@@ -2339,20 +2353,7 @@ function renderConsumoEmpModal(){
   var empOpts='<option value="" '+(window._ceEmp?'':'selected ')+'disabled>👆 ¿Quién consume?...</option>'
     +activos.map(function(e){return'<option value="'+e.id+'"'+(window._ceEmp===e.id?' selected':'')+'>'+esc(e.nombre)+(e.cargo?' · '+esc(e.cargo):'')+'</option>';}).join('');
   // Buscador de producto
-  var q=_normTxt((window._ceBusq||'').trim());
-  var matches=q?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,8):[];
-  var combosMatch=q?combos.filter(function(c){return c&&c.nombre&&(_normTxt(c.nombre).indexOf(q)>=0||_normTxt('combo').indexOf(q)>=0);}).slice(0,5):[];
-  var prodBtns=combosMatch.map(function(c){
-    return'<button onclick="elegirComboConsumoEmp(\''+c.id+'\')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:#f5a62310;border:1px solid #f5a62344;border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
-      +'<span style="font-size:13px;font-weight:700">🎁 '+esc(c.nombre)+'</span>'
-      +'<span style="color:#f5a623;font-size:11px;font-weight:800">'+fmt(c.precio||0)+'</span>'
-    +'</button>';
-  }).join('')+matches.map(function(p){
-    return'<button onclick="elegirProdConsumoEmp('+p.id+')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
-      +'<span style="font-size:13px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+(p.cubeta?' <span style="color:#f5a623;font-size:10px;font-weight:800">🪣</span>':'')+'</span>'
-      +'<span style="color:'+(p.sinStock?(p.disponible!==false?'#22c55e':'#ef4444'):((parseInt(p.stock)||0)>0?'var(--muted)':'#ef4444'))+';font-size:11px;font-weight:700">'+(p.sinStock?(p.disponible!==false?'✅ disponible':'🚫 agotado'):'stock: '+(parseInt(p.stock)||0))+'</span>'
-    +'</button>';
-  }).join('');
+
   // Resumen del mes por empleado
   var iniMes=new Date();iniMes.setDate(1);iniMes.setHours(0,0,0,0);
   var mesPorEmp={};var mesValorEmp={};
@@ -2380,12 +2381,29 @@ function renderConsumoEmpModal(){
       +'<div style="color:var(--muted);font-size:11px;margin-top:3px">Descuenta del inventario, NO genera venta ni entra a caja. Queda con nombre, fecha y hora.</div>'
     +'</div>'
     +'<select class="inp" id="ce-emp" onchange="window._ceEmp=this.value" style="margin-bottom:8px">'+empOpts+'</select>'
-    +'<input class="inp" id="ce-busq" placeholder="🔍 Buscar producto (ej: club, aguila...)" value="'+esc(window._ceBusq||'')+'" oninput="window._ceBusq=this.value;renderConsumoEmpModal();_refocusBusq(\'ce-busq\');" style="margin-bottom:8px"/>'
-    +(q?(prodBtns||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px">Sin coincidencias.</div>'):'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Escribe el nombre del producto que se consumió.</div>')
+    +'<input class="inp" id="ce-busq" placeholder="🔍 Buscar producto (ej: club, aguila...)" value="'+esc(window._ceBusq||'')+'" oninput="window._ceBusq=this.value;var r=document.getElementById(\'ce-res\');if(r)r.innerHTML=_ceResHTML();" style="margin-bottom:8px"/>'
+    +'<div id="ce-res">'+_ceResHTML()+'</div>'
     +(chips?'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:12px 0 5px">ESTE MES POR EMPLEADO</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+chips+'</div>':'')
     +'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:12px 0 4px">ÚLTIMOS REGISTROS</div>'
     +'<div style="max-height:30vh;overflow-y:auto;margin-bottom:12px">'+(rows||'<div style="color:var(--muted);font-size:12px;padding:6px 0">Sin consumos registrados todavía.</div>')+'</div>'
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+function _ceResHTML(){
+  var q=_normTxt((window._ceBusq||'').trim());
+  var matches=q?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,8):[];
+  var combosMatch=q?combos.filter(function(c){return c&&c.nombre&&(_normTxt(c.nombre).indexOf(q)>=0||_normTxt('combo').indexOf(q)>=0);}).slice(0,5):[];
+  var prodBtns=combosMatch.map(function(c){
+    return'<button onclick="elegirComboConsumoEmp(\''+c.id+'\')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:#f5a62310;border:1px solid #f5a62344;border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
+      +'<span style="font-size:13px;font-weight:700">🎁 '+esc(c.nombre)+'</span>'
+      +'<span style="color:#f5a623;font-size:11px;font-weight:800">'+fmt(c.precio||0)+'</span>'
+    +'</button>';
+  }).join('')+matches.map(function(p){
+    return'<button onclick="elegirProdConsumoEmp('+p.id+')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:5px;cursor:pointer;color:var(--text)">'
+      +'<span style="font-size:13px;font-weight:700">'+p.emoji+' '+esc(p.nombre)+(p.cubeta?' <span style="color:#f5a623;font-size:10px;font-weight:800">🪣</span>':'')+'</span>'
+      +'<span style="color:'+(p.sinStock?(p.disponible!==false?'#22c55e':'#ef4444'):((parseInt(p.stock)||0)>0?'var(--muted)':'#ef4444'))+';font-size:11px;font-weight:700">'+(p.sinStock?(p.disponible!==false?'✅ disponible':'🚫 agotado'):'stock: '+(parseInt(p.stock)||0))+'</span>'
+    +'</button>';
+  }).join('');
+  return q?(prodBtns||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px">Sin coincidencias.</div>'):'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Escribe el nombre del producto que se consumió.</div>';
 }
 function elegirProdConsumoEmp(pid,esCubeta){
   if(!window._ceEmp){alert('👆 Primero elige quién consume.');return;}
@@ -2603,7 +2621,7 @@ function renderKardexModal(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:8px">📒 Kardex de inventario</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · a la derecha: el cambio y <b style="color:var(--gold)">cuántas quedaron</b> después de cada movimiento</div>'
     +'<select class="inp" id="kardex-prod" onchange="window._kardexProd=this.value;renderKardexModal();" style="margin-bottom:8px">'+opts+'</select>'
-    +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;renderKardexModal();_refocusBusq(\'kardex-busq\');" style="margin-bottom:10px"/>'
+    +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;_debounceBusq(function(){renderKardexModal();_refocusBusq(\'kardex-busq\');})" style="margin-bottom:10px"/>'
     +headerStock
     +'<div style="max-height:52vh;overflow-y:auto">'+rows+'</div>');
 }
@@ -9414,7 +9432,7 @@ function renderPromoForm(){
     ?'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--accent)66;border-radius:9px;padding:9px 12px;margin-bottom:10px">'
       +'<span style="font-weight:800;font-size:13px">'+p.emoji+' '+esc(p.nombre)+'</span>'
       +'<button onclick="window._prEdit.prodId=null;window._prEdit.tipo=\'unidad\';renderPromoForm();" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">cambiar</button></div>'
-    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;renderPromoForm();_refocusBusq(\'pr-busq\');" style="margin-bottom:6px"/>'
+    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;_debounceBusq(function(){renderPromoForm();_refocusBusq(\'pr-busq\');})" style="margin-bottom:6px"/>'
       +matches.map(function(m){return'<button onclick="window._prEdit.prodId='+m.id+';window._prEdit.busq=\'\';renderPromoForm();" style="display:flex;justify-content:space-between;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:4px;cursor:pointer;color:var(--text)"><span style="font-size:12px;font-weight:700">'+m.emoji+' '+esc(m.nombre)+'</span><span style="color:var(--muted);font-size:11px">'+fmt(m.precio)+(m.cubeta?' · 🪣'+fmt(m.cubeta):'')+'</span></button>';}).join('');
   var tieneCubeta=p&&p.esCerveza&&p.cubeta;
   var tipoHtml=p?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué precio aplica?</div><div style="display:flex;gap:8px;margin-bottom:10px">'
@@ -11111,42 +11129,15 @@ function renderSocios(){
   // Carta por categorias
   // Categorías reales (sin 'Todos'); cada una es un acordeón
   var catsReales=menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort();
-  function _cardProdSoc(p){
-    var ps=Math.round(p.precio*0.9);
-    var psCub=p.esCerveza&&p.cubeta?Math.round((p.cubeta||p.precio*5)*0.9):0;
-    return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px">'
-      +'<div style="display:flex;align-items:center;gap:8px'+(p.esCerveza&&p.cubeta?';margin-bottom:6px':'')+'">'
-        +'<span style="font-size:20px">'+p.emoji+'</span>'
-        +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(p.nombre)+'</div>'
-        +'<div style="color:#22c55e;font-size:11px;font-weight:700">'+fmt(ps)+'</div></div>'
-        +'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="false" style="background:var(--accent)18;color:var(--accent);border:none;border-radius:7px;padding:4px 10px;font-size:14px;font-weight:900;cursor:pointer">+</button>'
-      +'</div>'
-      +(p.esCerveza&&p.cubeta
-        ?'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="true" style="width:100%;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:4px;font-size:11px;font-weight:700;cursor:pointer">🪣 Cubetazo ×5 — '+fmt(psCub)+'</button>'
-        :'')
-      +'</div>';
-  }
   // 🪣 Cubetazos mixtos del socio (nacional e importado, con 10% socio)
   var mixBtns='<div style="display:flex;gap:7px;margin-bottom:8px">'
     +'<button data-act="soc-mix" data-tipo="nac" style="flex:1;background:#22c55e14;color:#22c55e;border:1px solid #22c55e44;border-radius:10px;padding:9px 4px;font-size:11.5px;font-weight:900;cursor:pointer">🪣 Mixto NACIONAL<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_NAC_PRECIO*0.9))+'</span></button>'
     +'<button data-act="soc-mix" data-tipo="imp" style="flex:1;background:#38bdf814;color:#38bdf8;border:1px solid #38bdf844;border-radius:10px;padding:9px 4px;font-size:11.5px;font-weight:900;cursor:pointer">🪣 Mixto IMPORTADO<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_MIX_PRECIO*0.9))+'</span></button>'
   +'</div>';
 
-  // 🔍 Buscador (como en las mesas): con texto, resultados de toda la carta
+  // 🔍 Buscador (como en las mesas): sin re-render al escribir
   var socBusq=(window._socBusq||'').trim();
-  var busqBox='<input class="inp" id="soc-busq" placeholder="🔍 Buscar producto (ej: aguila, margarita...)" value="'+esc(window._socBusq||'')+'" oninput="window._socBusq=this.value;render();_refocusBusq(\'soc-busq\')" style="margin-bottom:8px"/>';
-  var busqResHtml='';
-  if(socBusq){
-    var qS=_normTxt(socBusq);
-    var matchesS=menu.filter(function(m){
-      return _normTxt(m.nombre).indexOf(qS)>=0||_normTxt(m.cat).indexOf(qS)>=0||_normTxt(m.subcat||'').indexOf(qS)>=0;
-    }).slice(0,30);
-    busqResHtml='<div style="margin-bottom:10px">'
-      +'<div style="color:var(--accent);font-size:11px;font-weight:800;margin-bottom:6px">🔍 '+matchesS.length+' RESULTADO'+(matchesS.length!==1?'S':'')+'</div>'
-      +(matchesS.length?'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">'+matchesS.map(_cardProdSoc).join('')+'</div>'
-        :'<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px;background:var(--card2);border-radius:10px">Sin coincidencias</div>')
-    +'</div>';
-  }
+  var busqBox='<input class="inp" id="soc-busq" placeholder="🔍 Buscar producto (ej: aguila, margarita...)" value="'+esc(window._socBusq||'')+'" oninput="_socBuscar(this.value)" style="margin-bottom:8px"/>';
 
   // Acordeón: Combos + cada categoría
   var acordeon='';
@@ -11261,7 +11252,7 @@ function renderSocios(){
         +'<button onclick="abrirRetiroSocio()" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e44;border-radius:10px;padding:11px;font-weight:800;font-size:12px;cursor:pointer">💵 Retiro de dinero</button>'
         +'<button onclick="abrirOtroSocio()" style="flex:1;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:10px;padding:11px;font-weight:800;font-size:12px;cursor:pointer">📝 Otro (fuera de carta)</button>'
       +'</div>'
-      +busqBox+mixBtns+(socBusq?busqResHtml:acordeon)
+      +busqBox+mixBtns+'<div id="soc-res">'+(socBusq?_socResHTML():'')+'</div>'+'<div id="soc-acordeon" style="'+(socBusq?'display:none':'')+'">'+acordeon+'</div>'
     +'</div>':'')
     // History del socio activo
     +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">📋 CONSUMOS DE '+socioActivo+'</div>'
@@ -11307,6 +11298,46 @@ function showToast(msg,color,dur){
   },dur||1800);
 }
 
+function _cardProdSoc(p){
+  var ps=Math.round(p.precio*0.9);
+  var psCub=p.esCerveza&&p.cubeta?Math.round((p.cubeta||p.precio*5)*0.9):0;
+  return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px">'
+    +'<div style="display:flex;align-items:center;gap:8px'+(p.esCerveza&&p.cubeta?';margin-bottom:6px':'')+'">'
+      +'<span style="font-size:20px">'+p.emoji+'</span>'
+      +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(p.nombre)+'</div>'
+      +'<div style="color:#22c55e;font-size:11px;font-weight:700">'+fmt(ps)+'</div></div>'
+      +'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="false" style="background:var(--accent)18;color:var(--accent);border:none;border-radius:7px;padding:4px 10px;font-size:14px;font-weight:900;cursor:pointer">+</button>'
+    +'</div>'
+    +(p.esCerveza&&p.cubeta
+      ?'<button data-act="soc-add" data-pid="'+p.id+'" data-cub="true" style="width:100%;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:7px;padding:4px;font-size:11px;font-weight:700;cursor:pointer">🪣 Cubetazo ×5 — '+fmt(psCub)+'</button>'
+      :'')
+    +'</div>';
+  }
+function _socResHTML(){
+  var qtxt=(window._socBusq||'').trim();
+  if(!qtxt)return null;
+  var q=_normTxt(qtxt);
+  var matches=menu.filter(function(m){
+    return _normTxt(m.nombre).indexOf(q)>=0||_normTxt(m.cat).indexOf(q)>=0||_normTxt(m.subcat||'').indexOf(q)>=0;
+  }).slice(0,30);
+  return '<div style="margin-bottom:10px">'
+    +'<div style="color:var(--accent);font-size:11px;font-weight:800;margin-bottom:6px">\ud83d\udd0d '+matches.length+' RESULTADO'+(matches.length!==1?'S':'')+'</div>'
+    +(matches.length?'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">'+matches.map(_cardProdSoc).join('')+'</div>'
+      :'<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px;background:var(--card2);border-radius:10px">Sin coincidencias</div>')
+  +'</div>';
+}
+function _socBuscar(v){
+  window._socBusq=v;
+  var res=document.getElementById('soc-res');
+  var aco=document.getElementById('soc-acordeon');
+  var h=_socResHTML();
+  if(res&&aco){
+    res.innerHTML=h||'';
+    aco.style.display=h?'none':'';
+    return;
+  }
+  render();
+}
 function abrirMixtoSocio(tipo){
   // 🪣 Cubetazo mixto para el socio: nacional (Águila/Poker) o importado (Heineken/Sol/Miller), con 10% de socio
   var esNac=(tipo==='nac');
