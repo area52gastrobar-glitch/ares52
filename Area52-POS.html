@@ -560,14 +560,15 @@ var modoParedes=false;
 var catFiltroPed='Todos';
 var _pedSubAbierta={};  // {cat|subcat: true} subcategorías desplegadas en el selector de pedido
 var _busqPed='';        // texto del buscador de productos en la mesa
+function _refocusBusq(id){
+  // Re-enfocar EN EL MISMO evento (sin setTimeout): así Android no cierra el teclado
+  var el=document.getElementById(id);
+  if(el){el.focus();var n=el.value.length;try{el.setSelectionRange(n,n);}catch(e){}}
+}
 function filtrarBusqPed(v){
   _busqPed=v;
   renderSoloPedido();
-  // Mantener el foco y el cursor en el buscador tras re-renderizar
-  setTimeout(function(){
-    var el=document.getElementById('busq-ped');
-    if(el){el.focus();var n=el.value.length;try{el.setSelectionRange(n,n);}catch(e){}}
-  },0);
+  _refocusBusq('busq-ped');
 }
 function limpiarBusqPed(){_busqPed='';renderSoloPedido();}
 function _normTxt(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
@@ -980,7 +981,7 @@ function renderSesionesModal(){
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin registros'+(f?' que coincidan':'')+'.</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">👥 Inicios de sesión</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+(window._sesCache||[]).length+' eventos: entradas, salidas, PIN fallidos y bloqueos por red</div>'
-    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;renderSesionesModal();setTimeout(function(){var el=document.getElementById(\'ses-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:10px"/>'
+    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;renderSesionesModal();_refocusBusq(\'ses-busq\');" style="margin-bottom:10px"/>'
     +'<div style="max-height:56vh;overflow-y:auto">'+rows+'</div>');
 }
 function completarLogin(){
@@ -2379,7 +2380,7 @@ function renderConsumoEmpModal(){
       +'<div style="color:var(--muted);font-size:11px;margin-top:3px">Descuenta del inventario, NO genera venta ni entra a caja. Queda con nombre, fecha y hora.</div>'
     +'</div>'
     +'<select class="inp" id="ce-emp" onchange="window._ceEmp=this.value" style="margin-bottom:8px">'+empOpts+'</select>'
-    +'<input class="inp" id="ce-busq" placeholder="🔍 Buscar producto (ej: club, aguila...)" value="'+esc(window._ceBusq||'')+'" oninput="window._ceBusq=this.value;renderConsumoEmpModal();setTimeout(function(){var el=document.getElementById(\'ce-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:8px"/>'
+    +'<input class="inp" id="ce-busq" placeholder="🔍 Buscar producto (ej: club, aguila...)" value="'+esc(window._ceBusq||'')+'" oninput="window._ceBusq=this.value;renderConsumoEmpModal();_refocusBusq(\'ce-busq\');" style="margin-bottom:8px"/>'
     +(q?(prodBtns||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px">Sin coincidencias.</div>'):'<div style="color:var(--muted);font-size:11px;text-align:center;padding:6px">Escribe el nombre del producto que se consumió.</div>')
     +(chips?'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:12px 0 5px">ESTE MES POR EMPLEADO</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+chips+'</div>':'')
     +'<div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:1px;margin:12px 0 4px">ÚLTIMOS REGISTROS</div>'
@@ -2602,7 +2603,7 @@ function renderKardexModal(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:8px">📒 Kardex de inventario</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · a la derecha: el cambio y <b style="color:var(--gold)">cuántas quedaron</b> después de cada movimiento</div>'
     +'<select class="inp" id="kardex-prod" onchange="window._kardexProd=this.value;renderKardexModal();" style="margin-bottom:8px">'+opts+'</select>'
-    +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;renderKardexModal();setTimeout(function(){var el=document.getElementById(\'kardex-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:10px"/>'
+    +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;renderKardexModal();_refocusBusq(\'kardex-busq\');" style="margin-bottom:10px"/>'
     +headerStock
     +'<div style="max-height:52vh;overflow-y:auto">'+rows+'</div>');
 }
@@ -9413,7 +9414,7 @@ function renderPromoForm(){
     ?'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--accent)66;border-radius:9px;padding:9px 12px;margin-bottom:10px">'
       +'<span style="font-weight:800;font-size:13px">'+p.emoji+' '+esc(p.nombre)+'</span>'
       +'<button onclick="window._prEdit.prodId=null;window._prEdit.tipo=\'unidad\';renderPromoForm();" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">cambiar</button></div>'
-    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;renderPromoForm();setTimeout(function(){var el=document.getElementById(\'pr-busq\');if(el){el.focus();var n=el.value.length;el.setSelectionRange(n,n);}},0);" style="margin-bottom:6px"/>'
+    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;renderPromoForm();_refocusBusq(\'pr-busq\');" style="margin-bottom:6px"/>'
       +matches.map(function(m){return'<button onclick="window._prEdit.prodId='+m.id+';window._prEdit.busq=\'\';renderPromoForm();" style="display:flex;justify-content:space-between;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:4px;cursor:pointer;color:var(--text)"><span style="font-size:12px;font-weight:700">'+m.emoji+' '+esc(m.nombre)+'</span><span style="color:var(--muted);font-size:11px">'+fmt(m.precio)+(m.cubeta?' · 🪣'+fmt(m.cubeta):'')+'</span></button>';}).join('');
   var tieneCubeta=p&&p.esCerveza&&p.cubeta;
   var tipoHtml=p?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué precio aplica?</div><div style="display:flex;gap:8px;margin-bottom:10px">'
@@ -11125,6 +11126,28 @@ function renderSocios(){
         :'')
       +'</div>';
   }
+  // 🪣 Cubetazos mixtos del socio (nacional e importado, con 10% socio)
+  var mixBtns='<div style="display:flex;gap:7px;margin-bottom:8px">'
+    +'<button data-act="soc-mix" data-tipo="nac" style="flex:1;background:#22c55e14;color:#22c55e;border:1px solid #22c55e44;border-radius:10px;padding:9px 4px;font-size:11.5px;font-weight:900;cursor:pointer">🪣 Mixto NACIONAL<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_NAC_PRECIO*0.9))+'</span></button>'
+    +'<button data-act="soc-mix" data-tipo="imp" style="flex:1;background:#38bdf814;color:#38bdf8;border:1px solid #38bdf844;border-radius:10px;padding:9px 4px;font-size:11.5px;font-weight:900;cursor:pointer">🪣 Mixto IMPORTADO<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_MIX_PRECIO*0.9))+'</span></button>'
+  +'</div>';
+
+  // 🔍 Buscador (como en las mesas): con texto, resultados de toda la carta
+  var socBusq=(window._socBusq||'').trim();
+  var busqBox='<input class="inp" id="soc-busq" placeholder="🔍 Buscar producto (ej: aguila, margarita...)" value="'+esc(window._socBusq||'')+'" oninput="window._socBusq=this.value;render();_refocusBusq(\'soc-busq\')" style="margin-bottom:8px"/>';
+  var busqResHtml='';
+  if(socBusq){
+    var qS=_normTxt(socBusq);
+    var matchesS=menu.filter(function(m){
+      return _normTxt(m.nombre).indexOf(qS)>=0||_normTxt(m.cat).indexOf(qS)>=0||_normTxt(m.subcat||'').indexOf(qS)>=0;
+    }).slice(0,30);
+    busqResHtml='<div style="margin-bottom:10px">'
+      +'<div style="color:var(--accent);font-size:11px;font-weight:800;margin-bottom:6px">🔍 '+matchesS.length+' RESULTADO'+(matchesS.length!==1?'S':'')+'</div>'
+      +(matchesS.length?'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">'+matchesS.map(_cardProdSoc).join('')+'</div>'
+        :'<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px;background:var(--card2);border-radius:10px">Sin coincidencias</div>')
+    +'</div>';
+  }
+
   // Acordeón: Combos + cada categoría
   var acordeon='';
   // Combos
@@ -11153,7 +11176,15 @@ function renderSocios(){
     acordeon+='<div style="margin-bottom:6px"><button data-act="soc-cat" data-cat="'+esc(cat)+'" style="width:100%;text-align:left;background:var(--card);border:1px solid '+(abierta?'var(--accent)':'var(--border)')+';border-radius:10px;padding:11px 14px;font-weight:700;font-size:13px;color:'+(abierta?'var(--accent)':'var(--text)')+';cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
       +'<span>'+esc(cat)+'</span><span style="font-size:11px;color:var(--muted)">'+prods.length+' '+(abierta?'▲':'▼')+'</span></button>';
     if(abierta){
-      acordeon+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+prods.map(_cardProdSoc).join('')+'</div>';
+      // Agrupado por subcategoría, como la carta de las mesas
+      var subMap={};
+      prods.forEach(function(p){var sc=(p.subcat||'').trim()||'_sin';if(!subMap[sc])subMap[sc]=[];subMap[sc].push(p);});
+      var subKeys=Object.keys(subMap).sort(function(a,b){if(a==='_sin')return 1;if(b==='_sin')return -1;return a.localeCompare(b);});
+      acordeon+='<div style="margin-top:8px">'+subKeys.map(function(sc){
+        var lista=subMap[sc].slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});
+        return (sc!=='_sin'&&subKeys.length>1?'<div style="color:var(--muted);font-size:10.5px;font-weight:800;letter-spacing:.6px;margin:7px 0 5px;text-transform:uppercase">'+esc(sc)+'</div>':'')
+          +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">'+lista.map(_cardProdSoc).join('')+'</div>';
+      }).join('')+'</div>';
     }
     acordeon+='</div>';
   });
@@ -11230,7 +11261,7 @@ function renderSocios(){
         +'<button onclick="abrirRetiroSocio()" style="flex:1;background:#22c55e18;color:#22c55e;border:1px solid #22c55e44;border-radius:10px;padding:11px;font-weight:800;font-size:12px;cursor:pointer">💵 Retiro de dinero</button>'
         +'<button onclick="abrirOtroSocio()" style="flex:1;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:10px;padding:11px;font-weight:800;font-size:12px;cursor:pointer">📝 Otro (fuera de carta)</button>'
       +'</div>'
-      +acordeon
+      +busqBox+mixBtns+(socBusq?busqResHtml:acordeon)
     +'</div>':'')
     // History del socio activo
     +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">📋 CONSUMOS DE '+socioActivo+'</div>'
@@ -11276,6 +11307,52 @@ function showToast(msg,color,dur){
   },dur||1800);
 }
 
+function abrirMixtoSocio(tipo){
+  // 🪣 Cubetazo mixto para el socio: nacional (Águila/Poker) o importado (Heineken/Sol/Miller), con 10% de socio
+  var esNac=(tipo==='nac');
+  var nombres=esNac?CUBE_NAC_NOMBRES:CUBE_MIX_NOMBRES;
+  var subcat=esNac?CUBE_NAC_SUBCAT:CUBE_MIX_SUBCAT;
+  var precioLista=esNac?CUBE_NAC_PRECIO:CUBE_MIX_PRECIO;
+  var precioSocio=Math.round(precioLista*0.9);
+  var etiqueta='Cubetazo mixto '+(esNac?'nacional':'importado');
+  var cervezas=menu.filter(function(m){
+    var match;
+    if(subcat){match=(m.subcat===subcat);}
+    else{var n=_normTxt(m.nombre||'');match=nombres.some(function(x){return n.indexOf(x)>=0;});}
+    return match&&(ventaSinStock||m.stock>0);
+  });
+  if(!cervezas.length){alert('No hay cervezas disponibles para este cubetazo.');return;}
+  abrirDistribucion({
+    titulo:'🪣 '+etiqueta+' para '+_socioActivo+' · '+fmt(precioSocio).replace(/\u00A0/g,' ')+' (elige '+CUBE_MIX_TAM+')',
+    emoji:'🪣',
+    total:CUBE_MIX_TAM,
+    productos:cervezas.map(function(p){return {id:p.id,nombre:p.nombre,emoji:p.emoji,precio:Math.round(precioSocio/CUBE_MIX_TAM),stock:p.stock};}),
+    onConfirm:function(cantidades){confirmarMixtoSocio(cantidades,precioLista,precioSocio,etiqueta);}
+  });
+}
+function confirmarMixtoSocio(cantidades,precioLista,precioSocio,etiqueta){
+  var detalle=[],stockDetalle=[],txt=[];
+  Object.keys(cantidades).forEach(function(pid){
+    var q=cantidades[pid];if(!q)return;
+    var p=menu.find(function(m){return Number(m.id)===Number(pid);});
+    if(!p)return;
+    detalle.push({prodId:p.id,nombre:p.nombre,emoji:p.emoji,cantidad:q});
+    stockDetalle.push({t:'p',id:p.id,cant:q});
+    txt.push(q+' '+p.nombre);
+  });
+  if(!detalle.length)return;
+  var item={nombre:'🪣 '+etiqueta+' ('+txt.join(' · ')+')',emoji:'🪣',qty:1,esMixto:true,
+    cubMixDetalle:detalle,precioBase:precioLista,precioLista:precioLista,precioSocio:precioSocio};
+  var consumo={id:'soc_'+Date.now(),ts:Date.now(),socio:_socioActivo,items:[item],total:precioSocio,stockDetalle:stockDetalle,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  consumoSocios.push(consumo);
+  var r=ref('consumoSocios');if(r)r.push(consumo);else fbSet('consumoSocios',consumoSocios);
+  aplicarStockDetalle(stockDetalle,-1,'Consumo socio '+_socioActivo+': '+etiqueta);
+  var totalSocio=consumoSocios.filter(function(c){return c.socio===_socioActivo;}).reduce(function(a,c){return a+(c.total||0);},0);
+  var colorS=(_socioActivo==='CARLOS')?'#38bdf8':'#a855f7';
+  closeModal2();
+  showToast('🪣 '+esc(etiqueta)+' → '+_socioActivo+'<br><span style="font-size:12px;opacity:.85">'+esc(txt.join(' · '))+' · 10% socio: '+fmt(precioSocio)+' · Total '+_socioActivo+': '+fmt(totalSocio)+'</span>',colorS);
+  render();
+}
 function abrirCantidadSocio(pid,esCubeta){
   var p=menu.find(function(m){return m.id===pid;});
   if(!p)return;
@@ -12182,15 +12259,19 @@ function imprimirPrecuenta(){
 
 /* ═══ Imprimir inventario actual (solo lo que queda, sin ceros) ═══ */
 /* ═══ 📋 CUADRE FÍSICO: conteo de inventario + dinero, valoriza faltantes ═══ */
-function _resumenOtros(){
-  // Agrupar TODAS las ventas de ítems personalizados (excluye asume-socio) y restar lo ya conciliado
+function _resumenOtros(desde,hasta){
+  // Agrupa ventas personalizadas del PERIODO (excluye asume-socio); lo conciliado se descuenta del total histórico
+  desde=desde||0;if(hasta==null)hasta=Infinity;
   var grupos={};
+  var totalHist={};   // vendidas de todos los tiempos por nombre (para pendientes globales)
   ventas.forEach(function(v){
     var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
     its.forEach(function(it){
       if(!it.isCustom||it.esAsumeSocio)return;
       var nom=(it.customNombre||'Personalizado').trim();
       var k=_normTxt(nom);
+      totalHist[k]=(totalHist[k]||0)+(it.qty||1);
+      if(v.ts<desde||v.ts>hasta)return;
       if(!grupos[k])grupos[k]={key:k,nombre:nom,qty:0,total:0,nVentas:0,primera:v.ts,ultima:v.ts};
       var g=grupos[k];
       g.qty+=(it.qty||1);
@@ -12200,16 +12281,39 @@ function _resumenOtros(){
       if(v.ts>g.ultima)g.ultima=v.ts;
     });
   });
-  otrosConciliados.forEach(function(c){
-    if(grupos[c.key])grupos[c.key].conciliadas=(grupos[c.key].conciliadas||0)+(c.cant||0);
-  });
+  var conc={};
+  otrosConciliados.forEach(function(c){conc[c.key]=(conc[c.key]||0)+(c.cant||0);});
   return Object.values(grupos).map(function(g){
-    g.pendientes=Math.max(0,g.qty-(g.conciliadas||0));
+    g.conciliadas=conc[g.key]||0;
+    g.pendGlobal=Math.max(0,(totalHist[g.key]||0)-g.conciliadas);   // lo que falta por cuadrar en total
+    g.pendientes=Math.min(g.qty,g.pendGlobal);                      // lo cuadrable de este periodo
     return g;
   }).sort(function(a,b){return b.pendientes-a.pendientes||b.total-a.total;});
 }
 function abrirVentasOtros(){
-  var lista=_resumenOtros();
+  if(!window._otrosPeriodo)window._otrosPeriodo='ult';
+  var per=window._otrosPeriodo;
+  var cs=cierres.slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+  var desde=0,hasta=Infinity,perTxt='';
+  if(per==='ult'&&cs.length){
+    var uc=cs[cs.length-1];
+    desde=uc.turnoInicio||0;hasta=uc.ts||Infinity;
+    perTxt='🔒 Último cierre · '+fmtFechaCorta(uc.ts);
+  }else if(per==='ult5'&&cs.length){
+    var c5=cs[Math.max(0,cs.length-5)];
+    desde=c5.turnoInicio||0;hasta=cs[cs.length-1].ts||Infinity;
+    perTxt='🔒 Últimos '+Math.min(5,cs.length)+' cierres';
+  }else if(per==='turno'){
+    desde=turnoInicio||0;hasta=Infinity;
+    perTxt='🟢 Turno actual (sin cerrar)';
+  }else{
+    per='todo';perTxt='📜 Todo el historial';
+  }
+  var chips=[['ult','🔒 Último cierre'],['ult5','5 cierres'],['turno','🟢 Turno actual'],['todo','📜 Todo']].map(function(x){
+    var sel=x[0]===per;
+    return'<button onclick="window._otrosPeriodo=\''+x[0]+'\';abrirVentasOtros()" style="flex:1;background:'+(sel?'#ef4444':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'#ef4444':'var(--border)')+';border-radius:8px;padding:7px 2px;font-size:10.5px;font-weight:800;cursor:pointer;white-space:nowrap">'+x[1]+'</button>';
+  }).join('');
+  var lista=_resumenOtros(desde,hasta);
   var totPend=lista.reduce(function(a,g){return a+(g.pendientes>0?g.total*(g.pendientes/g.qty):0);},0);
   var filas=lista.length?lista.map(function(g){
     var listo=g.pendientes===0;
@@ -12227,14 +12331,20 @@ function abrirVentasOtros(){
     +'</div>';
   }).join(''):'<div style="color:var(--dim);text-align:center;padding:14px;font-size:12px">No hay ventas en "Otros" 🎉</div>';
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">✏️ Ventas en Otros</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Lo que los cajeros vendieron como personalizado NO descontó inventario. Cuadra cada uno asignándolo a su producto real — y si se repite mucho, créalo en la Carta para que no vuelva a pasar.</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:8px">Lo que los cajeros vendieron como personalizado NO descontó inventario. Cuadra cada uno asignándolo a su producto real — y si se repite mucho, créalo en la Carta para que no vuelva a pasar.</div>'
+    +'<div style="display:flex;gap:5px;margin-bottom:6px">'+chips+'</div>'
+    +'<div style="color:#38bdf8;font-size:10.5px;font-weight:800;margin-bottom:8px">'+perTxt+'</div>'
     +(totPend>0?'<div style="background:#ef444412;border:1px solid #ef444433;border-radius:9px;padding:7px 11px;margin-bottom:10px;font-size:12px;font-weight:800;color:#ef4444">⚠️ Pendiente por cuadrar: ~'+fmt(Math.round(totPend))+'</div>':'')
     +filas
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
 }
 function abrirCuadrarOtro(key){
-  var g=_resumenOtros().find(function(x){return x.key===key;});
-  if(!g||!g.pendientes)return;
+  var g=_resumenOtros().find(function(x){return x.key===key;});   // global: aquí viven los pendientes reales
+  if(!g)return;
+  var vista=_resumenOtros.call?null:null;
+  // pendientes del periodo en pantalla (para el valor sugerido)
+  g.pendientes=g.pendGlobal!=null?g.pendGlobal:g.pendientes;
+  if(!g.pendientes)return;
   var opts=menu.slice().sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).map(function(p){
     return'<option value="'+p.id+'">'+(p.emoji||'')+' '+esc(p.nombre)+(p.sinStock?' (por receta)':' · stock '+(parseInt(p.stock)||0))+'</option>';
   }).join('');
@@ -12252,6 +12362,7 @@ function abrirCuadrarOtro(key){
 function confirmarCuadrarOtro(key){
   var g=_resumenOtros().find(function(x){return x.key===key;});
   if(!g)return;
+  g.pendientes=g.pendGlobal!=null?g.pendGlobal:g.pendientes;
   var pid=parseInt((document.getElementById('co-prod')||{}).value);
   var cant=parseInt((document.getElementById('co-cant')||{}).value)||0;
   var unds=parseInt((document.getElementById('co-unds')||{}).value)||1;
@@ -12857,6 +12968,8 @@ document.addEventListener('click',function(e){
     else abrirDescuento();
     return;
   }
+  var smx=e.target.closest('[data-act="soc-mix"]');
+  if(smx){abrirMixtoSocio(smx.getAttribute('data-tipo'));return;}
   var sa=e.target.closest('[data-act="soc-add"]');
   if(sa){
     var pid=parseInt(sa.getAttribute('data-pid'));
