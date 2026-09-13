@@ -11130,9 +11130,21 @@ function renderSocios(){
   // Categorías reales (sin 'Todos'); cada una es un acordeón
   var catsReales=menu.reduce(function(a,m){if(a.indexOf(m.cat)<0)a.push(m.cat);return a;},[]).sort();
   // 🪣 Cubetazos mixtos del socio (nacional e importado, con 10% socio)
-  var mixBtns='<div style="display:flex;gap:7px;margin-bottom:8px">'
-    +'<button data-act="soc-mix" data-tipo="nac" style="flex:1;background:#22c55e14;color:#22c55e;border:1px solid #22c55e44;border-radius:10px;padding:9px 4px;font-size:11.5px;font-weight:900;cursor:pointer">🪣 Mixto NACIONAL<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_NAC_PRECIO*0.9))+'</span></button>'
-    +'<button data-act="soc-mix" data-tipo="imp" style="flex:1;background:#38bdf814;color:#38bdf8;border:1px solid #38bdf844;border-radius:10px;padding:9px 4px;font-size:11.5px;font-weight:900;cursor:pointer">🪣 Mixto IMPORTADO<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_MIX_PRECIO*0.9))+'</span></button>'
+  var _precioMiticaSoc=(function(){
+    var mejor=null,esPr=false;
+    menu.forEach(function(m){
+      var n=_normTxt(m.nombre||'');
+      if(!CUBE_MITICA_NOMBRES.some(function(x){return n.indexOf(x)>=0;}))return;
+      var pr=promoVigente(m.id,'cubeta');
+      var v=pr?pr.valor:(m.cubeta||CUBE_MIX_PRECIO);
+      if(mejor===null||v<mejor){mejor=v;esPr=!!pr;}
+    });
+    return {precio:mejor||CUBE_MIX_PRECIO,esPromo:esPr};
+  })();
+  var mixBtns='<div style="display:flex;gap:6px;margin-bottom:8px">'
+    +'<button data-act="soc-mix" data-tipo="nac" style="flex:1;background:#22c55e14;color:#22c55e;border:1px solid #22c55e44;border-radius:10px;padding:9px 2px;font-size:11px;font-weight:900;cursor:pointer">🪣 NACIONAL<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_NAC_PRECIO*0.9))+'</span></button>'
+    +'<button data-act="soc-mix" data-tipo="imp" style="flex:1;background:#38bdf814;color:#38bdf8;border:1px solid #38bdf844;border-radius:10px;padding:9px 2px;font-size:11px;font-weight:900;cursor:pointer">🪣 IMPORTADO<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(CUBE_MIX_PRECIO*0.9))+'</span></button>'
+    +'<button data-act="soc-mix" data-tipo="mitica" style="flex:1;background:#a855f714;color:#a855f7;border:1px solid #a855f744;border-radius:10px;padding:9px 2px;font-size:11px;font-weight:900;cursor:pointer">🪣 MÍTICA'+(_precioMiticaSoc.esPromo?' 🏷️':'')+'<br><span style="font-size:10px;opacity:.8">'+fmt(Math.round(_precioMiticaSoc.precio*0.9))+'</span></button>'
   +'</div>';
 
   // 🔍 Buscador (como en las mesas): sin re-render al escribir
@@ -11339,13 +11351,26 @@ function _socBuscar(v){
   render();
 }
 function abrirMixtoSocio(tipo){
-  // 🪣 Cubetazo mixto para el socio: nacional (Águila/Poker) o importado (Heineken/Sol/Miller), con 10% de socio
-  var esNac=(tipo==='nac');
-  var nombres=esNac?CUBE_NAC_NOMBRES:CUBE_MIX_NOMBRES;
-  var subcat=esNac?CUBE_NAC_SUBCAT:CUBE_MIX_SUBCAT;
+  // 🪣 Cubetazo para el socio: nacional, importado o Mítica — con 10% de socio
+  var esNac=(tipo==='nac'),esMitica=(tipo==='mitica');
+  var nombres=esMitica?CUBE_MITICA_NOMBRES:(esNac?CUBE_NAC_NOMBRES:CUBE_MIX_NOMBRES);
+  var subcat=esMitica?'':(esNac?CUBE_NAC_SUBCAT:CUBE_MIX_SUBCAT);
   var precioLista=esNac?CUBE_NAC_PRECIO:CUBE_MIX_PRECIO;
+  var etiqueta='Cubetazo mixto '+(esMitica?'Mítica':(esNac?'nacional':'importado'));
+  if(esMitica){
+    // Igual que en las mesas: promo de cubeta vigente si existe, o el precio de cubeta de Mítica
+    var mejor=null,esPr=false;
+    menu.forEach(function(m){
+      var n=_normTxt(m.nombre||'');
+      if(!CUBE_MITICA_NOMBRES.some(function(x){return n.indexOf(x)>=0;}))return;
+      var pr=promoVigente(m.id,'cubeta');
+      var v=pr?pr.valor:(m.cubeta||CUBE_MIX_PRECIO);
+      if(mejor===null||v<mejor){mejor=v;esPr=!!pr;}
+    });
+    precioLista=mejor||CUBE_MIX_PRECIO;
+    if(esPr)etiqueta+=' 🏷️';
+  }
   var precioSocio=Math.round(precioLista*0.9);
-  var etiqueta='Cubetazo mixto '+(esNac?'nacional':'importado');
   var cervezas=menu.filter(function(m){
     var match;
     if(subcat){match=(m.subcat===subcat);}
