@@ -6130,7 +6130,7 @@ function _servSeedAgua(){
   // Históricos de la factura del Acueducto (AC 53 85H-10, bimestral)
   if(serviciosPublicos.agua&&serviciosPublicos.agua.recibos&&Object.keys(serviciosPublicos.agua.recibos).length)return;
   serviciosPublicos.agua={
-    diaRecibo:2,diaSuspension:22,frecuencia:'bimestral',
+    diaRecibo:2,diaSuspension:22,frecuencia:'bimestral',cuenta:'11686180 · pago: 12559293910',
     recibos:{
       r1:{id:'r1',ts:new Date(2026,1,15).getTime(),periodo:'ENE-FEB 2026',valor:235892,consumo:17},
       r2:{id:'r2',ts:new Date(2026,3,15).getTime(),periodo:'FEB-ABR 2026',valor:259979,consumo:19},
@@ -6144,7 +6144,7 @@ function _servSeedGas(){
   // Factura Vanti (cuenta 62219304, uso comercial) — Jul-Ago 2026
   if(serviciosPublicos.gas&&serviciosPublicos.gas.recibos&&Object.keys(serviciosPublicos.gas.recibos).length)return;
   serviciosPublicos.gas={
-    diaRecibo:11,diaSuspension:25,frecuencia:'mensual',factor:0.90529,
+    diaRecibo:11,diaSuspension:25,frecuencia:'mensual',factor:0.90529,cuenta:'62219304',
     recibos:{
       g1:{id:'g1',ts:new Date(2026,7,11).getTime(),periodo:'JUL-AGO 2026',valor:1149540,consumo:417,limite:'2026-08-24',suspension:'2026-08-25',lecturaIni:15320,lecturaFin:15781}
     },
@@ -6159,7 +6159,7 @@ function _servSeedLuz(){
   // Factura Enel (cliente 2692722-8, comercial) — Oct-Nov 2025
   if(serviciosPublicos.luz&&serviciosPublicos.luz.recibos&&Object.keys(serviciosPublicos.luz.recibos).length)return;
   serviciosPublicos.luz={
-    diaRecibo:8,diaSuspension:21,frecuencia:'mensual',factor:1,
+    diaRecibo:8,diaSuspension:21,frecuencia:'mensual',factor:1,cuenta:'2692722-8',
     recibos:{
       e1:{id:'e1',ts:new Date(2025,10,8).getTime(),periodo:'OCT-NOV 2025',valor:460070,consumo:467,limite:'2025-11-19',suspension:'2025-11-21',lecturaIni:41335,lecturaFin:41802}
     },
@@ -6170,10 +6170,21 @@ function _servSeedLuz(){
   };
   fbSet('serviciosPublicos/luz',serviciosPublicos.luz);
 }
+function _servSeedCuentas(){
+  // Servicios ya guardados de antes sin número de cuenta: completarlos una sola vez
+  var defs={agua:'11686180 · pago: 12559293910',gas:'62219304',luz:'2692722-8'};
+  Object.keys(defs).forEach(function(k){
+    if(serviciosPublicos[k]&&!serviciosPublicos[k].cuenta){
+      serviciosPublicos[k].cuenta=defs[k];
+      fbSet('serviciosPublicos/'+k+'/cuenta',defs[k]);
+    }
+  });
+}
 function abrirServiciosPublicos(){
   _servSeedAgua();
   _servSeedGas();
   _servSeedLuz();
+  _servSeedCuentas();
   if(!window._servSel)window._servSel='agua';
   var sk=window._servSel;
   var def=_SERV_DEF[sk];
@@ -6212,8 +6223,15 @@ function abrirServiciosPublicos(){
   var ult=recibos[0];
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:10px">🧾 Servicios públicos</div>'
     +'<div style="display:flex;gap:6px;margin-bottom:12px">'+chips+'</div>'
+    +(sv.cuenta?'<div onclick="copiarCuentaServ(\''+esc(String(sv.cuenta).replace(/'/g,''))+'\')" style="background:#06b6d412;border:1px solid #06b6d433;border-radius:10px;padding:8px 12px;margin-bottom:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
+      +'<div><div style="color:var(--muted);font-size:9.5px;letter-spacing:.5px">💳 CUENTA / REFERENCIA DE PAGO</div>'
+      +'<div style="font-size:15px;font-weight:900;color:#06b6d4;letter-spacing:.5px">'+esc(sv.cuenta)+'</div></div>'
+      +'<span style="color:var(--muted);font-size:10px">📋 copiar</span>'
+    +'</div>':'')
     +'<div style="background:var(--bg);border-radius:10px;padding:9px 12px;margin-bottom:10px">'
       +'<div style="font-size:11px;font-weight:800;color:#06b6d4;margin-bottom:6px">'+def.emoji+' '+def.label+' · configuración</div>'
+      +'<div style="color:var(--muted);font-size:10px;margin-bottom:2px">Cuenta / referencia de pago</div>'
+      +'<input class="inp inp-sm" id="sv-cuenta" value="'+esc(sv.cuenta||'')+'" placeholder="Ej: 62219304" style="margin-bottom:8px"/>'
       +'<div style="display:flex;gap:8px">'
         +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Día que llega el recibo</div><input class="inp inp-sm" id="sv-dia" type="number" min="1" max="31" value="'+(sv.diaRecibo||'')+'" placeholder="Ej: 2"/></div>'
         +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Día de suspensión</div><input class="inp inp-sm" id="sv-susp" type="number" min="1" max="31" value="'+(sv.diaSuspension||'')+'" placeholder="Ej: 22"/></div>'
@@ -6266,8 +6284,17 @@ function abrirServiciosPublicos(){
     +filas
     +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:12px">Cerrar</button>');
 }
+function copiarCuentaServ(txt){
+  // Copiar solo el número de pago (si hay varios, el último; quitar separadores de texto)
+  var num=String(txt).split('pago:').pop().replace(/[^0-9-]/g,'');
+  var copiar=num||txt;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(copiar).then(function(){showToast('📋 Copiado: '+esc(copiar),'#06b6d4');});
+  }else{showToast('💳 '+esc(txt),'#06b6d4');}
+}
 function guardarConfigServ(sk){
   if(!serviciosPublicos[sk])serviciosPublicos[sk]={};
+  serviciosPublicos[sk].cuenta=((document.getElementById('sv-cuenta')||{}).value||'').trim();
   serviciosPublicos[sk].diaRecibo=parseInt((document.getElementById('sv-dia')||{}).value)||null;
   serviciosPublicos[sk].diaSuspension=parseInt((document.getElementById('sv-susp')||{}).value)||null;
   serviciosPublicos[sk].frecuencia=(document.getElementById('sv-frec')||{}).value||'mensual';
