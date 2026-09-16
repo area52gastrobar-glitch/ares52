@@ -495,6 +495,7 @@ var abonosMesa={};  // {mesaId:[{monto,fp,nombre,ts,uid}]}
 var pedidoLog={};   // {mesaId:[{ts,texto,delta,uidNombre}]}  historial de pedidos con hora
 var fotoCompCfg={on:true,min:0};  // foto de comprobante para pagos digitales: activada, monto mínimo
 var arqueos=[];  // [{ts,uid,uidNombre,denoms,total,esperado,dif,turnoTs}] conteos de efectivo
+var _arqNoVistos=[];  // 🔔 arqueos de otros aún sin revisar por el admin (insignia en el header)
 var redBarCfg={on:false,ips:[]};  // bloqueo por red: meseros/cajeros solo entran desde las IPs autorizadas
 var _miIPCache=null;
 // Obtiene la IP pública de la red actual (con respaldo si el primer servicio falla)
@@ -910,7 +911,20 @@ function iniciarSync(){
     if(tabActual==='admin')render();
   });
   fbOn('arqueos',function(v){
+    var antes=arqueos.length?Math.max.apply(null,arqueos.map(function(a){return a.ts||0;})):0;
     arqueos=v?(Array.isArray(v)?v:Object.values(v)):[];
+    // 🔔 Avisar al admin/subadmin si ALGUIEN MÁS acaba de contar la caja (llega en vivo por Firebase)
+    if(window._arqInit&&usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin')){
+      var nuevos=arqueos.filter(function(a){return (a.ts||0)>antes&&a.uid!==usuarioActivo.id;});
+      nuevos.forEach(function(a){
+        var dif=a.dif||0;
+        var difTxt=dif===0?'✅ caja cuadrada':(dif<0?'🔴 FALTAN '+fmt(Math.abs(dif)):'🟡 sobran '+fmt(dif));
+        showToast('🧮 '+esc(a.uidNombre||'Alguien')+' contó la caja<br><span style="font-size:12px;opacity:.9">Contado '+fmt(a.total||0)+' · esperado '+fmt(a.esperado||0)+' · '+difTxt+'</span>',dif===0?'#22c55e':(dif<0?'#ef4444':'#f5a623'),9000);
+        _beep(dif<0?[[660,180,0],[440,260,220],[330,340,500]]:[[880,140,0],[1100,180,170]]);
+        _arqNoVistos.push(a.id);
+      });
+    }
+    window._arqInit=true;
     if(tabActual==='caja'||tabActual==='gastos')render();
   });
   fbOn('usuarios',function(v){
@@ -1302,7 +1316,10 @@ function renderMesas(){
   // Botón de venta rápida (con aviso si hay una a medias)
   var vrKey='vr_'+(usuarioActivo?usuarioActivo.id:'');
   var vrPend=(pedidos[vrKey]||[]).length;
-  var sndBtn='<button onclick="toggleSonidos()" title="Sonidos de mesas" style="background:'+(_sndOn?'#22c55e22':'var(--card)')+';border:1px solid '+(_sndOn?'#22c55e66':'var(--border)')+';color:'+(_sndOn?'#22c55e':'var(--muted)')+';border-radius:8px;padding:6px 12px;font-size:15px;cursor:pointer">'+(_sndOn?'🔔':'🔕')+'</button>';
+  var arqBadge=(_arqNoVistos.length&&usuarioActivo&&(usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'))
+    ?'<button onclick="verArqueosNuevos()" style="background:#f5a623;color:#1a1a22;border:none;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:900;cursor:pointer;animation:pulse 1.6s ease-in-out infinite">🧮 '+_arqNoVistos.length+' conteo'+(_arqNoVistos.length!==1?'s':'')+'</button>'
+    :'';
+  var sndBtn=arqBadge+'<button onclick="toggleSonidos()" title="Sonidos de mesas" style="background:'+(_sndOn?'#22c55e22':'var(--card)')+';border:1px solid '+(_sndOn?'#22c55e66':'var(--border)')+';color:'+(_sndOn?'#22c55e':'var(--muted)')+';border-radius:8px;padding:6px 12px;font-size:15px;cursor:pointer">'+(_sndOn?'🔔':'🔕')+'</button>';
   var ventaRapidaBtn='<button onclick="ventaRapida()" style="width:100%;margin-bottom:10px;background:linear-gradient(135deg,#f5a62322,#8B5CF622);border:1px solid #f5a62366;border-radius:12px;padding:12px;font-weight:800;font-size:14px;color:#f5a623;cursor:pointer">⚡ Venta rápida — sin mesa, pagan de una'
     +(vrPend?' <span style="background:#ef4444;color:#fff;border-radius:99px;padding:2px 9px;font-size:11px;margin-left:6px">'+vrPend+' pendiente</span>':'')
     +'</button>';
@@ -6580,6 +6597,23 @@ function efectivoEsperadoTurno(){
     (abonosMesa[mid]||[]).forEach(function(ab){if((ab.fp||'efectivo')==='efectivo')abEf+=(ab.monto||0);});
   });
   return {esperado:ini+vEf+abEf-gEf,ini:ini,ventas:vEf,abonos:abEf,gastos:gEf};
+}
+function verArqueosNuevos(){
+  var nuevos=arqueos.filter(function(a){return _arqNoVistos.indexOf(a.id)>=0;}).sort(function(a,b){return b.ts-a.ts;});
+  _arqNoVistos=[];
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:10px">🧮 Conteos de caja recientes</div>'
+    +(nuevos.length?nuevos.map(function(a){
+      var dif=a.dif||0;
+      var c=dif===0?'#22c55e':(dif<0?'#ef4444':'#f5a623');
+      return'<div style="background:var(--bg);border:1px solid '+c+'44;border-radius:11px;padding:10px 12px;margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800"><span>👤 '+esc(a.uidNombre||'')+'</span><span style="color:var(--muted);font-size:10px">'+fmtTime(a.ts)+'</span></div>'
+        +'<div style="font-size:12px;margin-top:4px">Contado <b>'+fmt(a.total||0)+'</b> · esperado '+fmt(a.esperado||0)+'</div>'
+        +'<div style="font-weight:900;color:'+c+';font-size:13px;margin-top:2px">'+(dif===0?'✅ Caja cuadrada':(dif<0?'🔴 Faltan '+fmt(Math.abs(dif)):'🟡 Sobran '+fmt(dif)))+'</div>'
+      +'</div>';
+    }).join(''):'<div style="color:var(--dim);text-align:center;padding:12px;font-size:12px">Nada nuevo</div>')
+    +'<div style="color:var(--muted);font-size:10px;margin-top:4px">El detalle completo de denominaciones está en Caja → arqueos del turno.</div>'
+    +'<button class="btn btn-full" onclick="closeModal1();render()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:10px">Cerrar</button>');
+  render();
 }
 function abrirArqueo(){
   var rows=DENOMS.map(function(d){
