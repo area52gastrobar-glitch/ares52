@@ -10004,8 +10004,21 @@ function renderRappi(){
       +'<span>'+esc(cat)+'</span><span style="font-size:11px;color:var(--muted)">'+prods.length+' '+(abierta?'▲':'▼')+'</span></button>';
     var body='';
     if(abierta){
-      body='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+prods.map(function(p){
-        return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left">'
+      body='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">'+prods.map(function(p){
+        var vars=p.variantes?(Array.isArray(p.variantes)?p.variantes:Object.values(p.variantes)):[];
+        if(vars.length){
+          // 📏 Producto con tamaños: un botón por variante (Alitas x8 · x16 · x24)
+          return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;grid-column:span 2">'
+            +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-size:16px">'+p.emoji+'</span>'
+            +'<span style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</span>'
+            +'<span style="font-size:9.5px;color:var(--muted)">'+(p.sinStock?(p.disponible!==false?'✅':'🚫 Agotado'):'Stock: '+(parseInt(p.stock)||0))+'</span></div>'
+            +'<div style="display:grid;grid-template-columns:repeat('+Math.min(vars.length,3)+',minmax(0,1fr));gap:5px">'
+            +vars.map(function(v,vi){
+              return'<button onclick="agregarRappiItem('+p.id+','+vi+')" style="background:#FF6B0014;border:1px solid #FF6B0033;border-radius:8px;padding:6px 4px;cursor:pointer;color:#FF6B00;font-size:10.5px;font-weight:800">'+esc(v.nombre)+'<br><span style="font-weight:700;opacity:.85">'+fmt(v.precio||0)+'</span></button>';
+            }).join('')+'</div>'
+          +'</div>';
+        }
+        return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left;min-width:0">'
           +'<div style="font-size:18px">'+p.emoji+'</div>'
           +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</div>'
           +'<div style="font-size:10px;color:var(--muted)">'+(p.sinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+(parseInt(p.stock)||0))+' · '+fmt(p.precio)+'</div>'
@@ -10057,12 +10070,17 @@ function renderRappi(){
   +'</div>';
 }
 
-function agregarRappiItem(pid){
+function agregarRappiItem(pid,vi){
   var p=menu.find(function(m){return Number(m.id)===Number(pid);});
   if(!p)return;
-  var idx=_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid);});
+  var vars=p.variantes?(Array.isArray(p.variantes)?p.variantes:Object.values(p.variantes)):[];
+  var v=(vi!=null&&vars[vi])?vars[vi]:null;
+  var vNom=v?v.nombre:'';
+  var idx=_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid)&&(it.varianteNombre||'')===vNom;});
   if(idx>=0)_rappiPedido[idx].qty++;
-  else _rappiPedido.push({pid:pid,qty:1,valor:p.precio||0,nombre:p.nombre});
+  else _rappiPedido.push({pid:pid,qty:1,valor:(v?(v.precio||0):(p.precio||0)),
+    nombre:p.nombre+(v?' ('+v.nombre+')':''),
+    varianteNombre:v?v.nombre:undefined,varianteUnd:v?(parseInt(v.und)||1):undefined});
   render();
 }
 
@@ -10080,9 +10098,9 @@ function registrarVentaRappi(){
   if(!_rappiPedido.length){alert('Agrega productos al pedido.');return;}
   var total=_rappiPedido.reduce(function(a,it){return a+(it.valor||0)*it.qty;},0);
   if(total<=0){alert('Asigna un valor a los productos.');return;}
-  // Descontar inventario (atómico + kardex)
+  // Descontar inventario por el motor central: variantes multiplican y las recetas (insumos) corren en cascada
   _rappiPedido.forEach(function(it){
-    cambiarStock('p',it.pid,-it.qty,'Venta Rappi');
+    ajustarStockItem({pid:it.pid,qty:1,varianteNombre:it.varianteNombre,varianteUnd:it.varianteUnd},-it.qty,'Venta Rappi');
   });
   // Registrar venta Rappi (separada)
   var venta={id:'rap'+Date.now(),ts:Date.now(),
