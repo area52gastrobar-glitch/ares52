@@ -4768,6 +4768,8 @@ function renderCarta(){
           +'<input class="inp" id="f-subcat-new" value="'+((curSub&&subcats.indexOf(curSub)<0)?esc(curSub):'')+'" placeholder="Escribe la nueva subcategoría" style="margin-top:6px;display:'+((curSub&&subcats.indexOf(curSub)<0)?'block':'none')+'"/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio detal (COP) *</div>'
           +'<input class="inp money" id="f-precio" type="text" value="'+moneyFmt(p.precio||'')+'" placeholder="0" inputmode="numeric"/></div>'
+        +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">🛵 Precio en APPS — Rappi/Didi/Uber (opcional)</div>'
+          +'<input class="inp money" id="f-precio-rappi" type="text" value="'+moneyFmt(p.precioRappi||'')+'" placeholder="Si es distinto al detal" inputmode="numeric"/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">💵 Precio de COMPRA por unidad (costo, opcional)</div>'
           +'<input class="inp money" id="f-costo" type="text" value="'+moneyFmt(p.costo||'')+'" placeholder="Para calcular utilidad" inputmode="numeric"/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Stock inicial</div>'
@@ -4788,7 +4790,10 @@ function renderCarta(){
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-sinstock" '+(p.sinStock?'checked':'')+'/> '
         +'✨ Sin control de cantidad — solo Disponible / Agotado <span style="color:var(--muted);font-size:11px">(cócteles, preparados...)</span></label>'
-      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Alitas x8 · x16 · x24. "Und" = cuántas descuenta del stock)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: x8)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="'+(v.und||1)+'" style="width:52px;text-align:center" data-vund="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>'              +'<input class="inp inp-sm" placeholder="Especificación (opcional — ej: 8 alas bañadas en BBQ + papas) — sale en la carta" value="'+esc(v.desc||'')+'" style="margin:-2px 0 8px;font-size:11px" data-vdesc="'+vi+'"/>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
+      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Descripción (opcional — aparece en la carta)</div>'        +'<textarea class="inp" id="f-desc" rows="2" placeholder="Ej: Acompañada de papas fritas y ensalada. Proteína a elección..." style="resize:vertical;font-size:12px">'+esc(p.descripcion||'')+'</textarea>'      +'</div>'      +'<div style="margin-bottom:10px">'        +'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">📐 Variantes de tamaño / medida <span style="color:#555">(opcional — ej: Alitas x8 · x16 · x24. "Und" = cuántas descuenta del stock)</span></div>'        +'<div id="variantes-list">'          +(p.variantes&&p.variantes.length?p.variantes.map(function(v,vi){            return'<div style="display:flex;gap:6px;margin-bottom:6px" id="vrow-'+vi+'">'              +'<input class="inp inp-sm" placeholder="Nombre (ej: x8)" value="'+esc(v.nombre||'')+'" style="flex:2" data-vnom="'+vi+'"/>'              +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="Precio" value="'+moneyFmt(v.precio||'')+'" style="flex:1" data-vpre="'+vi+'"/>'              +'<input class="inp inp-sm" type="number" inputmode="numeric" min="1" placeholder="Und" title="Unidades que descuenta del stock" value="'+(v.und||1)+'" style="width:52px;text-align:center" data-vund="'+vi+'"/>'              +'<button onclick="quitarVariante('+vi+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>'              +'</div>'              +'<div style="display:flex;gap:6px;margin:-2px 0 8px">'
+                +'<input class="inp inp-sm" placeholder="Especificación (opcional) — sale en la carta" value="'+esc(v.desc||'')+'" style="flex:1;font-size:11px" data-vdesc="'+vi+'"/>'
+                +'<input class="inp inp-sm money" type="text" inputmode="numeric" placeholder="🛵 apps" title="Precio en apps (Rappi/Didi/Uber)" value="'+moneyFmt(v.precioRappi||'')+'" style="width:92px;font-size:11px" data-vrap="'+vi+'"/>'
+              +'</div>';          }).join(''):'<div style="color:var(--muted);font-size:11px;margin-bottom:6px">Sin variantes — precio único</div>')        +'</div>'        +'<button onclick="agregarVariante()" style="background:var(--card);color:var(--accent);border:1px solid var(--accent)33;border-radius:7px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700">+ Agregar variante</button>'      +'</div>'      +'<div id="cubf" style="'+(p.esCerveza?'':'display:none;')+'margin-bottom:12px">'
         +'<div style="color:#22c55e;font-size:11px;font-weight:700;margin-bottom:3px">🪣 Precio CUBETAZO ×5 (COP)</div>'
         +'<input class="inp money" id="f-cubeta" type="text" value="'+moneyFmt(p.cubeta||'')+'" placeholder="Ej: 20.000" inputmode="numeric"/>'
       +'</div>'
@@ -5398,12 +5403,21 @@ function agregarVariante(){
     +'<button onclick="this.parentElement.parentElement.remove()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px">✕</button>';
   var wrap=document.createElement('div');
   wrap.appendChild(row);
+  var linea2=document.createElement('div');
+  linea2.style.cssText='display:flex;gap:6px;margin:-2px 0 8px';
   var descInp=document.createElement('input');
   descInp.className='inp inp-sm';
-  descInp.placeholder='Especificación (opcional — ej: 8 alas bañadas en BBQ + papas) — sale en la carta';
-  descInp.style.cssText='margin:-2px 0 8px;font-size:11px';
+  descInp.placeholder='Especificación (opcional) — sale en la carta';
+  descInp.style.cssText='flex:1;font-size:11px';
   descInp.setAttribute('data-vdesc',vi);
-  wrap.appendChild(descInp);
+  var rapInp=document.createElement('input');
+  rapInp.className='inp inp-sm money';
+  rapInp.type='text';rapInp.inputMode='numeric';
+  rapInp.placeholder='🛵 apps';rapInp.title='Precio en apps (Rappi/Didi/Uber)';
+  rapInp.style.cssText='width:92px;font-size:11px';
+  rapInp.setAttribute('data-vrap',vi);
+  linea2.appendChild(descInp);linea2.appendChild(rapInp);
+  wrap.appendChild(linea2);
   list.appendChild(wrap);
   row.querySelector('[data-vnom]').focus();
 }
@@ -5761,8 +5775,11 @@ function guardarProd(){
     var vund=undEl?Math.max(1,parseInt(undEl.value)||1):1;
     var descEl=document.querySelector('[data-vdesc="'+vi+'"]');
     var vdesc=descEl?String(descEl.value||'').trim():'';
-    if(nom&&pre>0) variantes.push({nombre:nom,precio:pre,und:vund,desc:vdesc});
+    var rapEl=document.querySelector('[data-vrap="'+vi+'"]');
+    var vrap=rapEl?parseInt(String(rapEl.value).replace(/[^0-9]/g,''))||0:0;
+    if(nom&&pre>0){var vv={nombre:nom,precio:pre,und:vund,desc:vdesc};if(vrap>0)vv.precioRappi=vrap;variantes.push(vv);}
   });
+  var precioRappi=moneyVal('f-precio-rappi')||null;
   var cubeta=cerv?(moneyVal('f-cubeta')||null):null;
   var emoji=(document.getElementById('f-emoji')||{}).value||'🍺';
   if(!nombre){alert('Escribe el nombre.');return;}
@@ -5770,10 +5787,10 @@ function guardarProd(){
   if(!cat){alert('Escribe la categoría.');return;}
   if(editandoProd==='nuevo'){
     var maxId=0;menu.forEach(function(m){if(m.id>maxId)maxId=m.id;});
-    menu.push({id:maxId+1,nombre:nombre,precio:precio,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[],sinStock:_sinStockF,disponible:true});
+    menu.push({id:maxId+1,nombre:nombre,precio:precio,precioRappi:precioRappi,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[],sinStock:_sinStockF,disponible:true});
     _recetaTemp=[];
   } else {
-    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
+    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,precioRappi:precioRappi,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
   }
   editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();
 }
@@ -10009,22 +10026,24 @@ function renderRappi(){
     if(abierta){
       body='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px">'+prods.map(function(p){
         var vars=p.variantes?(Array.isArray(p.variantes)?p.variantes:Object.values(p.variantes)):[];
+        var pApp=p.precioRappi||p.precio;
         if(vars.length){
-          // 📏 Producto con tamaños: un botón por variante (Alitas x8 · x16 · x24)
+          // 📏 Producto con tamaños: un botón por variante (Alitas x8 · x16 · x24) — con precio de apps si lo tiene
           return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;grid-column:span 2">'
             +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-size:16px">'+p.emoji+'</span>'
             +'<span style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</span>'
             +'<span style="font-size:9.5px;color:var(--muted)">'+(p.sinStock?(p.disponible!==false?'✅':'🚫 Agotado'):'Stock: '+(parseInt(p.stock)||0))+'</span></div>'
             +'<div style="display:grid;grid-template-columns:repeat('+Math.min(vars.length,3)+',minmax(0,1fr));gap:5px">'
             +vars.map(function(v,vi){
-              return'<button onclick="agregarRappiItem('+p.id+','+vi+')" style="background:#FF6B0014;border:1px solid #FF6B0033;border-radius:8px;padding:6px 4px;cursor:pointer;color:#FF6B00;font-size:10.5px;font-weight:800">'+esc(v.nombre)+'<br><span style="font-weight:700;opacity:.85">'+fmt(v.precio||0)+'</span></button>';
+              var vApp=v.precioRappi||v.precio||0;
+              return'<button onclick="agregarRappiItem('+p.id+','+vi+')" style="background:#FF6B0014;border:1px solid #FF6B0033;border-radius:8px;padding:6px 4px;cursor:pointer;color:#FF6B00;font-size:10.5px;font-weight:800">'+esc(v.nombre)+'<br><span style="font-weight:700;opacity:.85">'+fmt(vApp)+(v.precioRappi?' 🛵':'')+'</span></button>';
             }).join('')+'</div>'
           +'</div>';
         }
         return'<button onclick="agregarRappiItem('+p.id+')" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;cursor:pointer;text-align:left;min-width:0">'
           +'<div style="font-size:18px">'+p.emoji+'</div>'
           +'<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(p.nombre)+'</div>'
-          +'<div style="font-size:10px;color:var(--muted)">'+(p.sinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+(parseInt(p.stock)||0))+' · '+fmt(p.precio)+'</div>'
+          +'<div style="font-size:10px;color:var(--muted)">'+(p.sinStock?(p.disponible!==false?'✅ Disponible':'🚫 Agotado'):'Stock: '+(parseInt(p.stock)||0))+' · '+fmt(pApp)+(p.precioRappi?' 🛵':'')+'</div>'
         +'</button>';
       }).join('')+'</div>';
     }
@@ -10055,6 +10074,7 @@ function renderRappi(){
       +(_rappiPedido.length?'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--accent)33">'
         +'<span style="font-weight:800;font-size:14px">Total cobrado</span>'
         +'<span style="color:#FF6B00;font-weight:900;font-size:20px">'+fmt(totalPed)+'</span></div>'
+        +'<button onclick="abrirGaseosaRappi()" style="width:100%;margin-top:10px;background:#22c55e14;color:#22c55e;border:1px dashed #22c55e55;border-radius:9px;padding:8px;font-size:12px;font-weight:800;cursor:pointer">🥤 + Gaseosa INCLUIDA en el combo ($0)</button>'
         +'<div style="margin-top:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">💵 Recibido en EFECTIVO al entregar (opcional — el resto queda esperando la transferencia)</div>'
         +'<input class="inp money" id="rap-efectivo" type="text" value="'+moneyFmt(window._rapEf||0)+'" inputmode="numeric" oninput="window._rapEf=moneyVal(this)"/></div>'
         +'<button onclick="registrarVentaRappi()" style="width:100%;margin-top:10px;background:#FF6B00;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer">🛵 Registrar venta</button>':'')
@@ -10089,12 +10109,38 @@ function agregarRappiItem(pid,vi){
   var vNom=v?v.nombre:'';
   var idx=_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid)&&(it.varianteNombre||'')===vNom;});
   if(idx>=0)_rappiPedido[idx].qty++;
-  else _rappiPedido.push({pid:pid,qty:1,valor:(v?(v.precio||0):(p.precio||0)),
+  else _rappiPedido.push({pid:pid,qty:1,valor:(v?(v.precioRappi||v.precio||0):(p.precioRappi||p.precio||0)),
     nombre:p.nombre+(v?' ('+v.nombre+')':''),
     varianteNombre:v?v.nombre:undefined,varianteUnd:v?(parseInt(v.und)||1):undefined});
   render();
 }
 
+function abrirGaseosaRappi(){
+  // 🥤 Gaseosa que viene incluida en el combo de la app: entra a $0 pero SÍ descuenta inventario
+  var gas=menu.filter(function(m){
+    var t=_normTxt((m.nombre||'')+' '+(m.cat||'')+' '+(m.subcat||''));
+    return t.indexOf('gaseosa')>=0||t.indexOf('refresco')>=0||t.indexOf('soda')>=0;
+  }).filter(function(m){return ventaSinStock||m.sinStock?m.disponible!==false:m.stock>0;});
+  if(!gas.length){alert('No encontré gaseosas en la carta. Crea el producto (categoría o nombre con "gaseosa") para poder descontarla.');return;}
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:4px">🥤 Gaseosa incluida</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Entra al pedido en $0 (ya está dentro del precio del combo) pero descuenta del inventario.</div>'
+    +gas.map(function(p){
+      return'<button onclick="agregarGaseosaRappi('+p.id+')" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:7px;cursor:pointer;color:var(--text)">'
+        +'<span style="font-weight:800;font-size:13px">'+(p.emoji||'🥤')+' '+esc(p.nombre)+'</span>'
+        +'<span style="color:var(--muted);font-size:10.5px">'+(p.sinStock?'✅':'stock '+(parseInt(p.stock)||0))+'</span>'
+      +'</button>';
+    }).join(''));
+}
+function agregarGaseosaRappi(pid){
+  var p=menu.find(function(m){return Number(m.id)===Number(pid);});
+  if(!p)return;
+  var nom=p.nombre+' (incluida 🥤)';
+  var idx=_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid)&&it.nombre===nom;});
+  if(idx>=0)_rappiPedido[idx].qty++;
+  else _rappiPedido.push({pid:pid,qty:1,valor:0,nombre:nom,incluida:true});
+  closeModal2();
+  render();
+}
 function quitarRappiItem(idx){
   _rappiPedido.splice(idx,1);
   render();
