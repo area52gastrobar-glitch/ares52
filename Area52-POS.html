@@ -9980,7 +9980,7 @@ function renderRappi(){
   var esAdmin=usuarioActivo&&usuarioActivo.rol==='admin';
 
   // Total histórico Rappi (separado de la caja del bar)
-  var totalRappi=ventasRappi.reduce(function(a,v){return a+(v.total||0);},0);
+  var totalRappi=ventasRappi.reduce(function(a,v){return a+(v.saldo!=null?v.saldo:(v.total||0));},0);
   var hoyRappi=ventasRappi.filter(function(v){var d=new Date(v.ts),h=new Date();return d.toDateString()===h.toDateString();});
   var totalHoyRappi=hoyRappi.reduce(function(a,v){return a+(v.total||0);},0);
 
@@ -10055,7 +10055,9 @@ function renderRappi(){
       +(_rappiPedido.length?'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--accent)33">'
         +'<span style="font-weight:800;font-size:14px">Total cobrado</span>'
         +'<span style="color:#FF6B00;font-weight:900;font-size:20px">'+fmt(totalPed)+'</span></div>'
-        +'<button onclick="registrarVentaRappi()" style="width:100%;margin-top:10px;background:#FF6B00;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer">🛵 Registrar venta Rappi</button>':'')
+        +'<div style="margin-top:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">💵 Recibido en EFECTIVO al entregar (opcional — el resto queda esperando la transferencia)</div>'
+        +'<input class="inp money" id="rap-efectivo" type="text" value="'+moneyFmt(window._rapEf||0)+'" inputmode="numeric" oninput="window._rapEf=moneyVal(this)"/></div>'
+        +'<button onclick="registrarVentaRappi()" style="width:100%;margin-top:10px;background:#FF6B00;color:#fff;border:none;border-radius:10px;padding:12px;font-weight:800;font-size:14px;cursor:pointer">🛵 Registrar venta</button>':'')
     +'</div>'
     // Selector productos
     +'<div style="color:var(--muted);font-size:11px;font-weight:700;margin-bottom:8px">➕ AGREGAR PRODUCTO (toca una categoría)</div>'
@@ -10064,7 +10066,7 @@ function renderRappi(){
     +(esAdmin
       ?'<div style="background:#FF6B0018;border:1px solid #FF6B0033;border-radius:10px;padding:12px;margin-bottom:12px">'
         +'<div style="color:#FF6B00;font-weight:700;font-size:13px;margin-bottom:2px">🔒 Cierre de cuenta Rappi</div>'
-        +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Hazlo cada vez que una app (Rappi, Didi, Uber Eats) deposite el dinero. Cada plataforma se cierra por separado y el neto entra a Bre-B 💠. Acumulado actual: <b style="color:#FF6B00">'+fmt(totalRappi)+'</b></div>'
+        +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Hazlo cada vez que una app (Rappi, Didi, Uber Eats) deposite el dinero. Cada plataforma se cierra por separado y el neto entra a Bre-B 💠. Por consignar (saldos): <b style="color:#FF6B00">'+fmt(totalRappi)+'</b></div>'
         +(totalRappi>0
           ?'<button onclick="cerrarRappi()" style="width:100%;background:#FF6B00;color:#fff;border:none;border-radius:8px;padding:11px;font-weight:800;font-size:14px;cursor:pointer">💰 Registrar depósito y cerrar (dejar en 0)</button>'
           :'<div style="text-align:center;color:var(--muted);font-size:12px;padding:6px">Aún no hay ventas Rappi para cerrar</div>')
@@ -10112,14 +10114,24 @@ function registrarVentaRappi(){
     ajustarStockItem({pid:it.pid,qty:1,varianteNombre:it.varianteNombre,varianteUnd:it.varianteUnd},-it.qty,'Venta Rappi');
   });
   // Registrar venta Rappi (separada)
+  var efectivo=moneyVal(document.getElementById('rap-efectivo'));
+  if(efectivo<0)efectivo=0;
+  if(efectivo>total){alert('El efectivo recibido ('+fmt(efectivo).replace(/\u00A0/g,' ')+') no puede superar el total de la venta ('+fmt(total).replace(/\u00A0/g,' ')+').');return;}
   var venta={id:'rap'+Date.now(),ts:Date.now(),plataforma:_appPlat,
     items:JSON.parse(JSON.stringify(_rappiPedido)),total:total,
+    efectivo:efectivo,saldo:total-efectivo,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  // 💵 El efectivo recibido entra a la caja de una vez (para que el arqueo lo espere)
+  if(efectivo>0){
+    cajaHoy['ini_efectivo']=(cajaHoy['ini_efectivo']||0)+efectivo;
+    fbSet('cajaHoy',cajaHoy);
+  }
+  window._rapEf=0;
   ventasRappi.push(venta);
   var r=ref('ventasRappi');if(r)r.push(venta);else fbSet('ventasRappi',ventasRappi);
   _rappiPedido=[];
   var aP=APPS_DOMI[_appPlat]||APPS_DOMI.rappi;
-  showToast(aP.e+' Venta '+aP.n+' registrada<br><span style="font-size:12px;opacity:.85">'+fmt(total)+'</span>',aP.c);
+  showToast(aP.e+' Venta '+aP.n+' registrada<br><span style="font-size:12px;opacity:.85">'+fmt(total)+(efectivo>0?' · 💵 '+fmt(efectivo)+' en efectivo (a caja) · ⏳ '+fmt(total-efectivo)+' por transferencia':'')+'</span>',aP.c);
   render();
 }
 
@@ -10131,7 +10143,7 @@ function rappiHistorial(){
     var det=its.map(function(it){var p=menu.find(function(m){return Number(m.id)===Number(it.pid);});return (p?p.emoji+' '+esc(p.nombre):esc(it.nombre||'?'))+' x'+it.qty;}).join(', ');
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
       +'<div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--muted)">'+(function(){var a=APPS_DOMI[v.plataforma||'rappi']||APPS_DOMI.rappi;return'<span style="color:'+a.c+';font-weight:800">'+a.e+' '+a.n+'</span> · ';})()+fmtDT(v.ts)+' · '+esc(v.uidNombre||'')+'</span>'
-      +'<span style="color:#FF6B00;font-weight:900;font-size:15px">'+fmt(v.total)+'</span></div>'
+      +'<span style="color:#FF6B00;font-weight:900;font-size:15px">'+fmt(v.saldo!=null?v.saldo:v.total)+(v.efectivo>0?' <span style="font-size:9.5px;color:#22c55e;font-weight:700">+💵'+fmt(v.efectivo).replace(/\u00A0/g,' ')+'</span>':'')+'</span></div>'
       +'<div style="font-size:11px;color:var(--muted);margin-top:4px">'+det+'</div>'
     +'</div>';
   }).join('');
@@ -10163,15 +10175,16 @@ function cerrarRappi(plat){
     var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
     var det=its.map(function(it){return esc((it.nombre||'?'))+' x'+it.qty;}).join(', ');
     return'<label style="display:flex;gap:9px;align-items:flex-start;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:6px;cursor:pointer">'
-      +'<input type="checkbox" class="rap-sel" data-vid="'+esc(String(v.id))+'" data-total="'+(v.total||0)+'" checked onchange="_rapSelTotal()" style="margin-top:2px;width:17px;height:17px;accent-color:#FF6B00"/>'
+      +'<input type="checkbox" class="rap-sel" data-vid="'+esc(String(v.id))+'" data-total="'+(v.saldo!=null?v.saldo:(v.total||0))+'" checked onchange="_rapSelTotal()" style="margin-top:2px;width:17px;height:17px;accent-color:#FF6B00"/>'
       +'<span style="flex:1;min-width:0">'
         +'<span style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--muted)">'+fmtDT(v.ts)+'</span>'
-        +'<span style="color:#FF6B00;font-weight:900;font-size:14px">'+fmt(v.total||0)+'</span></span>'
+        +'<span style="color:#FF6B00;font-weight:900;font-size:14px">'+fmt(v.saldo!=null?v.saldo:(v.total||0))+'</span></span>'
+        +(v.efectivo>0?'<span style="display:block;font-size:10px;color:#22c55e;font-weight:700">💵 '+fmt(v.efectivo).replace(/\u00A0/g,' ')+' ya en efectivo · venta total '+fmt(v.total).replace(/\u00A0/g,' ')+'</span>':'')
         +'<span style="display:block;font-size:10.5px;color:var(--muted);margin-top:2px">'+det+'</span>'
       +'</span>'
     +'</label>';
   }).join('');
-  var total=lista.reduce(function(a,v){return a+(v.total||0);},0);
+  var total=lista.reduce(function(a,v){return a+(v.saldo!=null?v.saldo:(v.total||0));},0);
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💰 Cierre de cuenta · '+aC.e+' '+aC.n+'</div>'
     +chipsPlat
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Marca las ventas que '+aC.n+' te consignó en este depósito. Las que dejes sin marcar quedan pendientes para el próximo.</div>'
@@ -10198,12 +10211,12 @@ function confirmarCierreRappiSel(){
   document.querySelectorAll('.rap-sel').forEach(function(c){if(c.checked)ids.push(c.getAttribute('data-vid'));});
   if(!ids.length){alert('Marca al menos una venta.');return;}
   var sel=ventasRappi.filter(function(v){return ids.indexOf(String(v.id))>=0;});
-  var total=sel.reduce(function(a,v){return a+(v.total||0);},0);
+  var total=sel.reduce(function(a,v){return a+(v.saldo!=null?v.saldo:(v.total||0));},0);
   var aC=APPS_DOMI[_appPlatCierre]||APPS_DOMI.rappi;
   // 💸 Paso 2: ¿cuánto CONSIGNÓ la app? (descuentan comisiones y retenciones) — el neto entra a Bre-B
   window._rapCierreIds=ids;
   modal2('<div style="font-weight:800;font-size:15px;margin-bottom:4px">💸 ¿Cuánto consignó '+aC.n+'?</div>'
-    +'<div style="color:var(--muted);font-size:11.5px;margin-bottom:12px">Vendiste <b style="color:'+aC.c+'">'+fmt(total)+'</b> en '+sel.length+' venta'+(sel.length!==1?'s':'')+'. Escribe lo que de verdad llegó — la diferencia queda como descuento de '+aC.n+' y el neto <b style="color:#06B6D4">entra a Bre-B 💠</b>.</div>'
+    +'<div style="color:var(--muted);font-size:11.5px;margin-bottom:12px">Saldo por transferencia: <b style="color:'+aC.c+'">'+fmt(total)+'</b> en '+sel.length+' venta'+(sel.length!==1?'s':'')+' (el efectivo ya entró a la caja al registrarlas). Escribe lo que de verdad llegó — la diferencia queda como descuento de '+aC.n+' y el neto <b style="color:#06B6D4">entra a Bre-B 💠</b>.</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor consignado</div>'
     +'<input class="inp money" id="rap-consignado" type="text" value="'+moneyFmt(total)+'" inputmode="numeric" style="margin-bottom:12px;font-size:18px;font-weight:800"/>'
     +'<button class="btn btn-full" onclick="finalizarCierreRappi()" style="background:'+aC.c+';color:#fff;font-weight:900">🔒 Registrar depósito</button>');
@@ -10214,14 +10227,16 @@ function finalizarCierreRappi(){
   var sel=ventasRappi.filter(function(v){return ids.indexOf(String(v.id))>=0;});
   var quedan=ventasRappi.filter(function(v){return ids.indexOf(String(v.id))<0;});
   if(!sel.length)return;
-  var total=sel.reduce(function(a,v){return a+(v.total||0);},0);
+  var total=sel.reduce(function(a,v){return a+(v.saldo!=null?v.saldo:(v.total||0));},0);
+  var brutoVentas=sel.reduce(function(a,v){return a+(v.total||0);},0);
+  var efPrevio=sel.reduce(function(a,v){return a+(v.efectivo||0);},0);
   var consignado=moneyVal(document.getElementById('rap-consignado'));
   if(consignado<=0){alert('Escribe el valor consignado.');return;}
   var descuento=total-consignado;
   var aF=APPS_DOMI[_appPlatCierre]||APPS_DOMI.rappi;
   var quedanPlat=quedan.filter(function(v){return (v.plataforma||'rappi')===_appPlatCierre;}).length;
   if(descuento<0&&!confirm('Consignaron MÁS de lo vendido ('+fmt(consignado).replace(/\u00A0/g,' ')+' vs '+fmt(total).replace(/\u00A0/g,' ')+'). ¿Seguro?'))return;
-  if(!confirm('¿Cerrar '+sel.length+' venta'+(sel.length!==1?'s':'')+' de '+aF.n+'?\n\nVendido: '+fmt(total).replace(/\u00A0/g,' ')+'\nConsignado: '+fmt(consignado).replace(/\u00A0/g,' ')+'\nDescuento '+aF.n+': '+fmt(Math.max(0,descuento)).replace(/\u00A0/g,' ')+'\n\n💠 El consignado entra a Bre-B en la caja.'+(quedanPlat?'\n\nQuedan '+quedanPlat+' de '+aF.n+' pendientes.':'')))return;
+  if(!confirm('¿Cerrar '+sel.length+' venta'+(sel.length!==1?'s':'')+' de '+aF.n+'?\n\nVenta bruta: '+fmt(brutoVentas).replace(/\u00A0/g,' ')+(efPrevio?'\n💵 Ya en efectivo: '+fmt(efPrevio).replace(/\u00A0/g,' '):'')+'\nSaldo esperado: '+fmt(total).replace(/\u00A0/g,' ')+'\nConsignado: '+fmt(consignado).replace(/\u00A0/g,' ')+'\nDescuento '+aF.n+': '+fmt(Math.max(0,descuento)).replace(/\u00A0/g,' ')+'\n\n💠 El consignado entra a Bre-B en la caja.'+(quedanPlat?'\n\nQuedan '+quedanPlat+' de '+aF.n+' pendientes.':'')))return;
   var porProd={};
   sel.forEach(function(v){
     var its=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
@@ -10231,7 +10246,7 @@ function finalizarCierreRappi(){
       porProd[nombre].qty+=it.qty;
     });
   });
-  var cierre={id:'cr'+Date.now(),ts:Date.now(),plataforma:_appPlatCierre,total:total,consignado:consignado,descuentoRappi:Math.max(0,descuento),nVentas:sel.length,
+  var cierre={id:'cr'+Date.now(),ts:Date.now(),plataforma:_appPlatCierre,total:total,brutoVentas:brutoVentas,efectivoPrevio:efPrevio,consignado:consignado,descuentoRappi:Math.max(0,descuento),nVentas:sel.length,
     productos:Object.values(porProd),
     desde:Math.min.apply(null,sel.map(function(v){return v.ts;})),
     hasta:Math.max.apply(null,sel.map(function(v){return v.ts;})),
@@ -10263,7 +10278,7 @@ function rappiCierresHistorial(){
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center">'
         +'<div><div style="font-weight:800;font-size:14px;color:#FF6B00">'+fmt(c.consignado!=null?c.consignado:c.total)+(c.consignado!=null&&c.consignado!==c.total?' <span style="font-size:10px;color:var(--muted);font-weight:600">de '+fmt(c.total).replace(/\u00A0/g,' ')+' vendidos</span>':'')+'</div>'
-        +'<div style="color:var(--muted);font-size:11px">'+(function(){var a=APPS_DOMI[c.plataforma||'rappi']||APPS_DOMI.rappi;return'<span style="color:'+a.c+';font-weight:800">'+a.e+' '+a.n+'</span> · ';})()+rango+' · '+c.nVentas+' ventas · '+esc(c.uidNombre||'')+(c.descuentoRappi?' · <span style="color:#ef4444;font-weight:800">−'+fmt(c.descuentoRappi).replace(/\u00A0/g,' ')+' Rappi</span>':'')+'</div></div>'
+        +'<div style="color:var(--muted);font-size:11px">'+(function(){var a=APPS_DOMI[c.plataforma||'rappi']||APPS_DOMI.rappi;return'<span style="color:'+a.c+';font-weight:800">'+a.e+' '+a.n+'</span> · ';})()+rango+' · '+c.nVentas+' ventas · '+esc(c.uidNombre||'')+(c.descuentoRappi?' · <span style="color:#ef4444;font-weight:800">−'+fmt(c.descuentoRappi).replace(/\u00A0/g,' ')+' comisión</span>':'')+(c.efectivoPrevio?' · <span style="color:#22c55e;font-weight:700">💵 '+fmt(c.efectivoPrevio).replace(/\u00A0/g,' ')+' fue en efectivo</span>':'')+'</div></div>'
       +'</div>'
       +(detalle?'<div style="color:var(--muted);font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'+detalle+'</div>':'')
     +'</div>';
