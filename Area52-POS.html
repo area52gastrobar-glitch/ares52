@@ -7431,6 +7431,22 @@ function _movsDigitales(diasSet){
       movs.push({ts:v.ts,monto:monto,fp:fp,ref:esc(v.mesa||'Venta')+(v.uidNombre?' · cobró '+esc(v.uidNombre):''),vts:v.ts,mesa:v.mesa||'',uidNombre:v.uidNombre||''});
     });
   });
+  // Abonos digitales de mesas AÚN ABIERTAS: la plata ya entró al banco aunque la
+  // mesa no se haya cobrado. Cuentan desde el momento en que se registran.
+  // (Al cobrar la mesa pasan a venta.abonos y se borran de abonosMesa → no hay doble conteo.)
+  Object.keys(abonosMesa||{}).forEach(function(mid){
+    var lista=abonosMesa[mid];
+    if(!Array.isArray(lista))lista=lista?Object.values(lista):[];
+    var mesa=(typeof mesas!=='undefined'&&mesas.find(function(x){return String(x.id)===String(mid);}))||null;
+    var nomMesa=mesa?(mesa.nombre||('Mesa '+mesa.num)):('Mesa '+mid);
+    lista.forEach(function(ab){
+      if(!ab||!digital(ab.fp))return;
+      var ts=ab.ts||Date.now();
+      if(!diasSet[_concilDia(new Date(ts))])return;
+      var u=(typeof usuarios!=='undefined'&&usuarios.find(function(x){return x.id===ab.uid;}))||null;
+      movs.push({ts:ts,monto:ab.monto||0,fp:ab.fp,ref:'Abono ('+esc(ab.nombre||'')+') · '+esc(nomMesa)+' · mesa abierta',vts:null,mesa:nomMesa,uidNombre:u?u.nombre:''});
+    });
+  });
   return movs;
 }
 function _smsRangoLimites(){
