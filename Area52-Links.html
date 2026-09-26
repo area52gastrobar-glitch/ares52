@@ -373,6 +373,30 @@ body{
 @keyframes igShine{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 @keyframes igBorde{0%{border-color:#FED373}30%{border-color:#F15245}60%{border-color:#D92E7F}85%{border-color:#9B36B7}100%{border-color:#FED373}}
 .ig-btn:active{transform:scale(.97);}
+/* TikTok: banner gemelo con glitch cian/rojo */
+.tk-btn{
+  display:flex;align-items:center;gap:14px;width:100%;
+  padding:16px 18px;border-radius:18px;text-decoration:none;box-sizing:border-box;
+  background:linear-gradient(135deg,rgba(37,244,238,.10),rgba(0,0,0,.25),rgba(254,44,85,.12));
+  background-size:200% 200%;
+  border:2.5px solid rgba(37,244,238,.85);
+  animation:tkGlow 2s ease-in-out infinite, igShine 4s ease infinite, tkBorde 3s linear infinite;
+  transition:transform .2s;
+}
+@keyframes tkGlow{
+  0%,100%{box-shadow:0 0 16px rgba(37,244,238,.45)}
+  50%{box-shadow:0 0 38px rgba(254,44,85,.75), 0 0 60px rgba(37,244,238,.35)}
+}
+@keyframes tkBorde{0%{border-color:#25F4EE}45%{border-color:#FE2C55}75%{border-color:#fff}100%{border-color:#25F4EE}}
+.tk-btn:active{transform:scale(.97);}
+.tk-ico{font-size:38px;flex-shrink:0;filter:drop-shadow(0 0 12px rgba(37,244,238,.9));animation:igLatido 2s ease-in-out infinite;}
+.tk-txt{display:flex;flex-direction:column;line-height:1.2;text-align:left;flex:1;}
+.tk-txt b{
+  font-size:24px;letter-spacing:2.5px;font-weight:900;color:#fff;
+  text-shadow:-2px -1px 0 rgba(37,244,238,.9), 2px 1px 0 rgba(254,44,85,.9);
+}
+.tk-txt small{font-size:12.5px;color:#25F4EE;letter-spacing:.5px;margin-top:2px;}
+.tk-arrow{font-size:26px;color:#FE2C55;font-weight:700;animation:igFlecha 1.2s ease-in-out infinite;}
 .ig-ico{display:flex;align-items:center;flex-shrink:0;filter:drop-shadow(0 0 12px rgba(217,46,127,.9));animation:igLatido 2s ease-in-out infinite;}
 @keyframes igLatido{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 .ig-txt{display:flex;flex-direction:column;line-height:1.2;text-align:left;flex:1;}
@@ -496,6 +520,11 @@ body{
       </span>
       <span class="ig-txt"><b>¡SÍGUENOS!</b><small>@area52.gastrobar</small></span>
       <span class="ig-arrow">›</span>
+    </a>
+    <a href="https://www.tiktok.com/@area.52.gastro.ba" class="tk-btn" target="_blank" aria-label="TikTok @area.52.gastro.ba">
+      <span class="tk-ico">🎵</span>
+      <span class="tk-txt"><b>TIKTOK</b><small>@area.52.gastro.ba</small></span>
+      <span class="tk-arrow">›</span>
     </a>
     <a href="https://wa.me/573213502772" class="soc-btn" target="_blank">💬</a>
     <a href="mailto:Area52.gastrobar@gmail.com" class="soc-btn" target="_blank">✉️</a>
