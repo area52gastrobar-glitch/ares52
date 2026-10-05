@@ -11,26 +11,26 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root{
-  --bg:#0a0618;
-  --card:#140a28;
-  --gold:#a855f7;      /* violeta neón (marca) */
-  --cyan:#22d3ee;      /* cian eléctrico */
-  --green:#7CFFB2;     /* verde alien */
-  --red:#ff4d8d;       /* magenta */
+  --bg:var(--t-b1);
+  --card:var(--t-b2);
+  --gold:var(--t-p);      /* violeta neón (marca) */
+  --cyan:var(--t-c2);      /* cian eléctrico */
+  --green:var(--t-s);     /* verde alien */
+  --red:var(--t-k2);       /* magenta */
   --blue:#38bdf8;
-  --white:#ece7ff;
-  --muted:#9a7ac0;
+  --white:var(--t-tx);
+  --muted:var(--t-mu);
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{
   background:#060312;font-family:"Rajdhani",sans-serif;min-height:100vh;
   background-image:
     radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.7), transparent),
-    radial-gradient(1.5px 1.5px at 70% 20%, rgba(168,85,247,.6), transparent),
-    radial-gradient(1px 1px at 40% 70%, rgba(34,211,238,.6), transparent),
+    radial-gradient(1.5px 1.5px at 70% 20%, rgba(var(--t-p-rgb),.6), transparent),
+    radial-gradient(1px 1px at 40% 70%, rgba(var(--t-c2-rgb),.6), transparent),
     radial-gradient(1.5px 1.5px at 85% 60%, rgba(255,255,255,.5), transparent),
     radial-gradient(1px 1px at 15% 85%, rgba(255,255,255,.5), transparent),
-    radial-gradient(1px 1px at 55% 45%, rgba(124,255,178,.5), transparent);
+    radial-gradient(1px 1px at 55% 45%, rgba(var(--t-s-rgb),.5), transparent);
   background-size:100% 100%;
 }
 
@@ -73,26 +73,26 @@ body{
   padding:10px 32px 8px;
   text-align:center;
   position:relative;
-  border-bottom:1px solid rgba(168,85,247,.4);
+  border-bottom:1px solid rgba(var(--t-p-rgb),.4);
 }
 /* Texture overlay */
 .cover::before{
   content:"";position:absolute;inset:0;
-  background:radial-gradient(ellipse at 50% 0%,rgba(168,85,247,.22) 0%,transparent 65%);
+  background:radial-gradient(ellipse at 50% 0%,rgba(var(--t-p-rgb),.22) 0%,transparent 65%);
   pointer-events:none;
 }
 
 .cover-tag{
   font-family:"Orbitron",sans-serif;font-size:12px;letter-spacing:7px;font-weight:500;
   color:var(--cyan);margin-bottom:10px;text-transform:uppercase;
-  text-shadow:0 0 12px rgba(34,211,238,.6);
+  text-shadow:0 0 12px rgba(var(--t-c2-rgb),.6);
 }
 .cover-title{
   font-family:"Orbitron",sans-serif;font-weight:900;font-size:60px;letter-spacing:3px;
   color:var(--white);line-height:1;
-  text-shadow:0 0 30px rgba(168,85,247,.8),0 0 60px rgba(168,85,247,.4);
+  text-shadow:0 0 30px rgba(var(--t-p-rgb),.8),0 0 60px rgba(var(--t-p-rgb),.4);
 }
-.cover-title span{color:var(--gold);text-shadow:0 0 30px rgba(168,85,247,.9);}
+.cover-title span{color:var(--gold);text-shadow:0 0 30px rgba(var(--t-p-rgb),.9);}
 .cover-sub{
   font-family:"Orbitron",sans-serif;font-weight:500;font-size:13px;
   letter-spacing:9px;color:var(--muted);margin-top:8px;
@@ -111,7 +111,7 @@ body{
 
 /* Menu pages */
 .menu-pages{
-  background:linear-gradient(180deg,#0a0618 0%,#0d0620 100%);
+  background:linear-gradient(180deg,var(--t-b1) 0%,#0d0620 100%);
   position:relative;
   overflow:hidden;
 }
@@ -154,7 +154,7 @@ body.cliente-mode #doc{
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 .fondo-ilustraciones{display:none;}
-.cat-divider svg{fill:#f0c040;flex-shrink:0;}
+.cat-divider svg{fill:var(--t-o2);flex-shrink:0;}
 
 /* Category */
 
@@ -203,7 +203,7 @@ body.cliente-mode #doc{
 .menu-item{
   display:flex;align-items:baseline;gap:6px;
   padding:6px 0;
-  border-bottom:1px solid rgba(168,85,247,.12);
+  border-bottom:1px solid rgba(var(--t-p-rgb),.12);
 }
 .item-emoji{font-size:15px;flex-shrink:0;}
 .item-name{
@@ -220,12 +220,12 @@ body.cliente-mode #doc{
 }
 .item-cubeta{
   display:block;font-family:"Lato",sans-serif;font-weight:300;
-  font-size:11px;color:#f0c040;letter-spacing:1px;margin-top:2px;
+  font-size:11px;color:var(--t-o2);letter-spacing:1px;margin-top:2px;
 }
 
 /* Footer */
 .menu-footer{
-  background:#080314;border-top:1px solid rgba(168,85,247,.4);
+  background:#080314;border-top:1px solid rgba(var(--t-p-rgb),.4);
   padding:24px 36px;
   display:flex;align-items:center;justify-content:space-between;
   flex-wrap:wrap;gap:16px;
@@ -239,7 +239,7 @@ body.cliente-mode #doc{
 .footer-contact b{color:var(--cyan);font-weight:600;}
 .footer-brand{
   font-family:"Orbitron",sans-serif;font-weight:900;font-size:30px;letter-spacing:3px;
-  color:var(--gold);opacity:.4;text-shadow:0 0 20px rgba(168,85,247,.5);
+  color:var(--gold);opacity:.4;text-shadow:0 0 20px rgba(var(--t-p-rgb),.5);
 }
 
 /* Happy hour badge */
@@ -276,26 +276,26 @@ body.cliente-mode #doc{
 /* ── MODO CLARO (sin fondo) ── */
 .modo-claro #doc .cover{
   background:#fff !important;
-  border-bottom:3px solid #7b2ff7;
+  border-bottom:3px solid var(--t-p2);
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 .modo-claro #doc .cover::before{display:none;}
 .modo-claro #doc .cover-title{color:#1a1208 !important;-webkit-text-fill-color:#1a1208 !important;}
-.modo-claro #doc .cover-title span{color:#7b2ff7 !important;-webkit-text-fill-color:#7b2ff7 !important;}
-.modo-claro #doc .cover-tag{color:#7b2ff7 !important;}
+.modo-claro #doc .cover-title span{color:var(--t-p2) !important;-webkit-text-fill-color:var(--t-p2) !important;}
+.modo-claro #doc .cover-tag{color:var(--t-p2) !important;}
 .modo-claro #doc .cover-sub{color:#666 !important;}
 .modo-claro #doc .cover-tagline{color:#888 !important;}
-.modo-claro #doc .cover-divider-line{background:linear-gradient(90deg,transparent,#7b2ff7) !important;}
-.modo-claro #doc .cover-divider-diamond{background:#7b2ff7 !important;}
+.modo-claro #doc .cover-divider-line{background:linear-gradient(90deg,transparent,var(--t-p2)) !important;}
+.modo-claro #doc .cover-divider-diamond{background:var(--t-p2) !important;}
 .modo-claro #doc .menu-pages{background:#fff !important;}
 .modo-claro #doc .menu-footer{background:#1a1208 !important;}
 .modo-claro #doc .cat-section{border-bottom:1px solid #e8e0d0;}
 .modo-claro #doc .cat-title{color:#1a1208 !important;}
-.modo-claro #doc .cat-count{border-color:#7b2ff744 !important;color:#7b2ff7 !important;}
+.modo-claro #doc .cat-count{border-color:rgba(var(--t-p2-rgb),0.27) !important;color:var(--t-p2) !important;}
 .modo-claro #doc .item-name{color:#1a1208 !important;}
 .modo-claro #doc .item-dots{border-bottom-color:rgba(0,0,0,.2) !important;}
-.modo-claro #doc .item-price{color:#7b2ff7 !important;}
-.modo-claro #doc .item-cubeta div{background:#7b2ff722 !important;border-color:#7b2ff755 !important;color:#a07828 !important;}
+.modo-claro #doc .item-price{color:var(--t-p2) !important;}
+.modo-claro #doc .item-cubeta div{background:rgba(var(--t-p2-rgb),0.13) !important;border-color:rgba(var(--t-p2-rgb),0.33) !important;color:#a07828 !important;}
 .modo-claro #doc .menu-item{border-bottom-color:rgba(0,0,0,.08) !important;}
 .modo-claro #doc [style*="color:#bbb"]{color:#555 !important;}
 .modo-claro #doc [style*="color:#999"]{color:#666 !important;}
@@ -306,7 +306,7 @@ body.cliente-mode #doc{
   body.modo-claro #doc .menu-pages{background:#fff !important;}
   body.modo-claro #doc .cat-title{color:#1a1208 !important;}
   body.modo-claro #doc .item-name{color:#1a1208 !important;}
-  body.modo-claro #doc .item-price{color:#7b2ff7 !important;}
+  body.modo-claro #doc .item-price{color:var(--t-p2) !important;}
 }
 
 /* ═══ FLUJO CONTINUO SIN CORTES FEOS ═══
@@ -381,7 +381,7 @@ body.cliente-mode #doc{
 var LOGO_SVG='';
 
 // Category colors cycling: gold, red, blue, gold...
-var CAT_COLORS=["#a855f7","#22d3ee","#7CFFB2","#ff4d8d","#38bdf8","#c084fc","#22d3ee","#a855f7"];
+var CAT_COLORS=["var(--t-p)","var(--t-c2)","var(--t-s)","var(--t-k2)","#38bdf8","#c084fc","var(--t-c2)","var(--t-p)"];
 
 
 var CAT_EMOJI_MAP = {
@@ -548,7 +548,7 @@ function regenerar(){
     var count=cats[cat].length;
     function _menuItem(p){
       var cubHtml=(showCubeta&&p.esCerveza&&p.cubeta)
-        ?'<div style="display:inline-block;background:#f0c04022;border:1px solid #f0c04055;border-radius:4px;padding:1px 6px;margin-top:3px;font-size:11px;font-weight:700;color:#f0c040;letter-spacing:1px">🪣 CUBETAZO '+fmt(p.cubeta)+'</div>':"";
+        ?'<div style="display:inline-block;background:rgba(var(--t-o2-rgb),0.13);border:1px solid rgba(var(--t-o2-rgb),0.33);border-radius:4px;padding:1px 6px;margin-top:3px;font-size:11px;font-weight:700;color:var(--t-o2);letter-spacing:1px">🪣 CUBETAZO '+fmt(p.cubeta)+'</div>':"";
       var vars=p.variantes?(Array.isArray(p.variantes)?p.variantes:Object.values(p.variantes)):[];
       // 📏 Producto con tamaños (Alitas x8/x16/x24, Pizza personal/mediana...): una línea por tamaño
       var varsHtml=vars.length?vars.map(function(v){
@@ -614,7 +614,7 @@ function regenerar(){
         var pm=menuData.find(function(m){return m.id===ing.prodId||m.id===ing.pid;});
         return (pm?(pm.emoji||'')+' '+esc(pm.nombre):'Producto')+(ing.cantidad>1?' ×'+ing.cantidad:'');
       }).join(' · ');
-      return'<div style="background:linear-gradient(135deg,rgba(124,255,178,.10),rgba(168,85,247,.10));border:1px solid rgba(124,255,178,.35);border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:0 0 24px rgba(124,255,178,.10)">'
+      return'<div style="background:linear-gradient(135deg,rgba(var(--t-s-rgb),.10),rgba(var(--t-p-rgb),.10));border:1px solid rgba(var(--t-s-rgb),.35);border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:0 0 24px rgba(var(--t-s-rgb),.10)">'
         +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
           +'<div style="flex:1">'
             +'<div style="font-family:\'Orbitron\',sans-serif;font-weight:700;font-size:16px;color:'+comboColor+';text-shadow:0 0 12px '+comboColor+'55">'+(c.emoji||'🎁')+' '+esc(c.nombre)+'</div>'
@@ -639,7 +639,7 @@ function regenerar(){
     // Cover
     '<div class="cover">'
 
-      +'<div style="font-size:40px;margin-bottom:2px;filter:drop-shadow(0 0 16px rgba(124,255,178,.8))">'+NEGOCIO.emoji2+'</div>'
+      +'<div style="font-size:40px;margin-bottom:2px;filter:drop-shadow(0 0 16px rgba(var(--t-s-rgb),.8))">'+NEGOCIO.emoji2+'</div>'
       +'<div class="cover-tag">'+[M('ciudad'),M('pais'),NEGOCIO.desde?'EST '+M('desde'):''].filter(Boolean).join(' · ')+'</div>'
       +'<div class="cover-title">'+MarcaTitulo()+'</div>'
       +'<div class="cover-sub">'+M('tipo')+'</div>'
@@ -663,13 +663,13 @@ function regenerar(){
       if(!promosData.length)return"";
       var cards=promosData.map(function(pr){
         if(pr.tipo==="2x1"){
-          return'<div style="background:linear-gradient(135deg,#2a0a24,#1a0a2e,#0a2418);border:3px solid #ff5ec8;border-radius:18px;padding:20px 18px;margin-bottom:12px;text-align:center;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+          return'<div style="background:linear-gradient(135deg,#2a0a24,var(--t-b2),#0a2418);border:3px solid var(--t-k);border-radius:18px;padding:20px 18px;margin-bottom:12px;text-align:center;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
             +'<div style="position:absolute;top:-14px;left:-8px;font-size:66px;opacity:.12">🍹</div>'
             +'<div style="position:absolute;bottom:-14px;right:-8px;font-size:66px;opacity:.12">🍹</div>'
-            +'<div style="font-size:52px;font-weight:900;line-height:1;letter-spacing:2px;background:linear-gradient(135deg,#ff5ec8,#a855f7 45%,#7cffb2);-webkit-background-clip:text;background-clip:text;color:transparent">2×1</div>'
-            +'<div style="font-size:19px;font-weight:900;letter-spacing:5px;color:#fff;margin-top:4px;text-shadow:0 0 12px rgba(255,94,200,.7)">EN '+esc(pr.cat||'').toUpperCase()+'</div>'
-            +'<div style="font-size:11px;font-weight:800;letter-spacing:3px;color:#7cffb2;margin-top:5px">PIDE 2 · PAGA 1</div>'
-            +'<div style="display:inline-block;background:rgba(255,94,200,.15);border:1px solid rgba(255,94,200,.5);border-radius:20px;padding:5px 16px;margin-top:10px;font-size:11px;font-weight:800;color:#fff;letter-spacing:1px">📅 '+_promoDiasTxt(pr)+' &nbsp;·&nbsp; 🕐 '+_promoHoraTxt(pr)+'</div>'
+            +'<div style="font-size:52px;font-weight:900;line-height:1;letter-spacing:2px;background:linear-gradient(135deg,var(--t-k),var(--t-p) 45%,var(--t-s));-webkit-background-clip:text;background-clip:text;color:transparent">2×1</div>'
+            +'<div style="font-size:19px;font-weight:900;letter-spacing:5px;color:#fff;margin-top:4px;text-shadow:0 0 12px rgba(var(--t-k-rgb),.7)">EN '+esc(pr.cat||'').toUpperCase()+'</div>'
+            +'<div style="font-size:11px;font-weight:800;letter-spacing:3px;color:var(--t-s);margin-top:5px">PIDE 2 · PAGA 1</div>'
+            +'<div style="display:inline-block;background:rgba(var(--t-k-rgb),.15);border:1px solid rgba(var(--t-k-rgb),.5);border-radius:20px;padding:5px 16px;margin-top:10px;font-size:11px;font-weight:800;color:#fff;letter-spacing:1px">📅 '+_promoDiasTxt(pr)+' &nbsp;·&nbsp; 🕐 '+_promoHoraTxt(pr)+'</div>'
           +'</div>';
         }
         var p=menuData.find(function(m){return String(m.id)===String(pr.prodId);});
@@ -677,17 +677,17 @@ function regenerar(){
         var esCub=(pr.tipo||'unidad')==='cubeta';
         var normal=esCub?(p.cubeta||((p.precio||0)*5)):(p.precio||0);
         var ahorro=normal-(pr.valor||0);
-        return'<div style="background:linear-gradient(135deg,#1a0a2e,#0d1b2a);border:2px solid #f0c040;border-radius:16px;padding:16px 18px;margin-bottom:12px;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+        return'<div style="background:linear-gradient(135deg,var(--t-b2),#0d1b2a);border:2px solid var(--t-o2);border-radius:16px;padding:16px 18px;margin-bottom:12px;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
           +'<div style="position:absolute;top:-10px;right:-10px;font-size:60px;opacity:.12">'+(p.emoji||'🔥')+'</div>'
           +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'
             +'<div>'
               +'<div style="font-size:17px;font-weight:900;color:#fff;letter-spacing:.5px">'+(p.emoji||'')+' '+esc(p.nombre)+(esCub?' · 🪣 CUBETAZO':'')+'</div>'
-              +'<div style="font-size:11px;color:#7cffb2;font-weight:700;margin-top:3px;letter-spacing:1px">📅 '+_promoDiasTxt(pr)+' · 🕐 '+_promoHoraTxt(pr)+'</div>'
+              +'<div style="font-size:11px;color:var(--t-s);font-weight:700;margin-top:3px;letter-spacing:1px">📅 '+_promoDiasTxt(pr)+' · 🕐 '+_promoHoraTxt(pr)+'</div>'
             +'</div>'
             +'<div style="text-align:right;flex-shrink:0">'
               +(normal>pr.valor?'<div style="font-size:12px;color:#888;text-decoration:line-through">'+fmt(normal)+'</div>':'')
-              +'<div style="font-size:24px;font-weight:900;color:#f0c040;text-shadow:0 0 12px rgba(240,192,64,.5)">'+fmt(pr.valor||0)+'</div>'
-              +(ahorro>0?'<div style="font-size:10px;color:#7cffb2;font-weight:800">AHORRAS '+fmt(ahorro)+'</div>':'')
+              +'<div style="font-size:24px;font-weight:900;color:var(--t-o2);text-shadow:0 0 12px rgba(var(--t-o2-rgb),.5)">'+fmt(pr.valor||0)+'</div>'
+              +(ahorro>0?'<div style="font-size:10px;color:var(--t-s);font-weight:800">AHORRAS '+fmt(ahorro)+'</div>':'')
             +'</div>'
           +'</div>'
         +'</div>';
@@ -696,8 +696,8 @@ function regenerar(){
       return'<div class="menu-pages" style="page-break-after:always">'
         +'<div style="text-align:center;margin:14px 0 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
           +'<div style="font-size:34px">🔥</div>'
-          +'<div style="font-size:26px;font-weight:900;letter-spacing:4px;background:linear-gradient(90deg,#f0c040,#ff6b6b,#f0c040);-webkit-background-clip:text;background-clip:text;color:transparent">PROMOCIONES</div>'
-          +'<div style="font-size:11px;color:#7cffb2;letter-spacing:3px;font-weight:700;margin-top:2px">OFERTAS ACTIVAS · '+M('nombre')+'</div>'
+          +'<div style="font-size:26px;font-weight:900;letter-spacing:4px;background:linear-gradient(90deg,var(--t-o2),#ff6b6b,var(--t-o2));-webkit-background-clip:text;background-clip:text;color:transparent">PROMOCIONES</div>'
+          +'<div style="font-size:11px;color:var(--t-s);letter-spacing:3px;font-weight:700;margin-top:2px">OFERTAS ACTIVAS · '+M('nombre')+'</div>'
         +'</div>'
         +cards
         +'<div style="text-align:center;font-size:10px;color:#666;margin-top:8px">Promociones válidas únicamente en los días y horarios indicados.</div>'

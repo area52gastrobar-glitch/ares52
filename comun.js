@@ -6,7 +6,7 @@
   function def(k,v){if(N[k]==null||N[k]==='')N[k]=v;}
   def('nombre','Mi Negocio');def('nombreCorto',N.nombre);def('tipo','');def('ciudad','');def('pais','Colombia');
   def('lema','');def('direccion','');def('telefono','');def('whatsapp','');def('correo','');def('instagram','');def('tiktok','');
-  def('desde','');def('emoji','🍽️');def('emoji2',N.emoji);def('logo','');def('fondos',[]);def('enlaces',[]);def('videoPromo','');
+  def('desde','');def('emoji','🍽️');def('emoji2',N.emoji);def('logo','');def('logoGrande',N.logo);def('horario','');def('fondos',[]);def('enlaces',[]);def('videoPromo','');
   def('rocolaPinStaff','');def('colores',{});def('firebase',null);def('decoracion',true);
   // Nombre sin tildes y en mayúsculas (tiquetes, encabezados del POS, nombres de archivo)
   def('nombreSimple',N.nombre.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase());
@@ -44,16 +44,58 @@
     titulo();
     window.MarcaAplicar(document);
   }
-  // Colores y adornos del tema: se aplican de una vez (antes de pintar la página)
+  /* ═══ 🎨 TEMAS ═══
+     Un tema es una paleta completa (más tipo de letra de los títulos y adornos) que cambia todas las pantallas a la vez.
+     Se elige en el POS (Admin → Tema) y queda guardado en la base (config/tema); negocio.js trae el tema de arranque.
+     Para agregar un tema nuevo basta sumar otro bloque a esta lista. */
+  var TEMAS=window.TEMAS={
+    espacial:{nombre:'Espacial',desc:'Neón violeta y verde sobre noche',muestra:['#a855f7','#7cffb2','#4de1ff','#05030d'],decoracion:true,
+      v:{p:'168,85,247',p2:'123,47,247',p3:'176,38,255',s:'124,255,178',s2:'57,255,20',c:'77,225,255',c2:'34,211,238',c3:'0,229,255',k:'255,94,200',k2:'255,77,141',o:'201,168,76',o2:'240,192,64',b0:'5,3,13',b1:'10,6,24',b2:'20,10,40',tx:'236,231,255',mu:'154,122,192',l:'185,166,255'}},
+    pub:{nombre:'Pub',desc:'Madera oscura, latón y crema',muestra:['#d9a441','#aac48c','#f4ead6','#0e0a07'],decoracion:false,
+      fuente:{familia:"'Abril Fatface'"},
+      pos:{bg:'#0e0a07',panel:'#15100a',card:'#1c150e',card2:'#241b12',border:'#3a2c1c',accent:'#d9a441',text:'#f4ead6',muted:'#8f7a5c',dim:'#33271a'},
+      v:{p:'217,164,65',p2:'166,107,42',p3:'217,164,65',s:'170,196,140',s2:'170,196,140',c:'222,184,135',c2:'222,184,135',c3:'222,184,135',k:'196,84,64',k2:'196,84,64',o:'201,168,76',o2:'240,192,64',b0:'14,10,7',b1:'24,17,11',b2:'38,27,17',tx:'244,234,214',mu:'168,146,116',l:'226,205,160'}},
+    discoteca:{nombre:'Discoteca',desc:'Negro con magenta, azul eléctrico y amarillo láser',muestra:['#ff2d95','#ffe600','#00d4ff','#050508'],decoracion:false,
+      fuente:{familia:"'Unbounded'"},
+      pos:{bg:'#050508',panel:'#0b0a12',card:'#12101c',card2:'#191628',border:'#2a2440',accent:'#ff2d95',text:'#f5f5ff',muted:'#6f6a90',dim:'#2a2545'},
+      v:{p:'255,45,149',p2:'196,0,255',p3:'196,0,255',s:'255,230,0',s2:'255,230,0',c:'0,212,255',c2:'0,212,255',c3:'0,212,255',k:'255,90,54',k2:'255,90,54',o:'255,214,10',o2:'255,214,10',b0:'5,5,8',b1:'10,8,18',b2:'20,14,32',tx:'245,245,255',mu:'150,150,178',l:'255,170,215'}}
+  };
+  var POSV=['bg','panel','card','card2','border','accent','text','muted','dim'],temaActual=null,estiloTema=null;
+  window.MarcaTemaActual=function(){return temaActual;};
+  window.MarcaTema=function(id,recordar){
+    if(!TEMAS[id])id='espacial';
+    var T=TEMAS[id],r=document.documentElement,c=N.colores||{};
+    temaActual=id;r.setAttribute('data-tema',id);
+    Object.keys(T.v).forEach(function(k){r.style.setProperty('--t-'+k+'-rgb',T.v[k]);r.style.setProperty('--t-'+k,'rgb('+T.v[k]+')');});
+    if(r.getAttribute('data-app')==='pos')POSV.forEach(function(k){if(T.pos&&T.pos[k])r.style.setProperty('--'+k,T.pos[k]);else r.style.removeProperty('--'+k);});
+    Object.keys(c).forEach(function(k){if(c[k])r.style.setProperty('--'+k,c[k]);});   // los colores propios del negocio mandan sobre el tema
+    r.classList.toggle('sin-decoracion',T.decoracion===false||N.decoracion===false);
+    if(!estiloTema){estiloTema=document.createElement('style');(document.head||r).appendChild(estiloTema);}
+    var css='.sin-decoracion .ovni,.sin-decoracion .nave,.sin-decoracion .wrap::after,.sin-decoracion .footer::before{display:none!important}';
+    if(T.fuente){
+      r.style.setProperty('--t-fd',T.fuente.familia);
+      css+='.name,.cover-title,.wrap>h1,.top>h1{font-family:'+T.fuente.familia+',Georgia,serif!important;letter-spacing:.02em!important}';
+      if(!document.getElementById('tema-fuentes')&&!document.querySelector('link[href$="fuentes/fuentes.css"]')){var l=document.createElement('link');l.id='tema-fuentes';l.rel='stylesheet';l.href='fuentes/fuentes.css';(document.head||r).appendChild(l);}
+    }else r.style.removeProperty('--t-fd');
+    estiloTema.textContent=css;
+    if(recordar){try{localStorage.setItem('a52_tema',id);}catch(e){}}
+    if(typeof window.alCambiarTema==='function'){try{window.alCambiarTema(id);}catch(e){}}
+  };
+  // Se aplica de una vez (antes de pintar la página): primero el último tema visto en este equipo, si no el de negocio.js
   (function(){
-    var c=N.colores||{},r=document.documentElement;
-    Object.keys(c).forEach(function(k){if(c[k])r.style.setProperty('--'+k,c[k]);});
+    var r=document.documentElement,porDefecto=TEMAS[N.tema]?N.tema:'espacial',visto=null;
+    try{visto=localStorage.getItem('a52_tema');}catch(e){}
     r.style.setProperty('--m-emoji',JSON.stringify(N.emoji));r.style.setProperty('--m-emoji2',JSON.stringify(N.emoji2));
-    if(N.decoracion===false){
-      r.classList.add('sin-decoracion');
-      var st=document.createElement('style');st.textContent='.sin-decoracion .ovni,.sin-decoracion .nave,.sin-decoracion .wrap::after,.sin-decoracion .footer::before{display:none!important}';
-      (document.head||r).appendChild(st);
-    }
+    window.MarcaTema(TEMAS[visto]?visto:porDefecto,false);
+    // …y se confirma con el que el administrador dejó guardado en la base (lectura pública, sin identificar a nadie)
+    try{
+      if(N.firebase&&N.firebase.databaseURL&&window.fetch&&/^https:/.test(N.firebase.databaseURL))
+        fetch(N.firebase.databaseURL+'/config/tema.json').then(function(x){return x.ok?x.json():undefined;}).then(function(t){
+          if(t===undefined)return;
+          var debe=(typeof t==='string'&&TEMAS[t])?t:porDefecto;
+          if(debe!==temaActual)window.MarcaTema(debe,true);else{try{localStorage.setItem('a52_tema',debe);}catch(e){}}
+        }).catch(function(){});
+    }catch(e){}
     try{titulo();}catch(e){}
   })();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',listo);else listo();

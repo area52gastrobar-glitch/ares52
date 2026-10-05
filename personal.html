@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-app="pos">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
@@ -20,7 +20,7 @@
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-10-05c';
+var APP_BUILD='2026-10-05d';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -288,6 +288,7 @@ select.inp{cursor:pointer}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px" id="pin-keypad"></div>
       <button class="btn btn-outline btn-full" style="font-size:12px" onclick="backToUsers()">&#8592; Cambiar usuario</button>
       <div style="color:var(--red);font-size:12px;min-height:16px;text-align:center;margin-top:6px" id="pin-err"></div>
+      <div style="color:var(--muted);font-size:10.5px;text-align:center;margin-top:2px">También puede escribir la clave con el teclado</div>
     </div>
   </div>
 </div>
@@ -978,6 +979,15 @@ function renderPinKeypad(){
     return '<button class="pin-btn" onclick="pinKey(\''+k+'\')">'+(k==='DEL'?'&#9003;':k)+'</button>';
   }).join('');
 }
+document.addEventListener('keydown',function(ev){
+  var paso=document.getElementById('login-step-pin'),pantalla=document.getElementById('login-screen');
+  if(!paso||paso.style.display!=='block'||!pantalla||pantalla.style.display==='none')return;
+  if(document.getElementById('a52-candado')||ev.ctrlKey||ev.metaKey||ev.altKey)return;
+  var num=/^Numpad[0-9]$/.test(ev.code||'')?ev.code.slice(-1):(/^[0-9]$/.test(ev.key)?ev.key:null);   // el teclado numérico sirve con o sin Bloq Num
+  if(num!==null){ev.preventDefault();pinKey(num);}
+  else if(ev.key==='Backspace'||(ev.key==='Delete'&&ev.code!=='NumpadDecimal')){ev.preventDefault();pinKey('DEL');}
+  else if(ev.key==='Escape'){ev.preventDefault();backToUsers();}
+});
 function pinKey(k){
   if(k==='DEL'){pinBuffer=pinBuffer.slice(0,-1);renderPinDots();return;}
   if(pinBuffer.length>=4)return;
@@ -1246,6 +1256,26 @@ function a52Herramienta(id){
   try{history.replaceState(null,'','#'+id);}catch(e){}
 }
 function a52HerramientaCerrar(){var o=document.getElementById('a52-herr');if(o)o.remove();try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}}
+
+/* ═══ 🎨 TEMA ═══ el administrador elige el aspecto de todas las pantallas (clientes y personal) */
+function a52TemaHtml(){
+  var act=MarcaTemaActual();
+  return'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:6px">🎨 Tema</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.45">Cambia los colores y el estilo de la página de inicio, la carta, la rocola y el POS. Los clientes lo ven la próxima vez que abran la página.</div>'
+    +Object.keys(TEMAS).map(function(id){
+      var T=TEMAS[id],on=id===act;
+      return'<button onclick="a52Tema(\''+id+'\')" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:'+(on?'var(--card2)':'var(--bg)')+';border:'+(on?'2px solid var(--accent)':'1px solid var(--border)')+';border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;color:var(--text)">'
+        +'<span style="display:flex;flex:none;border-radius:8px;overflow:hidden;border:1px solid var(--border)">'+T.muestra.map(function(c){return'<i style="display:block;width:18px;height:34px;background:'+c+'"></i>';}).join('')+'</span>'
+        +'<span style="flex:1;min-width:0"><b style="font-size:14px">'+esc(T.nombre)+'</b><br><span style="color:var(--muted);font-size:11px">'+esc(T.desc)+'</span></span>'
+        +(on?'<span style="color:var(--accent);font-weight:800;font-size:12px">En uso</span>':'')+'</button>';
+    }).join('')+'</div>';
+}
+function a52Tema(id){
+  if(!TEMAS[id])return;
+  MarcaTema(id,true);
+  var d=getDb();if(d)d.ref('config/tema').set(id).then(function(){showToast('🎨 Tema «'+TEMAS[id].nombre+'» guardado','#22c55e');},function(){alert('Este equipo no pudo guardar el tema en la base. Quedó aplicado solo aquí.');});
+  if(tabActual==='admin')render();
+}
 function completarLogin(){
   registrarSesion('login',usuarioSelLogin);
     usuarioActivo=usuarioSelLogin;
@@ -12510,6 +12540,7 @@ function renderAdmin(){
     +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)" onclick="abrirSesiones()">👥 Ver inicios de sesión</button>'
     +'</div>'
     +a52EquipoHtml()
+    +a52TemaHtml()
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
     +notifSection

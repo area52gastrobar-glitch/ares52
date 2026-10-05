@@ -8,48 +8,48 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--verde:#39ff14;--morado:#b026ff;--cian:#00e5ff;--rojo:#ff3b5c;--tinta:#eafff2}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#050014;color:var(--tinta);min-height:100vh;background-image:radial-gradient(ellipse at 10% 0%,rgba(176,38,255,.14) 0%,transparent 45%),radial-gradient(ellipse at 90% 100%,rgba(0,229,255,.09) 0%,transparent 45%)}
-body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(1px 1px at 10% 20%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 30% 70%,#9ff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 55% 15%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 75% 45%,#d9b3ff 50%,transparent 51%),radial-gradient(1px 1px at 88% 80%,#fff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 20% 90%,#aef 50%,transparent 51%),radial-gradient(1px 1px at 44% 38%,#bfffb3 50%,transparent 51%),radial-gradient(1px 1px at 6% 58%,#fff 50%,transparent 51%),radial-gradient(1.2px 1.2px at 94% 12%,#fff 50%,transparent 51%);opacity:.55;animation:titilar 4s ease-in-out infinite alternate}
+:root{--verde:var(--t-s2);--morado:var(--t-p3);--cian:var(--t-c3);--rojo:#ff3b5c;--tinta:var(--t-tx)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--t-b0);color:var(--tinta);min-height:100vh;background-image:radial-gradient(ellipse at 10% 0%,rgba(var(--t-p3-rgb),.14) 0%,transparent 45%),radial-gradient(ellipse at 90% 100%,rgba(var(--t-c3-rgb),.09) 0%,transparent 45%)}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(1px 1px at 10% 20%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 30% 70%,#9ff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 55% 15%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 75% 45%,var(--t-l) 50%,transparent 51%),radial-gradient(1px 1px at 88% 80%,#fff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 20% 90%,#aef 50%,transparent 51%),radial-gradient(1px 1px at 44% 38%,#bfffb3 50%,transparent 51%),radial-gradient(1px 1px at 6% 58%,#fff 50%,transparent 51%),radial-gradient(1.2px 1.2px at 94% 12%,#fff 50%,transparent 51%);opacity:.55;animation:titilar 4s ease-in-out infinite alternate}
 @keyframes titilar{from{opacity:.35}to{opacity:.7}}
-.top{display:flex;align-items:center;gap:12px;padding:12px 18px;background:rgba(8,2,24,.8);border-bottom:1px solid rgba(176,38,255,.35);position:relative;z-index:2;box-shadow:0 2px 20px rgba(176,38,255,.12)}
-.top img{width:42px;height:42px;border-radius:50%;border:2px solid var(--verde);box-shadow:0 0 12px rgba(57,255,20,.55)}
-.top h1{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;letter-spacing:2px;background:linear-gradient(90deg,var(--verde),var(--cian),var(--morado));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 6px rgba(57,255,20,.45))}
-.top .nave{font-size:22px;animation:flotar 3.5s ease-in-out infinite;filter:drop-shadow(0 0 8px rgba(0,229,255,.8))}
+.top{display:flex;align-items:center;gap:12px;padding:12px 18px;background:rgba(var(--t-b1-rgb),.8);border-bottom:1px solid rgba(var(--t-p3-rgb),.35);position:relative;z-index:2;box-shadow:0 2px 20px rgba(var(--t-p3-rgb),.12)}
+.top img{width:42px;height:42px;border-radius:50%;border:2px solid var(--verde);box-shadow:0 0 12px rgba(var(--t-s2-rgb),.55)}
+.top h1{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;letter-spacing:2px;background:linear-gradient(90deg,var(--verde),var(--cian),var(--morado));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 6px rgba(var(--t-s2-rgb),.45))}
+.top .nave{font-size:22px;animation:flotar 3.5s ease-in-out infinite;filter:drop-shadow(0 0 8px rgba(var(--t-c3-rgb),.8))}
 @keyframes flotar{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-4px) rotate(4deg)}}
 .layout{display:grid;grid-template-columns:1fr 380px;gap:0;height:calc(100vh - 67px);position:relative;z-index:1}
 @media(max-width:880px){.layout{grid-template-columns:1fr;height:auto}}
 .player-side{padding:18px;display:flex;flex-direction:column;gap:14px}
-.player-box{background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9;width:100%;border:1px solid rgba(0,229,255,.3);box-shadow:0 0 24px rgba(0,229,255,.15)}
-.now{background:rgba(16,6,36,.75);border:1px solid rgba(57,255,20,.45);border-radius:14px;padding:16px;box-shadow:0 0 20px rgba(57,255,20,.15),inset 0 0 26px rgba(57,255,20,.04);animation:pulso 3s ease-in-out infinite}
-@keyframes pulso{0%,100%{box-shadow:0 0 14px rgba(57,255,20,.12)}50%{box-shadow:0 0 26px rgba(57,255,20,.3)}}
-.now .lbl{color:var(--verde);font-family:'Orbitron',sans-serif;font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;text-shadow:0 0 8px rgba(57,255,20,.5)}
+.player-box{background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9;width:100%;border:1px solid rgba(var(--t-c3-rgb),.3);box-shadow:0 0 24px rgba(var(--t-c3-rgb),.15)}
+.now{background:rgba(var(--t-b2-rgb),.75);border:1px solid rgba(var(--t-s2-rgb),.45);border-radius:14px;padding:16px;box-shadow:0 0 20px rgba(var(--t-s2-rgb),.15),inset 0 0 26px rgba(var(--t-s2-rgb),.04);animation:pulso 3s ease-in-out infinite}
+@keyframes pulso{0%,100%{box-shadow:0 0 14px rgba(var(--t-s2-rgb),.12)}50%{box-shadow:0 0 26px rgba(var(--t-s2-rgb),.3)}}
+.now .lbl{color:var(--verde);font-family:'Orbitron',sans-serif;font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;text-shadow:0 0 8px rgba(var(--t-s2-rgb),.5)}
 .now .t{font-size:20px;font-weight:800;margin-top:4px}
-.now .a{color:#8f86b8;font-size:14px}
+.now .a{color:var(--t-mu);font-size:14px}
 .controls{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-.ctrl{flex:1;min-width:90px;background:rgba(176,38,255,.10);border:1px solid rgba(176,38,255,.4);color:var(--tinta);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
-.ctrl:hover{box-shadow:0 0 12px rgba(176,38,255,.35)}
-.ctrl.play{background:linear-gradient(90deg,var(--verde),var(--cian));color:#02140a;border:none;box-shadow:0 0 14px rgba(57,255,20,.45)}
+.ctrl{flex:1;min-width:90px;background:rgba(var(--t-p3-rgb),.10);border:1px solid rgba(var(--t-p3-rgb),.4);color:var(--tinta);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+.ctrl:hover{box-shadow:0 0 12px rgba(var(--t-p3-rgb),.35)}
+.ctrl.play{background:linear-gradient(90deg,var(--verde),var(--cian));color:#02140a;border:none;box-shadow:0 0 14px rgba(var(--t-s2-rgb),.45)}
 .ctrl:active{transform:scale(.97)}
-.queue-side{background:rgba(8,2,24,.6);border-left:1px solid rgba(176,38,255,.3);padding:18px;overflow-y:auto}
-.qt{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:800;color:var(--verde);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;text-shadow:0 0 10px rgba(57,255,20,.5)}
+.queue-side{background:rgba(var(--t-b1-rgb),.6);border-left:1px solid rgba(var(--t-p3-rgb),.3);padding:18px;overflow-y:auto}
+.qt{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:800;color:var(--verde);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;text-shadow:0 0 10px rgba(var(--t-s2-rgb),.5)}
 .genre-group{margin-bottom:16px}
-.genre-head{display:flex;align-items:center;gap:8px;background:rgba(176,38,255,.14);border:1px solid rgba(176,38,255,.35);border-radius:8px;padding:7px 12px;margin-bottom:8px}
-.genre-head .g{color:#d9a6ff;font-weight:800;font-size:13px;text-shadow:0 0 8px rgba(176,38,255,.5)}
-.genre-head .c{color:#8f86b8;font-size:11px;margin-left:auto}
-.qsong{background:rgba(16,6,36,.6);border:1px solid rgba(0,229,255,.16);border-radius:11px;padding:10px 13px;margin-bottom:7px;display:flex;align-items:center;gap:10px}
-.qsong.current{border-color:var(--verde);background:rgba(57,255,20,.08);box-shadow:0 0 14px rgba(57,255,20,.25)}
+.genre-head{display:flex;align-items:center;gap:8px;background:rgba(var(--t-p3-rgb),.14);border:1px solid rgba(var(--t-p3-rgb),.35);border-radius:8px;padding:7px 12px;margin-bottom:8px}
+.genre-head .g{color:var(--t-l);font-weight:800;font-size:13px;text-shadow:0 0 8px rgba(var(--t-p3-rgb),.5)}
+.genre-head .c{color:var(--t-mu);font-size:11px;margin-left:auto}
+.qsong{background:rgba(var(--t-b2-rgb),.6);border:1px solid rgba(var(--t-c3-rgb),.16);border-radius:11px;padding:10px 13px;margin-bottom:7px;display:flex;align-items:center;gap:10px}
+.qsong.current{border-color:var(--verde);background:rgba(var(--t-s2-rgb),.08);box-shadow:0 0 14px rgba(var(--t-s2-rgb),.25)}
 .qsong .info{flex:1;min-width:0}
 .qsong .nm{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.qsong .ar{font-size:11px;color:#8f86b8}
+.qsong .ar{font-size:11px;color:var(--t-mu)}
 .qsong .by{font-size:10px;color:var(--verde)}
 .qsong button{background:rgba(255,59,92,.12);color:var(--rojo);border:none;border-radius:7px;width:30px;height:30px;cursor:pointer;flex-shrink:0}
-.qsong .play-now{background:rgba(57,255,20,.12);color:var(--verde)}
+.qsong .play-now{background:rgba(var(--t-s2-rgb),.12);color:var(--verde)}
 .empty{text-align:center;color:#5d5480;padding:40px 10px}
-.setup{background:rgba(176,38,255,.12);border:1px solid rgba(176,38,255,.4);border-radius:12px;padding:16px;margin:18px;color:#e3c8ff;font-size:13px;line-height:1.6;position:relative;z-index:1}
-.setup input{width:100%;background:rgba(5,0,20,.6);border:1px solid rgba(176,38,255,.4);border-radius:8px;padding:10px;color:#fff;margin:8px 0;font-size:14px}
-.setup button{background:linear-gradient(90deg,var(--morado),var(--cian));color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:800;cursor:pointer;box-shadow:0 0 12px rgba(176,38,255,.4)}
-.badge{font-size:9px;font-weight:800;padding:1px 7px;border-radius:99px;background:rgba(57,255,20,.14);color:var(--verde);border:1px solid rgba(57,255,20,.35)}
+.setup{background:rgba(var(--t-p3-rgb),.12);border:1px solid rgba(var(--t-p3-rgb),.4);border-radius:12px;padding:16px;margin:18px;color:var(--t-l);font-size:13px;line-height:1.6;position:relative;z-index:1}
+.setup input{width:100%;background:rgba(var(--t-b0-rgb),.6);border:1px solid rgba(var(--t-p3-rgb),.4);border-radius:8px;padding:10px;color:#fff;margin:8px 0;font-size:14px}
+.setup button{background:linear-gradient(90deg,var(--morado),var(--cian));color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:800;cursor:pointer;box-shadow:0 0 12px rgba(var(--t-p3-rgb),.4)}
+.badge{font-size:9px;font-weight:800;padding:1px 7px;border-radius:99px;background:rgba(var(--t-s2-rgb),.14);color:var(--verde);border:1px solid rgba(var(--t-s2-rgb),.35)}
 @media (prefers-reduced-motion:reduce){body::before,.top .nave,.now{animation:none}}
 </style>
 </head>
@@ -84,7 +84,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
     <div class="now">
       <div class="lbl" style="display:flex;justify-content:space-between;align-items:center;gap:6px">🎵 Poner música (DJ)<span style="display:flex;gap:5px">
         <button onclick="exportarHistorialExcel()" style="background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Descargar el historial en Excel para corregir las cifras">⬇️ Excel</button>
-        <button onclick="document.getElementById('impExcel').click()" style="background:rgba(77,225,255,.12);color:#4de1ff;border:1px solid rgba(77,225,255,.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Subir el Excel corregido">⬆️ Subir</button>
+        <button onclick="document.getElementById('impExcel').click()" style="background:rgba(var(--t-c-rgb),.12);color:var(--t-c);border:1px solid rgba(var(--t-c-rgb),.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Subir el Excel corregido">⬆️ Subir</button>
         <input type="file" id="impExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarHistorialExcel(this)"/>
         <button onclick="reconfigurarKeys()" style="background:rgba(255,255,255,.08);color:#888;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer" title="Editar las API Keys">🔑 Llaves</button>
       </span></div>
@@ -102,7 +102,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <option value="Otro">🎵 Otro</option>
       </select>
       <button class="ctrl play" style="width:100%" onclick="djBuscar()">🔍 Buscar</button>
-      <div id="djResultados"></div>
+      <div id="djResultados" style="max-height:58vh;overflow-y:auto"></div>
     </div>
   </div>
   <div class="queue-side">
@@ -214,9 +214,9 @@ function reconfigurarKeys(){
   document.getElementById('mainLayout').style.display='none';
   s.innerHTML='<div class="setup"><b>🔑 Tus API Keys de YouTube</b><br>'
     +'<div style="font-size:13px;color:#888;margin:6px 0">Cada llave da ~100 búsquedas al día. Pon dos para tener ~200. Pega una en cada casilla.</div>'
-    +'<div style="font-size:12px;color:#39ff14;margin-bottom:3px">Llave 1 (obligatoria)</div>'
+    +'<div style="font-size:12px;color:var(--t-s2);margin-bottom:3px">Llave 1 (obligatoria)</div>'
     +'<input id="kEdit1" placeholder="Pega aquí la primera API Key" value="'+k1.replace(/"/g,"&quot;")+'">'
-    +'<div style="font-size:12px;color:#39ff14;margin:8px 0 3px">Llave 2 (opcional)</div>'
+    +'<div style="font-size:12px;color:var(--t-s2);margin:8px 0 3px">Llave 2 (opcional)</div>'
     +'<input id="kEdit2" placeholder="Pega aquí la segunda API Key" value="'+k2.replace(/"/g,"&quot;")+'">'
     +'<button onclick="guardarKeysEditadas()" style="margin-top:10px">💾 Guardar llaves</button>'
     +'<button onclick="cancelarEdicionKeys()" style="margin-top:8px;background:rgba(255,255,255,.1);color:#fff">Cancelar</button>'
@@ -232,7 +232,7 @@ function guardarKeysEditadas(){
   localStorage.setItem('a52_ytkeys',JSON.stringify(keys));
   db.ref('config/ytkeys').set(keys);
   db.ref('config/ytkey').set(k1);
-  document.getElementById('kEstado').innerHTML='<span style="color:#39ff14">✓ Guardadas '+keys.length+' llave(s). Se sincronizan a todos los equipos.</span>';
+  document.getElementById('kEstado').innerHTML='<span style="color:var(--t-s2)">✓ Guardadas '+keys.length+' llave(s). Se sincronizan a todos los equipos.</span>';
   setTimeout(cancelarEdicionKeys,1200);
 }
 function cancelarEdicionKeys(){
@@ -744,9 +744,9 @@ function djBuscar(){
   if(!YT_API_KEY){alert('Configura primero la API Key.');return;}
   var cont=document.getElementById('djResultados');
   var cached=djCacheGet(q);
-  if(cached){djPintar(cached);return;}  // usa caché, no gasta cuota
+  if(cached&&cached.length>6){djPintar(cached);return;}  // usa caché, no gasta cuota (las guardadas con la lista corta se buscan de nuevo una vez)
   cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">🔎 Buscando...</div>';
-  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=6&q='+encodeURIComponent(q+' música')+'&key='+YT_API_KEY;
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=12&q='+encodeURIComponent(q+' música')+'&key='+YT_API_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
     if(data.error){
       var msg=(data.error.errors&&data.error.errors[0]&&data.error.errors[0].reason)||data.error.message||'error';
@@ -794,7 +794,7 @@ function djAgregar(videoId,tituloEnc,canalEnc){
   var pedido={cancion:titulo,artista:canal,genero:genero,nombre:'DJ',videoId:videoId,ts:Date.now(),played:false};
   db.ref('musica').push(pedido).then(function(){
     document.getElementById('djBusqueda').value='';
-    document.getElementById('djResultados').innerHTML='<div style="color:#39ff14;padding:10px;font-size:13px">✓ Agregada a la cola</div>';
+    document.getElementById('djResultados').innerHTML='<div style="color:var(--t-s2);padding:10px;font-size:13px">✓ Agregada a la cola</div>';
     setTimeout(function(){var r=document.getElementById('djResultados');if(r)r.innerHTML='';},1500);
   });
   // Registrarla en el historial global: así los clientes tampoco pueden repetirla en 1.5h
