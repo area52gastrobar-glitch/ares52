@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{nombreCorto} · DJ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--verde:#39ff14;--morado:#b026ff;--cian:#00e5ff;--rojo:#ff3b5c;--tinta:#eafff2}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#050014;color:var(--tinta);min-height:100vh;background-image:radial-gradient(ellipse at 10% 0%,rgba(176,38,255,.14) 0%,transparent 45%),radial-gradient(ellipse at 90% 100%,rgba(0,229,255,.09) 0%,transparent 45%)}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(1px 1px at 10% 20%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 30% 70%,#9ff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 55% 15%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 75% 45%,#d9b3ff 50%,transparent 51%),radial-gradient(1px 1px at 88% 80%,#fff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 20% 90%,#aef 50%,transparent 51%),radial-gradient(1px 1px at 44% 38%,#bfffb3 50%,transparent 51%),radial-gradient(1px 1px at 6% 58%,#fff 50%,transparent 51%),radial-gradient(1.2px 1.2px at 94% 12%,#fff 50%,transparent 51%);opacity:.55;animation:titilar 4s ease-in-out infinite alternate}
+@keyframes titilar{from{opacity:.35}to{opacity:.7}}
+.top{display:flex;align-items:center;gap:12px;padding:12px 18px;background:rgba(8,2,24,.8);border-bottom:1px solid rgba(176,38,255,.35);position:relative;z-index:2;box-shadow:0 2px 20px rgba(176,38,255,.12)}
+.top img{width:42px;height:42px;border-radius:50%;border:2px solid var(--verde);box-shadow:0 0 12px rgba(57,255,20,.55)}
+.top h1{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:900;letter-spacing:2px;background:linear-gradient(90deg,var(--verde),var(--cian),var(--morado));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 6px rgba(57,255,20,.45))}
+.top .nave{font-size:22px;animation:flotar 3.5s ease-in-out infinite;filter:drop-shadow(0 0 8px rgba(0,229,255,.8))}
+@keyframes flotar{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-4px) rotate(4deg)}}
+.layout{display:grid;grid-template-columns:1fr 380px;gap:0;height:calc(100vh - 67px);position:relative;z-index:1}
+@media(max-width:880px){.layout{grid-template-columns:1fr;height:auto}}
+.player-side{padding:18px;display:flex;flex-direction:column;gap:14px}
+.player-box{background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9;width:100%;border:1px solid rgba(0,229,255,.3);box-shadow:0 0 24px rgba(0,229,255,.15)}
+.now{background:rgba(16,6,36,.75);border:1px solid rgba(57,255,20,.45);border-radius:14px;padding:16px;box-shadow:0 0 20px rgba(57,255,20,.15),inset 0 0 26px rgba(57,255,20,.04);animation:pulso 3s ease-in-out infinite}
+@keyframes pulso{0%,100%{box-shadow:0 0 14px rgba(57,255,20,.12)}50%{box-shadow:0 0 26px rgba(57,255,20,.3)}}
+.now .lbl{color:var(--verde);font-family:'Orbitron',sans-serif;font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;text-shadow:0 0 8px rgba(57,255,20,.5)}
+.now .t{font-size:20px;font-weight:800;margin-top:4px}
+.now .a{color:#8f86b8;font-size:14px}
+.controls{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.ctrl{flex:1;min-width:90px;background:rgba(176,38,255,.10);border:1px solid rgba(176,38,255,.4);color:var(--tinta);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+.ctrl:hover{box-shadow:0 0 12px rgba(176,38,255,.35)}
+.ctrl.play{background:linear-gradient(90deg,var(--verde),var(--cian));color:#02140a;border:none;box-shadow:0 0 14px rgba(57,255,20,.45)}
+.ctrl:active{transform:scale(.97)}
+.queue-side{background:rgba(8,2,24,.6);border-left:1px solid rgba(176,38,255,.3);padding:18px;overflow-y:auto}
+.qt{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:800;color:var(--verde);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;text-shadow:0 0 10px rgba(57,255,20,.5)}
+.genre-group{margin-bottom:16px}
+.genre-head{display:flex;align-items:center;gap:8px;background:rgba(176,38,255,.14);border:1px solid rgba(176,38,255,.35);border-radius:8px;padding:7px 12px;margin-bottom:8px}
+.genre-head .g{color:#d9a6ff;font-weight:800;font-size:13px;text-shadow:0 0 8px rgba(176,38,255,.5)}
+.genre-head .c{color:#8f86b8;font-size:11px;margin-left:auto}
+.qsong{background:rgba(16,6,36,.6);border:1px solid rgba(0,229,255,.16);border-radius:11px;padding:10px 13px;margin-bottom:7px;display:flex;align-items:center;gap:10px}
+.qsong.current{border-color:var(--verde);background:rgba(57,255,20,.08);box-shadow:0 0 14px rgba(57,255,20,.25)}
+.qsong .info{flex:1;min-width:0}
+.qsong .nm{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qsong .ar{font-size:11px;color:#8f86b8}
+.qsong .by{font-size:10px;color:var(--verde)}
+.qsong button{background:rgba(255,59,92,.12);color:var(--rojo);border:none;border-radius:7px;width:30px;height:30px;cursor:pointer;flex-shrink:0}
+.qsong .play-now{background:rgba(57,255,20,.12);color:var(--verde)}
+.empty{text-align:center;color:#5d5480;padding:40px 10px}
+.setup{background:rgba(176,38,255,.12);border:1px solid rgba(176,38,255,.4);border-radius:12px;padding:16px;margin:18px;color:#e3c8ff;font-size:13px;line-height:1.6;position:relative;z-index:1}
+.setup input{width:100%;background:rgba(5,0,20,.6);border:1px solid rgba(176,38,255,.4);border-radius:8px;padding:10px;color:#fff;margin:8px 0;font-size:14px}
+.setup button{background:linear-gradient(90deg,var(--morado),var(--cian));color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:800;cursor:pointer;box-shadow:0 0 12px rgba(176,38,255,.4)}
+.badge{font-size:9px;font-weight:800;padding:1px 7px;border-radius:99px;background:rgba(57,255,20,.14);color:var(--verde);border:1px solid rgba(57,255,20,.35)}
+@media (prefers-reduced-motion:reduce){body::before,.top .nave,.now{animation:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <img data-m-src="logo" alt="">
+  <h1>DJ · ROCOLA <span data-m="nombre"></span></h1>
+  <span class="nave" data-m="emoji"></span>
+  <div style="margin-left:auto;font-size:11px;color:#666" id="estado">●</div>
+</div>
+
+<div id="setupScreen"></div>
+<div class="layout" id="mainLayout" style="display:none">
+  <div class="player-side">
+    <div class="player-box" style="position:relative">
+      <div id="ytplayerA" style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
+      <div id="ytplayerB" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none"></div>
+      <iframe id="promoFrame" src="" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000;z-index:10" allow="autoplay; fullscreen" allowfullscreen></iframe>
+      <button id="btnFullPromo" onclick="pantallaCompletaPromo()" style="display:none;position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;z-index:11">⛶ Pantalla completa</button>
+    </div>
+    <div class="now">
+      <div class="lbl">▶ Sonando ahora</div>
+      <div class="t" id="nowTitle">—</div>
+      <div class="a" id="nowArtist"></div>
+      <div class="controls">
+        <button class="ctrl play" id="btnPlayPause" onclick="togglePlay()">⏸ Pausa</button>
+        <button class="ctrl" onclick="siguiente()">⏭ Siguiente</button>
+        <button class="ctrl" onclick="reproducirCola()">🔄 Reanudar cola</button>
+        <button class="ctrl" id="btnVideo" onclick="toggleVideoPromo()">🎬 Video promo</button>
+      </div>
+    </div>
+    <div class="now">
+      <div class="lbl" style="display:flex;justify-content:space-between;align-items:center;gap:6px">🎵 Poner música (DJ)<span style="display:flex;gap:5px">
+        <button onclick="exportarHistorialExcel()" style="background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Descargar el historial en Excel para corregir las cifras">⬇️ Excel</button>
+        <button onclick="document.getElementById('impExcel').click()" style="background:rgba(77,225,255,.12);color:#4de1ff;border:1px solid rgba(77,225,255,.3);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;font-weight:700" title="Subir el Excel corregido">⬆️ Subir</button>
+        <input type="file" id="impExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarHistorialExcel(this)"/>
+        <button onclick="reconfigurarKeys()" style="background:rgba(255,255,255,.08);color:#888;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer" title="Editar las API Keys">🔑 Llaves</button>
+      </span></div>
+      <input id="djBusqueda" placeholder="Busca una canción para agregar a la cola" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin:8px 0" onkeydown="if(event.key==='Enter')djBuscar()">
+      <select id="djGenero" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;color:#fff;font-size:14px;margin-bottom:8px">
+        <option value="auto">✨ Detectar automáticamente</option>
+        <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
+        <option value="Salsa">💃 Salsa</option>
+        <option value="Vallenato">🪗 Vallenato</option>
+        <option value="Crossover">🎉 Crossover / Fiesta</option>
+        <option value="Pop">🎤 Pop</option>
+        <option value="Rock">🎸 Rock</option>
+        <option value="Electrónica">🎧 Electrónica</option>
+        <option value="Popular">🎶 Popular / Despecho</option>
+        <option value="Otro">🎵 Otro</option>
+      </select>
+      <button class="ctrl play" style="width:100%" onclick="djBuscar()">🔍 Buscar</button>
+      <div id="djResultados"></div>
+    </div>
+  </div>
+  <div class="queue-side">
+    <div class="qt">🎧 Cola por género</div>
+    <div id="colaLista"><div class="empty">Cargando...</div></div>
+  </div>
+</div>
+
+<script src="negocio.js"></script>
+<script src="comun.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+var firebaseConfig=NEGOCIO.firebase;
+firebase.initializeApp(firebaseConfig);
+var db=firebase.database();
+A52Candado(db,'historialMusica',function(){});   // 🔐 solo equipos autorizados (o reglas abiertas)
+
+// Orden de prioridad de géneros (para agrupar la cola)
+var GENRE_ORDER=['Reggaetón','Crossover','Salsa','Vallenato','Pop','Rock','Electrónica','Popular','Otro'];
+var CANCIONES_POR_GENERO=4;  // cuántas canciones suenan de un género antes de rotar al siguiente
+// Estado REAL de la rotación: qué género está en turno y cuántas seguidas lleva.
+// Sin esto, el orden se recalculaba en cada canción y el género de turno recibía
+// una ventana nueva de 4 cada vez -> nunca rotaba hasta agotarse.
+var _rot={genero:null,n:0};
+function _contarRotacion(p){
+  var g=(p&&p.genero)||'Otro';
+  if(g===_rot.genero){_rot.n++;}else{_rot={genero:g,n:1};}
+}
+
+var YT_KEYS=[];          // las dos (o más) llaves
+var _keyIdx=0;            // cuál se está usando
+var YT_API_KEY='';        // la activa (compatibilidad con el resto del código)
+function setActiveKey(){YT_API_KEY=YT_KEYS[_keyIdx]||'';}
+function rotarKey(){
+  // Pasar a la siguiente llave si hay; devuelve true si cambió
+  if(_keyIdx<YT_KEYS.length-1){_keyIdx++;setActiveKey();return true;}
+  return false;
+}
+var players=[null,null], playerReady=false, activeIdx=0;
+var siguientePreload=null;  // pedido precargado en el reproductor inactivo
+function P(){return players[activeIdx];}      // reproductor activo
+function PInact(){return players[1-activeIdx];} // reproductor inactivo (precarga)
+var pedidos=[];
+var actual=null;  // pedido sonando
+var videoCache={};  // {key: videoId}
+var historialMusica={};  // {videoId:{cancion,artista,genero,veces}}
+var _autoIdx=0;
+var _ultimaAutoVid=null;  // para no repetir la última en modo aleatorio
+var _autoRecientes=[];    // videoIds ya puestos por autoplay (para no repetir hasta agotar el top)
+try{_autoRecientes=JSON.parse(localStorage.getItem('a52_autoRecientes')||'[]');}catch(e){}
+function _guardarAutoRecientes(){try{localStorage.setItem('a52_autoRecientes',JSON.stringify(_autoRecientes));}catch(e){}}
+var _videosBloqueados={};  // videoIds que YouTube bloquea (LatinAutor, etc.) para no repetirlos
+var _ultProgreso={t:Date.now(),pos:-1};
+setInterval(function(){
+  // Vigilante anti-trabado: si hay canción activa pero no avanza en 9s, saltar
+  if(!playerReady||!actual)return;
+  var p=P&&P();if(!p||!p.getCurrentTime||!p.getPlayerState)return;
+  var st=p.getPlayerState();
+  // -1 sin iniciar, 3 buffering -> permitir; 1 playing -> debe avanzar la posición
+  var pos=0;try{pos=p.getCurrentTime();}catch(e){return;}
+  if(st===YT.PlayerState.PLAYING){
+    if(Math.abs(pos-_ultProgreso.pos)>0.3){_ultProgreso={t:Date.now(),pos:pos};}
+    else if(Date.now()-_ultProgreso.t>9000){
+      // Trabado reproduciendo sin avanzar -> saltar
+      _ultProgreso={t:Date.now(),pos:-1};saltarPorError();
+    }
+  } else if(st===YT.PlayerState.UNSTARTED||st===YT.PlayerState.CUED){
+    // Cargada pero nunca arranca en 9s -> saltar
+    if(Date.now()-_ultProgreso.t>9000){_ultProgreso={t:Date.now(),pos:-1};saltarPorError();}
+  } else {
+    _ultProgreso.t=Date.now();
+  }
+},2500);
+
+// ---------- SETUP API KEYS (con rotación) ----------
+function arrancarConKeys(){
+  setActiveKey();
+  document.getElementById('setupScreen').innerHTML='';
+  document.getElementById('mainLayout').style.display='';
+  iniciarPlayer();
+}
+function renderSetup(){
+  var s=document.getElementById('setupScreen');
+  if(YT_KEYS.length){arrancarConKeys();return;}
+  s.innerHTML='<div class="setup"><b>🔑 Configuración inicial (una sola vez)</b><br>'
+    +'Pega tus API Keys de YouTube (Google Cloud → YouTube Data API v3). Puedes poner dos para tener más búsquedas al día; la segunda es opcional.<br>'
+    +'<input id="keyInput" placeholder="API Key 1 (obligatoria)">'
+    +'<input id="keyInput2" placeholder="API Key 2 (opcional, para más búsquedas)" style="margin-top:8px">'
+    +'<button onclick="guardarKey()">Guardar y empezar</button></div>';
+}
+function guardarKey(){
+  var k1=document.getElementById('keyInput').value.trim();
+  var k2=(document.getElementById('keyInput2')||{}).value;k2=(k2||'').trim();
+  if(!k1){alert('Pega al menos la primera API key');return;}
+  var keys=[k1];if(k2)keys.push(k2);
+  YT_KEYS=keys;_keyIdx=0;setActiveKey();
+  localStorage.setItem('a52_ytkeys',JSON.stringify(keys));
+  // Guardar en Firebase para que cualquier equipo nuevo y la página de clientes las tomen solas
+  db.ref('config/ytkeys').set(keys);
+  db.ref('config/ytkey').set(k1);  // compatibilidad con versión anterior
+  arrancarConKeys();
+}
+// Para editar las llaves después desde el DJ
+function reconfigurarKeys(){
+  var s=document.getElementById('setupScreen');
+  var k1=YT_KEYS[0]||'', k2=YT_KEYS[1]||'';
+  document.getElementById('mainLayout').style.display='none';
+  s.innerHTML='<div class="setup"><b>🔑 Tus API Keys de YouTube</b><br>'
+    +'<div style="font-size:13px;color:#888;margin:6px 0">Cada llave da ~100 búsquedas al día. Pon dos para tener ~200. Pega una en cada casilla.</div>'
+    +'<div style="font-size:12px;color:#39ff14;margin-bottom:3px">Llave 1 (obligatoria)</div>'
+    +'<input id="kEdit1" placeholder="Pega aquí la primera API Key" value="'+k1.replace(/"/g,"&quot;")+'">'
+    +'<div style="font-size:12px;color:#39ff14;margin:8px 0 3px">Llave 2 (opcional)</div>'
+    +'<input id="kEdit2" placeholder="Pega aquí la segunda API Key" value="'+k2.replace(/"/g,"&quot;")+'">'
+    +'<button onclick="guardarKeysEditadas()" style="margin-top:10px">💾 Guardar llaves</button>'
+    +'<button onclick="cancelarEdicionKeys()" style="margin-top:8px;background:rgba(255,255,255,.1);color:#fff">Cancelar</button>'
+    +'<div id="kEstado" style="margin-top:10px;font-size:13px"></div>'
+    +'</div>';
+}
+function guardarKeysEditadas(){
+  var k1=(document.getElementById('kEdit1')||{}).value;k1=(k1||'').trim();
+  var k2=(document.getElementById('kEdit2')||{}).value;k2=(k2||'').trim();
+  if(!k1){document.getElementById('kEstado').innerHTML='<span style="color:#ff3b5c">⚠️ La primera llave es obligatoria.</span>';return;}
+  var keys=[k1];if(k2)keys.push(k2);
+  YT_KEYS=keys;_keyIdx=0;setActiveKey();
+  localStorage.setItem('a52_ytkeys',JSON.stringify(keys));
+  db.ref('config/ytkeys').set(keys);
+  db.ref('config/ytkey').set(k1);
+  document.getElementById('kEstado').innerHTML='<span style="color:#39ff14">✓ Guardadas '+keys.length+' llave(s). Se sincronizan a todos los equipos.</span>';
+  setTimeout(cancelarEdicionKeys,1200);
+}
+function cancelarEdicionKeys(){
+  document.getElementById('setupScreen').innerHTML='';
+  document.getElementById('mainLayout').style.display='';
+}
+
+// ---------- YOUTUBE PLAYER ----------
+function iniciarPlayer(){
+  if(window.YT&&window.YT.Player){crearPlayer();return;}
+  var tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+  window.onYouTubeIframeAPIReady=crearPlayer;
+}
+var _readyCount=0;
+function crearPlayer(){
+  ['A','B'].forEach(function(suf,idx){
+    players[idx]=new YT.Player('ytplayer'+suf,{
+      height:'100%',width:'100%',
+      playerVars:{autoplay:0,controls:1,rel:0,playsinline:1},
+      events:{
+        'onReady':function(){_readyCount++;if(_readyCount>=2){playerReady=true;reproducirCola();}},
+        'onStateChange':function(e){ onStateDual(idx,e); },
+        'onError':function(e){ onErrorDual(idx,e); }
+      }
+    });
+  });
+}
+function onStateDual(idx,e){
+  if(idx!==activeIdx)return;
+  if(e.data===YT.PlayerState.PLAYING){_avanzando=false;iniciarMonitorFin();precargarSiguiente();}
+  if(e.data===YT.PlayerState.ENDED){marcarYsiguiente();}
+  actualizarBotonPlay();
+}
+function onErrorDual(idx,e){
+  if(idx===activeIdx){
+    if(actual&&actual.videoId)_videosBloqueados[actual.videoId]=true;
+    _avanzando=false;
+    if(!actual){setTimeout(function(){saltarPorError();},400);return;}
+    // Buscar otra versión de la misma canción (audio / lyrics / letra) que sí se pueda reproducir
+    document.getElementById('nowTitle').textContent='🔎 Video bloqueado, buscando otra versión de '+actual.cancion+'...';
+    var ped=actual;
+    buscarAlternativa(ped,function(vid){
+      if(actual!==ped)return;  // el DJ ya cambió de canción mientras tanto
+      if(vid){
+        ped.videoId=vid; if(ped.key)videoCache[ped.key]=vid;
+        document.getElementById('nowTitle').textContent=(ped.auto?'🔁 ':'')+ped.cancion;
+        var p=P();
+        if(p&&p.loadVideoById){p.loadVideoById(vid);p.playVideo();}
+      } else {
+        document.getElementById('nowTitle').textContent='⚠️ Sin versión disponible, pasando a la siguiente...';
+        descartarPedido(ped);
+        setTimeout(function(){saltarPorError();},600);
+      }
+    });
+  } else {
+    // El bloqueado era el precargado -> marcarlo y buscarle alternativa para que siga en la cola
+    var pre=siguientePreload; siguientePreload=null;
+    if(pre&&pre.videoId){
+      _videosBloqueados[pre.videoId]=true;
+      buscarAlternativa(pre,function(vid){ if(vid){pre.videoId=vid;if(pre.key)videoCache[pre.key]=vid;render();} });
+    }
+  }
+}
+// Busca en YouTube otra versión embebible de la canción (evitando los videos ya bloqueados)
+var _intentosAlt={};
+function buscarAlternativa(pedido,cb){
+  var base=((pedido.cancion||'')+' '+(pedido.artista||'')).trim();
+  if(!base||!YT_API_KEY){cb(null);return;}
+  var k=(pedido.key||base);
+  _intentosAlt[k]=(_intentosAlt[k]||0)+1;
+  if(_intentosAlt[k]>3){cb(null);return;}  // máximo 3 versiones alternativas por canción
+  var sufijos=[' audio',' lyrics',' letra',' cover'];
+  var i=0;
+  function intentar(){
+    if(i>=sufijos.length){cb(null);return;}
+    var q=encodeURIComponent(base+sufijos[i++]);
+    var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&safeSearch=moderate&maxResults=8&q='+q+'&key='+YT_API_KEY;
+    fetch(url).then(function(r){return r.json();}).then(function(data){
+      var items=(data.items||[]).filter(function(it){return it.id&&it.id.videoId&&!_videosBloqueados[it.id.videoId];});
+      if(!items.length){intentar();return;}
+      // Verificar con videos.list que realmente sean embebibles antes de cargarlos
+      var ids=items.map(function(it){return it.id.videoId;}).join(',');
+      var u2='https://www.googleapis.com/youtube/v3/videos?part=status&id='+ids+'&key='+YT_API_KEY;
+      fetch(u2).then(function(r){return r.json();}).then(function(d2){
+        var ok=(d2.items||[]).filter(function(v){return v.status&&v.status.embeddable;});
+        if(ok.length){cb(ok[0].id);}else{intentar();}
+      }).catch(function(){cb(items[0].id.videoId);});
+    }).catch(function(){intentar();});
+  }
+  intentar();
+}
+// Descarta definitivamente un pedido que no se pudo reproducir (sin contarlo en el historial)
+var _descartados={};
+function descartarPedido(ped){
+  if(!ped)return;
+  if(ped.videoId)_videosBloqueados[ped.videoId]=true;
+  if(ped.key){
+    _descartados[ped.key]=true;
+    delete videoCache[ped.key];
+    ped.played=true;
+    var enLista=pedidos.find(function(x){return x.key===ped.key;});
+    if(enLista)enLista.played=true;
+    try{db.ref('musica/'+ped.key+'/played').set(true);}catch(e){}
+  } else if(ped.auto&&ped.videoId){
+    _autoRecientes.push(ped.videoId);_guardarAutoRecientes();
+  }
+}
+var _ultSalto={key:null,n:0};
+function saltarPorError(){
+  // Igual que marcarYsiguiente pero NO cuenta el video (estaba bloqueado)
+  clearInterval(_monitorFin);
+  // Si el mismo pedido falla repetidamente, descartarlo para no quedar en bucle
+  if(actual&&actual.key){
+    if(_ultSalto.key===actual.key){_ultSalto.n++;}else{_ultSalto={key:actual.key,n:1};}
+    if(_ultSalto.n>=2)descartarPedido(actual);
+  }
+  actual=null;
+  _avanzando=false;  // nunca quedarse trabado por error
+  reproducirCola();
+}
+function actualizarBotonPlay(){
+  var p=P();
+  if(!p||!p.getPlayerState)return;
+  var st=p.getPlayerState();
+  var b=document.getElementById('btnPlayPause');
+  b.innerHTML=(st===YT.PlayerState.PLAYING)?'⏸ Pausa':'▶ Reproducir';
+}
+function togglePlay(){
+  var p=P();if(!p)return;
+  var st=p.getPlayerState();
+  if(st===YT.PlayerState.PLAYING)p.pauseVideo();else p.playVideo();
+}
+
+// ---------- COLA AGRUPADA POR GÉNERO ----------
+function colaOrdenada(){
+  // pendientes (no sonadas y no bloqueadas)
+  var pend=pedidos.filter(function(p){return !p.played && !_descartados[p.key] && !(p.videoId&&_videosBloqueados[p.videoId]) && !(p.key&&videoCache[p.key]&&_videosBloqueados[videoCache[p.key]]);});
+  return _ordenarPorGenero(pend);
+}
+// Cola SOLO para decidir qué reproducir/precargar: excluye la que está sonando
+function colaParaReproducir(){
+  var cola=colaOrdenada();
+  if(actual&&actual.key){cola=cola.filter(function(p){return p.key!==actual.key;});}
+  // También excluir el mismo video que está sonando (evita duplicados exactos seguidos)
+  if(actual&&actual.videoId){
+    var vid=actual.videoId;
+    var i=cola.findIndex(function(p){return p.videoId===vid;});
+    if(i===0&&cola.length>1){var d=cola.shift();cola.push(d);}  // si el duplicado es el próximo, mandarlo al final
+  }
+  return cola;
+}
+function _ordenarPorGenero(pend){
+  // Agrupar por género (cada grupo ordenado por llegada)
+  var grupos={};
+  pend.forEach(function(p){var g=p.genero||'Otro';(grupos[g]=grupos[g]||[]).push(p);});
+  Object.keys(grupos).forEach(function(g){grupos[g].sort(function(a,b){return a.ts-b.ts;});});
+
+  // Rueda de géneros por prioridad
+  var generos=Object.keys(grupos);
+  generos.sort(function(a,b){
+    var ia=GENRE_ORDER.indexOf(a),ib=GENRE_ORDER.indexOf(b);
+    if(ia<0)ia=99;if(ib<0)ib=99;
+    if(ia!==ib)return ia-ib;
+    return (grupos[a][0].ts)-(grupos[b][0].ts);
+  });
+
+  // Girar la rueda para empezar en el género en turno; si ese ya no tiene
+  // pendientes, empezar en el SIGUIENTE de la rueda (no volver al primero)
+  var start=0;
+  if(_rot.genero){
+    var idx=generos.indexOf(_rot.genero);
+    if(idx>=0){start=idx;}
+    else{
+      var pr=GENRE_ORDER.indexOf(_rot.genero);if(pr<0)pr=99;
+      start=0;
+      for(var i=0;i<generos.length;i++){
+        var pi=GENRE_ORDER.indexOf(generos[i]);if(pi<0)pi=99;
+        if(pi>pr){start=i;break;}
+      }
+    }
+  }
+  generos=generos.slice(start).concat(generos.slice(0,start));
+
+  // Rotación: al género en turno solo le quedan (N - ya sonadas seguidas) cupos
+  // en su primera vuelta; los demás (y las vueltas siguientes) usan N completo.
+  var resultado=[];
+  var idxPorGenero={};generos.forEach(function(g){idxPorGenero[g]=0;});
+  var vuelta=0, quedan=true, sinLimite=false;
+  while(quedan){
+    quedan=false;
+    var agregadasEnVuelta=0;
+    generos.forEach(function(g,gi){
+      var lista=grupos[g];
+      var cupo=CANCIONES_POR_GENERO;
+      if(!sinLimite&&vuelta===0&&gi===0&&g===_rot.genero){
+        cupo=Math.max(0,CANCIONES_POR_GENERO-_rot.n);
+      }
+      for(var n=0;n<cupo;n++){
+        if(idxPorGenero[g]<lista.length){
+          resultado.push(lista[idxPorGenero[g]]);
+          idxPorGenero[g]++;
+          quedan=true;agregadasEnVuelta++;
+        }
+      }
+    });
+    // Caso borde: solo hay un género y ya agotó su cupo -> seguir sin límite
+    if(!agregadasEnVuelta&&resultado.length<pend.length){sinLimite=true;quedan=true;}
+    vuelta++;
+  }
+  return resultado;
+}
+
+// ---------- BÚSQUEDA YOUTUBE ----------
+function buscarVideo(pedido,cb){
+  // El cliente ya eligió el video exacto -> usarlo directo
+  if(pedido.videoId){cb(pedido.videoId);return;}
+  if(videoCache[pedido.key]&&!_videosBloqueados[videoCache[pedido.key]]){cb(videoCache[pedido.key]);return;}
+  // Fallback: buscar (por si vino de una versión vieja sin videoId)
+  var q=encodeURIComponent((pedido.cancion||'')+' '+(pedido.artista||''));
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&videoSyndicated=true&maxResults=5&q='+q+'&key='+YT_API_KEY;
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    var it=(data.items||[]).filter(function(x){return x.id&&x.id.videoId&&!_videosBloqueados[x.id.videoId];});
+    if(it.length){
+      var vid=it[0].id.videoId;
+      videoCache[pedido.key]=vid;cb(vid);
+    } else { cb(null); }
+  }).catch(function(){cb(null);});
+}
+
+// ---------- REPRODUCCIÓN ----------
+function reproducirCola(){
+  if(!playerReady)return;
+  var cola=colaParaReproducir();
+  if(actual&&!actual.played){
+    // ya hay algo sonando, no reiniciar
+    return;
+  }
+  if(!cola.length){
+    // Cola vacía -> modo automático: poner las más reproducidas del histórico
+    reproducirMasSonadas();
+    return;
+  }
+  reproducirPedido(cola[0]);
+}
+
+function reproducirMasSonadas(){
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId&&(h.veces||0)>0&&!_videosBloqueados[h.videoId];});
+  if(!lista.length){
+    document.getElementById('nowTitle').textContent='Cola vacía';
+    document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
+    return;
+  }
+  // Tomar el top de las más sonadas y elegir AL AZAR, sin repetir las ya puestas
+  lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
+  var top=lista.slice(0,40);
+  // Quitar del pool las que ya se pusieron recientemente en autoplay
+  var pool=top.filter(function(x){return _autoRecientes.indexOf(x.videoId)===-1;});
+  // Si ya se pusieron todas, reiniciar el ciclo (evitando repetir de una la última)
+  if(!pool.length){
+    _autoRecientes=[];_guardarAutoRecientes();
+    pool=top.filter(function(x){return x.videoId!==_ultimaAutoVid;});
+    if(!pool.length)pool=top;
+  }
+  var h=pool[Math.floor(Math.random()*pool.length)];
+  _ultimaAutoVid=h.videoId;
+  _autoRecientes.push(h.videoId);
+  // No dejar crecer la memoria más allá del tamaño del top
+  if(_autoRecientes.length>top.length)_autoRecientes.shift();
+  _guardarAutoRecientes();
+  // Guardar valores LIMPIOS en actual; decorar solo lo que se muestra
+  actual={cancion:limpiarTexto(h.cancion),artista:limpiarTexto(h.artista),genero:h.genero||'Otro',videoId:h.videoId,auto:true};
+  document.getElementById('nowTitle').textContent='🔁 '+actual.cancion;
+  document.getElementById('nowArtist').textContent=(actual.artista||'')+' · Auto (más sonadas)';
+  mostrarActivo();
+  var p=P();
+  if(p&&p.loadVideoById){p.loadVideoById(h.videoId);p.playVideo();}
+  render();
+}
+function reproducirPedido(pedido){
+  actual=pedido;
+  _contarRotacion(pedido);
+  siguientePreload=null;
+  document.getElementById('nowTitle').textContent=pedido.cancion;
+  document.getElementById('nowArtist').textContent=(pedido.artista||'')+(pedido.genero?'  ·  '+pedido.genero:'');
+  mostrarActivo();
+  buscarVideo(pedido,function(vid){
+    var p=P();
+    if(vid&&p&&p.loadVideoById){p.loadVideoById(vid);p.playVideo();}
+    else{document.getElementById('nowTitle').textContent='⚠️ No encontrada: '+pedido.cancion;setTimeout(marcarYsiguiente,800);}
+  });
+  render();
+}
+
+function mostrarActivo(){
+  var a=document.getElementById('ytplayerA'), b=document.getElementById('ytplayerB');
+  if(!a||!b)return;
+  var act=(activeIdx===0)?a:b, inact=(activeIdx===0)?b:a;
+  act.style.opacity='1';act.style.pointerEvents='auto';act.style.zIndex='2';
+  inact.style.opacity='0';inact.style.pointerEvents='none';inact.style.zIndex='1';
+}
+
+function precargarSiguiente(){
+  var cola=colaParaReproducir();
+  var prox=cola[0];
+  if(!prox||prox.played){siguientePreload=null;return;}
+  if(actual&&((prox.key&&prox.key===actual.key)||(prox.videoId&&prox.videoId===actual.videoId))){siguientePreload=null;return;}
+  if(siguientePreload&&siguientePreload.key===prox.key)return;
+  siguientePreload=prox;
+  buscarVideo(prox,function(vid){
+    var pin=PInact();
+    if(vid&&pin&&pin.cueVideoById){pin.cueVideoById(vid);}
+  });
+}
+
+function cambiarAlSiguiente(){
+  var prox=siguientePreload;
+  if(!prox||prox.played)return false;
+  var cola=colaParaReproducir();
+  if(!cola.length||cola[0].key!==prox.key)return false;
+  activeIdx=1-activeIdx;
+  actual=prox;siguientePreload=null;
+  _contarRotacion(prox);
+  document.getElementById('nowTitle').textContent=prox.cancion;
+  document.getElementById('nowArtist').textContent=(prox.artista||'')+(prox.genero?'  ·  '+prox.genero:'');
+  mostrarActivo();
+  var p=P();
+  if(p&&p.playVideo){p.playVideo();}
+  render();
+  return true;
+}
+var _monitorFin=null;
+var _avanzando=false;  // seguro para no saltar varias canciones de golpe
+function iniciarMonitorFin(){
+  clearInterval(_monitorFin);
+  _monitorFin=setInterval(function(){
+    var p=P();
+    if(!p||!p.getCurrentTime||!p.getDuration)return;
+    var dur=p.getDuration(), cur=p.getCurrentTime();
+    if(dur>0 && (dur-cur)<=0.4 && p.getPlayerState()===YT.PlayerState.PLAYING){
+      clearInterval(_monitorFin);
+      marcarYsiguiente();
+    }
+  },300);
+}
+
+function marcarYsiguiente(){
+  if(_avanzando)return;
+  _avanzando=true;
+  clearInterval(_monitorFin);
+  var anterior=actual;
+  if(anterior){
+    anterior.played=true;  // marcar YA en local: la cola no debe volver a verla mientras Firebase confirma
+    if(anterior.key){
+      var enLista=pedidos.find(function(x){return x.key===anterior.key;});
+      if(enLista)enLista.played=true;
+      db.ref('musica/'+anterior.key+'/played').set(true);
+    }
+    registrarReproduccion(anterior);
+  }
+  actual=null;
+  // Intentar cambio rápido al reproductor que ya tiene la siguiente precargada
+  var ok=cambiarAlSiguiente();
+  if(!ok){reproducirCola();}
+  setTimeout(function(){_avanzando=false;},900);
+}
+
+function limpiarTexto(s){
+  return String(s||'').replace(/^🔁\s*/,'').replace(/\s*·\s*Auto \(más sonadas\)/g,'').trim();
+}
+// ═══ 📊 Corrección del historial en Excel ═══
+function _conSheetJS(cb){
+  if(window.XLSX){cb();return;}
+  var sc=document.createElement('script');
+  sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  sc.onload=cb;
+  sc.onerror=function(){alert('No se pudo cargar la librería de Excel. Revisa la conexión a internet.');};
+  document.head.appendChild(sc);
+}
+function exportarHistorialExcel(){
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId;});
+  if(!lista.length){alert('Aún no hay historial para exportar.');return;}
+  _conSheetJS(function(){
+    lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
+    var filas=lista.map(function(h){
+      return {
+        VideoId:h.videoId,
+        Cancion:h.cancion||'',
+        Artista:h.artista||'',
+        Genero:h.genero||'Otro',
+        Veces:h.veces||0,
+        UltimaVez:h.ultima?new Date(h.ultima).toLocaleString('es-CO'):''
+      };
+    });
+    var ws=XLSX.utils.json_to_sheet(filas);
+    ws['!cols']=[{wch:14},{wch:38},{wch:26},{wch:12},{wch:8},{wch:20}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Historial');
+    XLSX.writeFile(wb,NEGOCIO.archivo+'-HistorialMusica.xlsx');
+    alert('⬇️ Descargado: '+filas.length+' canciones.\n\nCorrige la columna VECES (y si quieres, Cancion / Artista / Genero).\nNO borres ni cambies la columna VideoId — es la llave para volver a subir.\nCuando termines, usa ⬆️ Subir.');
+  });
+}
+function importarHistorialExcel(inp){
+  var f=inp.files&&inp.files[0];
+  if(!f)return;
+  inp.value='';
+  _conSheetJS(function(){
+    var r=new FileReader();
+    r.onload=function(){
+      var filas;
+      try{
+        var wb=XLSX.read(r.result,{type:'array'});
+        filas=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      }catch(e){alert('No pude leer el archivo: '+e.message);return;}
+      if(!filas||!filas.length){alert('El archivo está vacío.');return;}
+      var cambios=[];
+      filas.forEach(function(row){
+        var vid=String(row.VideoId||row.videoId||row.videoid||'').trim();
+        if(!vid||!historialMusica[vid])return;
+        var h=historialMusica[vid];
+        var upd={};
+        var vNum=parseInt(row.Veces!=null?row.Veces:row.veces);
+        if(!isNaN(vNum)&&vNum>=0&&vNum!==(h.veces||0))upd.veces=vNum;
+        var nCan=String(row.Cancion||row.cancion||'').trim();
+        if(nCan&&nCan!==(h.cancion||''))upd.cancion=nCan;
+        var nArt=String(row.Artista||row.artista||'').trim();
+        if(nArt&&nArt!==(h.artista||''))upd.artista=nArt;
+        var nGen=String(row.Genero||row.genero||'').trim();
+        if(nGen&&nGen!==(h.genero||''))upd.genero=nGen;
+        if(Object.keys(upd).length)cambios.push({vid:vid,nombre:h.cancion||vid,antes:h.veces||0,upd:upd});
+      });
+      if(!cambios.length){alert('No hay diferencias entre el Excel y el historial actual — nada que aplicar.');return;}
+      var muestra=cambios.slice(0,10).map(function(c){
+        return '• '+c.nombre.slice(0,34)+(c.upd.veces!=null?': '+c.antes+' → '+c.upd.veces+' veces':' (datos)');
+      }).join('\n');
+      if(!confirm('📊 Se aplicarán cambios a '+cambios.length+' canciones:\n\n'+muestra+(cambios.length>10?'\n… y '+(cambios.length-10)+' más':'')+'\n\n¿Aplicar? (El resto del historial queda intacto)'))return;
+      var pend=cambios.length;
+      cambios.forEach(function(c){
+        db.ref('historialMusica/'+c.vid).update(c.upd,function(){
+          pend--;
+          if(pend===0)alert('✅ Historial corregido: '+cambios.length+' canciones actualizadas.\nDesde ahora el top solo crece con pedidos reales — las automáticas no suman.');
+        });
+      });
+    };
+    r.readAsArrayBuffer(f);
+  });
+}
+function registrarReproduccion(p){
+  if(!p||!p.videoId)return;
+  if(p.auto)return;  // el modo automático NO suma al contador: solo cuentan pedidos reales (evita que las mismas 5 se repitan siempre)
+  var cancionLimpia=limpiarTexto(p.cancion);
+  var artistaLimpio=limpiarTexto(p.artista);
+  var ref=db.ref('historialMusica/'+p.videoId);
+  ref.transaction(function(cur){
+    if(!cur){return {videoId:p.videoId,cancion:cancionLimpia,artista:artistaLimpio,genero:p.genero||'Otro',veces:1,ultima:Date.now()};}
+    cur.veces=(cur.veces||0)+1;cur.ultima=Date.now();
+    if(cancionLimpia)cur.cancion=cancionLimpia;
+    if(artistaLimpio)cur.artista=artistaLimpio;
+    return cur;
+  });
+}
+function siguiente(){marcarYsiguiente();}
+
+function detectarGenero(titulo,canal){
+  var t=' '+((titulo||'')+' '+(canal||'')).toLowerCase()+' ';
+  t=t.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  t=t.replace(/[^a-z0-9ñ]+/g,' ');  // separar por palabras: evita que "manana" contenga "mana", "la leyenda" contenga "la ley", etc.
+  // Cada keyword se busca como PALABRA/FRASE completa, no como subcadena
+  function hay(k){return t.indexOf(' '+k+' ')>=0;}
+  var reglas=[
+    // Artistas primero (más confiables que palabras sueltas)
+    {g:'Vallenato',k:['vallenato','vallenatos','vallenata','acordeon','diomedes','diomedes diaz','silvestre dangond','jorge celedon','binomio','binomio de oro','poncho zuleta','los betos','penalozas','ivan villazon','peter manjarres','martin elias','churo diaz','kaleth morales','luifer cuello','felipe pelaez','los diablitos','miguel morales','rafael orozco','jean carlos centeno','omar geles','elder dayan','ana del castillo']},
+    {g:'Salsa',k:['salsa','grupo niche','niche','guayacan','marc anthony','willie colon','hector lavoe','frankie ruiz','jerry rivera','la india','oscar de leon','salsa choke','gilberto santa rosa','tito rojas','fruko','joe arroyo','el gran combo','maelo ruiz','eddie santiago','rey ruiz','tito nieves','lalo ebratt','sonora poncena','ismael rivera','richie ray','yuri buenaventura']},
+    {g:'Reggaetón',k:['reggaeton','regueton','reguetton','perreo','bad bunny','feid','ferxxo','karol g','j balvin','maluma','daddy yankee','ozuna','anuel','anuel aa','myke towers','rauw alejandro','blessd','ryan castro','sech','arcangel','wisin','yandel','jhayco','jhay cortez','nicky jam','farruko','don omar','tego calderon','plan b','zion','lennox','dekko','beele','urbano','dembow']},
+    {g:'Popular',k:['popular','despecho','despechada','arelys henao','arelys','jhonny rivera','jhon alex castano','luis alberto posada','dario gomez','el charrito','el charrito negro','pipe bueno','yeison jimenez','jessi uribe','paola jara','cantina','ranchera','rancheras','vicente fernandez','alejandro fernandez','christian nodal','alacranes','giovanny ayala','fernando burbano','luisito munoz','antonio aguilar','corridos','banda ms','musica popular']},
+    {g:'Electrónica',k:['electronica','edm','techno','tiesto','david guetta','calvin harris','progressive house','electro house','deep house','martin garrix','avicii','alok','afro house','guaracha','aleteo','zapateo','skrillex','hardwell','armin van buuren','tomorrowland','bass house','big room']},
+    {g:'Rock',k:['rock','metal','soda stereo','heroes del silencio','guns n roses','metallica','nirvana','queen','acdc','ac dc','foo fighters','enanitos verdes','cerati','caifanes','mana','la ley','bon jovi','aerosmith','kiss','led zeppelin','pink floyd','hombres g','vilma palma','prisioneros','los prisioneros','molotov','aterciopelados','kraken','la pestilencia']},
+    {g:'Crossover',k:['crossover','cumbia','merengue','la makina','tropical','sonora','sonora dinamita','aventura','romeo santos','bachata','elvis crespo','fiesta mix','rumba','olga tanon','juan luis guerra','oro solido','los hermanos rosario','sergio vargas','pastor lopez','rodolfo aicardi','los graduados','binomio de oro tropical','grupo galé','lisandro meza','la sonora','toño rosario','merengues','cumbias']},
+    {g:'Pop',k:['pop','shakira','manu chao','juanes','sebastian yatra','camilo','morat','reik','sin bandera','luis fonsi','carlos vives','fonseca','justin bieber','dua lipa','taylor swift','ed sheeran','bruno mars','coldplay','adele','the weeknd','harry styles','billie eilish','miley cyrus','camila cabello','ricky martin','chayanne','cnco','piso 21','greeicy','mau y ricky']}
+  ];
+  // Pasada 1: artistas y frases (2+ palabras) — señal fuerte
+  for(var i=0;i<reglas.length;i++){for(var j=0;j<reglas[i].k.length;j++){var k=reglas[i].k[j];if(k.indexOf(' ')>=0&&hay(k))return reglas[i].g;}}
+  // Pasada 2: palabras sueltas
+  for(var i=0;i<reglas.length;i++){for(var j=0;j<reglas[i].k.length;j++){var k=reglas[i].k[j];if(k.indexOf(' ')<0&&hay(k))return reglas[i].g;}}
+  return 'Otro';
+}
+
+function djCacheGet(q){
+  try{var raw=localStorage.getItem('a52_busqcache');if(!raw)return null;var o=JSON.parse(raw);var e=o[q.toLowerCase()];if(e&&(Date.now()-e.ts)<7*24*3600*1000)return e.items;}catch(err){}
+  return null;
+}
+function djCacheSet(q,items){
+  try{var raw=localStorage.getItem('a52_busqcache');var o=raw?JSON.parse(raw):{};o[q.toLowerCase()]={items:items,ts:Date.now()};var ks=Object.keys(o);if(ks.length>120){ks.slice(0,ks.length-120).forEach(function(k){delete o[k];});}localStorage.setItem('a52_busqcache',JSON.stringify(o));}catch(err){}
+}
+function djPintar(items){
+  var cont=document.getElementById('djResultados');
+  if(!items||!items.length){cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">Sin resultados.</div>';return;}
+  cont.innerHTML=items.map(function(it){
+    return'<div onclick="djAgregar(\''+it.v+'\',\''+encodeURIComponent(it.titulo)+'\',\''+encodeURIComponent(it.canal)+'\')" style="display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:7px;margin-top:7px;cursor:pointer">'
+      +'<img src="'+it.thumb+'" style="width:70px;height:40px;border-radius:6px;object-fit:cover">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(it.titulo)+'</div><div style="font-size:11px;color:#999">'+esc(it.canal)+'</div></div>'
+    +'</div>';
+  }).join('');
+}
+
+function djBuscar(){
+  var q=document.getElementById('djBusqueda').value.trim();
+  if(!q){return;}
+  if(!YT_API_KEY){alert('Configura primero la API Key.');return;}
+  var cont=document.getElementById('djResultados');
+  var cached=djCacheGet(q);
+  if(cached){djPintar(cached);return;}  // usa caché, no gasta cuota
+  cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">🔎 Buscando...</div>';
+  var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=6&q='+encodeURIComponent(q+' música')+'&key='+YT_API_KEY;
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    if(data.error){
+      var msg=(data.error.errors&&data.error.errors[0]&&data.error.errors[0].reason)||data.error.message||'error';
+      // Si se agotó la cuota y hay otra llave, rotar y reintentar una vez
+      if((msg==='rateLimitExceeded'||msg==='quotaExceeded')&&rotarKey()){
+        cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">🔄 Cambiando a la segunda llave...</div>';
+        setTimeout(djBuscar,300);
+        return;
+      }
+      var extra=(msg==='rateLimitExceeded'||msg==='quotaExceeded')?'Se agotaron las búsquedas de hoy en todas las llaves. Se reinicia ~2am.':'Revisa la API Key (YouTube Data API v3 y dominio permitido).';
+      cont.innerHTML='<div style="color:#ff3b5c;padding:12px;font-size:12px">⚠️ '+msg+'<br><span style="color:#888">'+extra+'</span></div>';
+      return;
+    }
+    if(!data.items||!data.items.length){cont.innerHTML='<div style="color:#888;padding:12px;font-size:13px">Sin resultados. Prueba con otro nombre.</div>';return;}
+    var items=data.items.map(function(it){
+      var sn=it.snippet;
+      return {v:it.id.videoId,titulo:sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'"),canal:sn.channelTitle,thumb:sn.thumbnails.default.url};
+    });
+    djCacheSet(q,items);
+    djPintar(items);
+  }).catch(function(){cont.innerHTML='<div style="color:#ff3b5c;padding:12px;font-size:13px">Error de búsqueda.</div>';});
+}
+
+// Historial global de pedidos/sonadas (compartido con la página de clientes) para el bloqueo de 1.5h
+var historialRocola=[];
+db.ref('historialRocola').on('value',function(snap){
+  var v=snap.val()||{};
+  historialRocola=Object.keys(v).map(function(k){return v[k];});
+  // Limpieza automática: borrar registros de más de 24 horas para no crecer sin límite (antes la hacía la página del cliente)
+  var lim=Date.now()-24*60*60*1000;
+  Object.keys(v).forEach(function(k){if(((v[k]||{}).ts||0)<lim)db.ref('historialRocola/'+k).remove().catch(function(){});});
+});
+function djAgregar(videoId,tituloEnc,canalEnc){
+  var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
+  // Misma regla que los clientes: sin repetir en 1.5h — pero el DJ puede forzarla
+  var VENTANA_REPETIR=90*60*1000;
+  var reciente=pedidos.find(function(p){return p.videoId===videoId && (Date.now()-(p.ts||0))<VENTANA_REPETIR;})
+             ||historialRocola.find(function(p){return p.videoId===videoId && (Date.now()-(p.ts||0))<VENTANA_REPETIR;});
+  if(reciente){
+    var minsRest=Math.ceil((VENTANA_REPETIR-(Date.now()-reciente.ts))/60000);
+    if(!confirm('🔁 "'+titulo+'" ya se pidió o sonó hace poco (libre en '+minsRest+' min).\n\n¿Agregarla de todas formas?'))return;
+  }
+  var genero=document.getElementById('djGenero').value||'auto';
+  if(genero==='auto')genero=detectarGenero(titulo,canal);
+  var pedido={cancion:titulo,artista:canal,genero:genero,nombre:'DJ',videoId:videoId,ts:Date.now(),played:false};
+  db.ref('musica').push(pedido).then(function(){
+    document.getElementById('djBusqueda').value='';
+    document.getElementById('djResultados').innerHTML='<div style="color:#39ff14;padding:10px;font-size:13px">✓ Agregada a la cola</div>';
+    setTimeout(function(){var r=document.getElementById('djResultados');if(r)r.innerHTML='';},1500);
+  });
+  // Registrarla en el historial global: así los clientes tampoco pueden repetirla en 1.5h
+  db.ref('historialRocola').push({videoId:videoId,cancion:titulo,artista:canal,nombre:'DJ',genero:genero,ts:Date.now()});
+}
+
+var promoActivo=false;
+var PROMO_URL=NEGOCIO.videoPromo?MarcaUrl(NEGOCIO.videoPromo):'';   // video propio del negocio (opcional)
+function pantallaCompletaPromo(){
+  var frame=document.getElementById('promoFrame');
+  if(!frame)return;
+  if(frame.requestFullscreen)frame.requestFullscreen();
+  else if(frame.webkitRequestFullscreen)frame.webkitRequestFullscreen();
+  else if(frame.msRequestFullscreen)frame.msRequestFullscreen();
+}
+
+function toggleVideoPromo(){
+  if(!PROMO_URL){alert('Este negocio no tiene un video promocional configurado.');return;}
+  promoActivo=!promoActivo;
+  var frame=document.getElementById('promoFrame');
+  var btn=document.getElementById('btnVideo');
+  var btnFull=document.getElementById('btnFullPromo');
+  if(promoActivo){
+    // Mostrar video promo encima (la música de YouTube sigue sonando por debajo)
+    frame.src=PROMO_URL;
+    frame.style.display='block';
+    frame.style.zIndex='10';
+    if(btnFull)btnFull.style.display='block';
+    btn.innerHTML='📺 Volver al video';
+    btn.classList.add('play');
+  } else {
+    frame.style.display='none';
+    frame.src='';  // detener el promo
+    if(btnFull)btnFull.style.display='none';
+    btn.innerHTML='🎬 Video promo';
+    btn.classList.remove('play');
+  }
+}
+
+function moverCancion(key,dir){
+  var cola=colaOrdenada();
+  var idx=cola.findIndex(function(p){return p.key===key;});
+  if(idx<0)return;
+  var vecinoIdx=idx+dir;
+  if(vecinoIdx<0||vecinoIdx>=cola.length)return;
+  var a=cola[idx], b=cola[vecinoIdx];
+  if(!a.key||!b.key)return;
+  // Intercambiar el timestamp (orden de llegada) entre las dos canciones
+  var tsA=a.ts, tsB=b.ts;
+  // Si quedaran iguales, separar levemente
+  if(tsA===tsB){tsB=tsA+(dir>0?1:-1);}
+  db.ref('musica/'+a.key+'/ts').set(tsB);
+  db.ref('musica/'+b.key+'/ts').set(tsA);
+  // Si cambian de género entre sí no se moverá fuera del bloque; dentro del mismo género sí reordena.
+}
+
+function quitar(key){db.ref('musica/'+key).remove();}
+function reproducirYa(key){
+  var p=pedidos.find(function(x){return x.key===key;});
+  if(!p)return;
+  // La que estaba sonando se marca como sonada (se interrumpió, pero ya sonó): así NO se repite después
+  if(actual&&actual.key&&actual.key!==key){
+    actual.played=true;
+    db.ref('musica/'+actual.key+'/played').set(true);
+  }
+  clearInterval(_monitorFin);
+  _avanzando=false;
+  siguientePreload=null;
+  reproducirPedido(p);
+}
+
+// ---------- RENDER COLA ----------
+function render(){
+  var cont=document.getElementById('colaLista');
+  var cola=colaOrdenada();
+  if(!cola.length&&!actual){cont.innerHTML='<div class="empty">🎵 No hay canciones en la cola</div>';return;}
+  // Agrupar visualmente por género respetando el orden
+  var html='';
+  var lastG=null;
+  cola.forEach(function(p){
+    if(p.genero!==lastG){
+      var n=cola.filter(function(x){return x.genero===p.genero;}).length;
+      html+='<div class="genre-head"><span class="g">'+esc(p.genero||'Otro')+'</span><span class="c">'+n+' '+(n===1?'canción':'canciones')+'</span></div>';
+      lastG=p.genero;
+    }
+    var esActual=actual&&actual.key===p.key;
+    var idxEnCola=cola.indexOf(p);
+    var puedeSubir=idxEnCola>0, puedeBajar=idxEnCola<cola.length-1;
+    html+='<div class="qsong'+(esActual?' current':'')+'">'
+      +'<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">'
+        +'<button onclick="moverCancion(\''+p.key+'\',-1)" '+(puedeSubir&&!esActual?'':'disabled')+' style="background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer;font-size:12px;opacity:'+(puedeSubir&&!esActual?'1':'.25')+'">▲</button>'
+        +'<button onclick="moverCancion(\''+p.key+'\',1)" '+(puedeBajar&&!esActual?'':'disabled')+' style="background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer;font-size:12px;opacity:'+(puedeBajar&&!esActual?'1':'.25')+'">▼</button>'
+      +'</div>'
+      +'<div class="info"><div class="nm">'+(esActual?'▶ ':'')+esc(p.cancion)+'</div>'
+      +(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')
+      +((p.nombre||p.mesa)?'<div class="by">'+(p.mesa?'🪑 Mesa '+esc(String(p.mesa))+' · ':'')+'🙋 '+esc(p.nombre||'')+'</div>':'')+'</div>'
+      +'<button class="play-now" onclick="reproducirYa(\''+p.key+'\')" title="Reproducir ya">▶</button>'
+      +'<button onclick="quitar(\''+p.key+'\')">✕</button>'
+    +'</div>';
+  });
+  cont.innerHTML=html;
+}
+
+function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+db.ref('historialMusica').on('value',function(snap){
+  historialMusica=snap.val()||{};
+  Object.keys(historialMusica).forEach(function(vid){
+    var h=historialMusica[vid];if(!h)return;
+    // Eliminar entradas "sucias" (registros de pedidos con clave push, no las de más-sonadas)
+    if(!h.videoId||h.videoId!==vid){
+      db.ref('historialMusica/'+vid).remove();
+      delete historialMusica[vid];
+      return;
+    }
+    // Reparar entradas con texto repetido (de versiones anteriores)
+    var c=limpiarTexto(h.cancion), a=limpiarTexto(h.artista);
+    if(c!==h.cancion||a!==h.artista){
+      h.cancion=c;h.artista=a;
+      db.ref('historialMusica/'+vid+'/cancion').set(c);
+      db.ref('historialMusica/'+vid+'/artista').set(a);
+    }
+  });
+});
+
+db.ref('musica').on('value',function(snap){
+  var v=snap.val()||{};
+  pedidos=Object.keys(v).map(function(k){var o=v[k];o.key=k;return o;}).sort(function(a,b){return a.ts-b.ts;});
+  document.getElementById('estado').textContent='● '+pedidos.filter(function(p){return !p.played;}).length+' en cola';
+  render();
+  // Si no hay nada sonando y llegó algo, arrancar
+  if(playerReady&&(!actual||actual.played))reproducirCola();
+});
+
+// Cargar llaves: primero las locales, si no hay, las de Firebase (equipo nuevo)
+(function cargarKeysYArrancar(){
+  try{
+    var localKeys=JSON.parse(localStorage.getItem('a52_ytkeys')||'null');
+    if(localKeys&&localKeys.length){YT_KEYS=localKeys;_keyIdx=0;setActiveKey();renderSetup();return;}
+    // compatibilidad: una sola llave vieja
+    var vieja=localStorage.getItem('a52_ytkey');
+    if(vieja){YT_KEYS=[vieja];_keyIdx=0;setActiveKey();renderSetup();return;}
+  }catch(e){}
+  // No hay llaves locales -> buscar en Firebase
+  db.ref('config/ytkeys').once('value').then(function(snap){
+    var keys=snap.val();
+    if(keys&&keys.length){
+      YT_KEYS=Array.isArray(keys)?keys:Object.values(keys);
+      localStorage.setItem('a52_ytkeys',JSON.stringify(YT_KEYS));
+      _keyIdx=0;setActiveKey();renderSetup();return;
+    }
+    // intentar la llave única vieja en Firebase
+    db.ref('config/ytkey').once('value').then(function(s2){
+      var k=s2.val();
+      if(k){YT_KEYS=[k];localStorage.setItem('a52_ytkeys',JSON.stringify(YT_KEYS));_keyIdx=0;setActiveKey();}
+      renderSetup();
+    });
+  }).catch(function(){renderSetup();});
+})();
+</script>
+</body>
+</html>

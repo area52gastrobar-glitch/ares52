@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{nombreCorto} · Estación de impresión</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0f;color:#fff;min-height:100vh}
+.wrap{max-width:680px;margin:0 auto;padding:24px 18px}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.top img{width:48px;height:48px;border-radius:50%}
+.top h1{font-size:20px;font-weight:900;letter-spacing:1px;background:linear-gradient(90deg,#c4973a,#f5d676);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.estado{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px;margin-bottom:14px}
+.dot{width:14px;height:14px;border-radius:50%;background:#22c55e;box-shadow:0 0 12px #22c55e;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.estado .txt{font-weight:700;font-size:15px}
+.estado .sub{color:#888;font-size:12px;margin-top:2px}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:13px;color:#c4973a;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+.btn{background:linear-gradient(90deg,#c4973a,#e0b052);color:#1a1208;border:none;border-radius:10px;padding:12px 18px;font-weight:800;font-size:14px;cursor:pointer;margin-right:8px}
+.btn.sec{background:rgba(255,255,255,.08);color:#fff}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+label{font-size:13px;color:#bbb}
+input[type=checkbox]{width:18px;height:18px;accent-color:#c4973a}
+.log{font-size:12px;color:#999;max-height:240px;overflow-y:auto}
+.log-item{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between}
+.log-item .ok{color:#22c55e}
+#area-print{position:absolute;left:-9999px;top:0}
+@page{size:80mm auto;margin:0}
+@media print{
+  html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important;height:auto!important;min-height:0!important}
+  body>*{display:none!important}
+  #area-print{display:block!important;position:static!important;width:80mm;margin:0;padding:0}
+  #area-print *{visibility:visible}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <img data-m-src="logo" alt="">
+    <h1>ESTACIÓN DE IMPRESIÓN</h1>
+  </div>
+
+  <div class="estado">
+    <div class="dot" id="dot"></div>
+    <div><div class="txt" id="estadoTxt">Conectando...</div>
+      <div class="sub" id="estadoSub">Esta ventana debe quedar abierta mientras opera el bar</div></div>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ Configuración</h2>
+    <div class="row"><input type="checkbox" id="autoPrint" checked><label for="autoPrint">Imprimir automáticamente al recibir un recibo</label></div>
+    <div class="row"><button class="btn sec" onclick="pruebaImpresion()">🖨️ Imprimir prueba</button>
+    <button class="btn sec" onclick="limpiarPendientes()">🧹 Limpiar cola</button></div>
+    <div style="color:#888;font-size:12px;margin-top:8px;line-height:1.5">
+      1. La impresora térmica USB debe estar instalada en este computador.<br>
+      2. Deja esta ventana abierta. Cuando cobres desde cualquier celular y toques "Imprimir recibo", aparecerá aquí y se imprimirá.<br>
+      3. En el cuadro de impresión de Windows, elige tu impresora térmica y activa "guardar márgenes mínimos".
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🧾 Recibos recibidos</h2>
+    <div class="log" id="log"><div style="color:#666;padding:10px">Aún no se han recibido recibos.</div></div>
+  </div>
+</div>
+
+<div id="area-print"></div>
+
+<script src="negocio.js"></script>
+<script src="comun.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+var firebaseConfig=NEGOCIO.firebase;
+firebase.initializeApp(firebaseConfig);
+var db=firebase.database();
+A52Candado(db,'impresion',function(){});   // 🔐 solo equipos autorizados (o reglas abiertas)
+var arranque=Date.now();  // solo imprimir trabajos nuevos, no viejos
+var impresos={};
+
+function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function fmt(n){return '$'+(Math.round(n)||0).toLocaleString('es-CO');}
+
+function ticketHTML(t){
+  var pre=!!t.preorden;
+  var its=(t.items&&t.items.length?t.items:[]).map(function(i){
+    return '<div style="display:flex;justify-content:space-between"><span>'+(i.qty||1)+'x '+esc(i.nombre)+'</span><span>'+fmt(i.total)+'</span></div>';
+  }).join('');
+  var pagos=(t.pagos&&t.pagos.length?t.pagos:[]).map(function(p){
+    return '<div style="display:flex;justify-content:space-between"><span>'+esc(p.label)+'</span><span>'+fmt(p.monto)+'</span></div>';
+  }).join('');
+  return '<div style="width:76mm;font-family:monospace;color:#000;font-size:12px;padding:4px 2mm 6mm">'
+    +(pre?'<div style="text-align:center;font-weight:bold;font-size:13px;border:2px dashed #000;padding:4px;margin-bottom:6px;letter-spacing:2px">PRE-ORDEN</div>':'')
+    +'<div style="text-align:center;font-weight:bold;font-size:15px">'+MU('nombreTipo')+'</div>'
+    +'<div style="text-align:center;font-size:10px">'+M('direccionCiudad')+'<br>'+[NEGOCIO.telefono?'Tel: '+M('telefonoBonito'):'',NEGOCIO.instagram?'@'+M('instagram'):''].filter(Boolean).join(' · ')+'</div>'
+    +'<div style="text-align:center;font-size:10px;margin:4px 0">'+new Date(t.ts||Date.now()).toLocaleString('es-CO')+'</div>'
+    +'<div style="border-top:1px dashed #000;margin:6px 0"></div>'
+    +'<div style="font-weight:bold">'+esc(t.mesa||'')+'</div>'
+    +'<div style="border-top:1px dashed #000;margin:6px 0"></div>'
+    +its
+    +'<div style="border-top:1px dashed #000;margin:6px 0"></div>'
+    +'<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>TOTAL</span><span>'+fmt(t.total)+'</span></div>'
+    +(pagos?'<div style="border-top:1px dashed #000;margin:6px 0"></div>'+pagos:'')
+    +(pre?'<div style="text-align:center;margin-top:10px;font-size:10px;color:#555">** No es comprobante de pago **</div>'
+        :'<div style="text-align:center;margin-top:10px;font-size:11px">¡Gracias por tu visita!</div><div style="text-align:center;font-size:18px">👽</div>')
+    +'</div>';
+}
+
+function imprimir(t){
+  document.getElementById('area-print').innerHTML=ticketHTML(t);
+  window.print();
+}
+
+function pruebaImpresion(){
+  imprimir({mesa:'PRUEBA DE IMPRESIÓN',items:[{qty:1,nombre:'Item de prueba',total:1000}],total:1000,pagos:[{label:'Efectivo',monto:1000}],ts:Date.now()});
+}
+
+function logItem(t,estado){
+  var log=document.getElementById('log');
+  if(log.querySelector('div[style*="666"]'))log.innerHTML='';
+  var d=document.createElement('div');d.className='log-item';
+  d.innerHTML='<span>'+esc(t.mesa||'?')+' · '+fmt(t.total)+'</span><span class="ok">'+estado+' '+new Date().toLocaleTimeString('es-CO')+'</span>';
+  log.insertBefore(d,log.firstChild);
+}
+
+function limpiarPendientes(){
+  db.ref('impresion').remove();
+  document.getElementById('log').innerHTML='<div style="color:#666;padding:10px">Cola limpiada.</div>';
+}
+
+db.ref('impresion').on('child_added',function(snap){
+  var t=snap.val(); var key=snap.key;
+  if(!t||impresos[key])return;
+  if((t.ts||0)<arranque-5000)return;  // ignorar trabajos viejos previos a abrir la estación
+  impresos[key]=true;
+  if(document.getElementById('autoPrint').checked){
+    imprimir(t);
+    logItem(t,'✓ impreso');
+  } else {
+    logItem(t,'recibido');
+  }
+  // borrar el trabajo tras procesarlo
+  db.ref('impresion/'+key).remove();
+});
+
+db.ref('.info/connected').on('value',function(s){
+  var on=s.val();
+  document.getElementById('dot').style.background=on?'#22c55e':'#ef4444';
+  document.getElementById('dot').style.boxShadow='0 0 12px '+(on?'#22c55e':'#ef4444');
+  document.getElementById('estadoTxt').textContent=on?'Conectado y escuchando':'Sin conexión';
+});
+</script>
+</body>
+</html>
