@@ -1,0 +1,60 @@
+{
+  "rules": {
+    "equipos": {
+      ".read": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true && root.child('equipos').child(auth.uid).child('admin').val() === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    },
+    "solicitudes": {
+      ".read": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 40 && newData.child('nombre').val().length >= 2 && newData.child('ts').isNumber() && (!newData.child('tipo').exists() || (newData.child('tipo').isString() && newData.child('tipo').val().length <= 40))))"
+      }
+    },
+    "menu": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
+    "combos": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
+    "promos": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
+    "config": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
+    "musica": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      "$id": {
+        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['cancion','videoId','ts']) && newData.child('cancion').isString() && newData.child('cancion').val().length <= 200 && newData.child('videoId').isString() && newData.child('videoId').val().length <= 20 && newData.child('ts').isNumber() && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 60)) && (!newData.child('genero').exists() || (newData.child('genero').isString() && newData.child('genero').val().length <= 40)) && (!newData.child('artista').exists() || (newData.child('artista').isString() && newData.child('artista').val().length <= 200)) && newData.child('played').val() === false)"
+      }
+    },
+    "historialRocola": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      "$id": {
+        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['cancion','videoId','ts']) && newData.child('cancion').isString() && newData.child('cancion').val().length <= 200 && newData.child('videoId').isString() && newData.child('videoId').val().length <= 20 && newData.child('ts').isNumber() && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 60)) && (!newData.child('genero').exists() || (newData.child('genero').isString() && newData.child('genero').val().length <= 40)) && (!newData.child('artista').exists() || (newData.child('artista').isString() && newData.child('artista').val().length <= 200)))"
+      }
+    },
+    "smsBanco": {
+      ".read": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      "$id": {
+        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.child('texto').isString() && newData.child('texto').val().length <= 1000 && newData.child('llave').val() === 'CAMBIE-ESTA-LLAVE')"
+      }
+    },
+    "$otro": {
+      ".read": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    }
+  }
+}

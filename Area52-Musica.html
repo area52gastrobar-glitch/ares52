@@ -102,10 +102,12 @@ select.inp{color:var(--tinta)}select.inp option{background:#0c0322;color:#fff}
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 var firebaseConfig={apiKey:"AIzaSyDbAU2pyYucDTBtm6TIxCfgkyzmnhYvJBU",authDomain:"area52bar-a36aa.firebaseapp.com",databaseURL:"https://area52bar-a36aa-default-rtdb.firebaseio.com",projectId:"area52bar-a36aa",storageBucket:"area52bar-a36aa.firebasestorage.app",messagingSenderId:"79314921682",appId:"1:79314921682:web:abfa44eefbd0df7441250b"};
 firebase.initializeApp(firebaseConfig);
+try{firebase.auth();}catch(e){}   // si este navegador es de un equipo autorizado, la base lo reconoce (modo staff)
 var db=firebase.database();
 var STAFF_PIN="5252";
 var staffMode=false, pedidos=[], historial=[], YT_KEY='';
@@ -246,9 +248,11 @@ function toggleStaff(){
   if(pin===STAFF_PIN){staffMode=true;toast('🔓 Modo staff','#39ff14');render();}
   else if(pin!==null){toast('PIN incorrecto','#ff3b5c');}
 }
-function marcarSonada(k){db.ref('musica/'+k+'/played').set(true);}
-function borrar(k){db.ref('musica/'+k).remove();}
-function limpiarSonadas(){if(!confirm('¿Borrar las ya sonadas?'))return;pedidos.forEach(function(p){if(p.played)db.ref('musica/'+p.key).remove();});}
+// Marcar y borrar solo funciona en equipos autorizados (los que un administrador aprobó en el POS)
+function staffNo(){toast('🔐 Este equipo no está autorizado.<br>Ábralo en el POS para pedir aprobación, o use la consola del DJ','#ff3b5c');}
+function marcarSonada(k){db.ref('musica/'+k+'/played').set(true).catch(staffNo);}
+function borrar(k){db.ref('musica/'+k).remove().catch(staffNo);}
+function limpiarSonadas(){if(!confirm('¿Borrar las ya sonadas?'))return;var avisado=false;pedidos.forEach(function(p){if(p.played)db.ref('musica/'+p.key).remove().catch(function(){if(!avisado){avisado=true;staffNo();}});});}
 
 function render(){
   var cont=document.getElementById('lista');
@@ -304,7 +308,8 @@ db.ref('historialRocola').on('value',function(snap){
   historial=Object.keys(v).map(function(k){var o=v[k];o.key=k;return o;}).sort(function(a,b){return b.ts-a.ts;});
   // Limpieza automática: borrar registros de más de 24 horas para no crecer sin límite
   var lim=Date.now()-24*60*60*1000;
-  historial.filter(function(h){return (h.ts||0)<lim;}).forEach(function(h){db.ref('historialRocola/'+h.key).remove();});
+  // (solo lo logra un equipo autorizado; en el celular de un cliente la base lo niega y no pasa nada)
+  historial.filter(function(h){return (h.ts||0)<lim;}).forEach(function(h){db.ref('historialRocola/'+h.key).remove().catch(function(){});});
   historial=historial.filter(function(h){return (h.ts||0)>=lim;});
 });
 </script>

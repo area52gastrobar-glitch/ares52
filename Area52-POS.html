@@ -90,6 +90,108 @@ function _loadScript(src, cb){
   s.onerror=function(){console.warn('Could not load: '+src);cb(false);};
   document.head.appendChild(s);
 }
+/* ═══ 🔐 EQUIPOS AUTORIZADOS ═══
+   La base de datos solo atiende a los equipos que un administrador aprobó desde el POS.
+   Cada equipo se identifica solo (sin correo ni contraseña); el personal sigue entrando con su PIN.
+   Mientras las reglas de la base sigan abiertas, todo funciona igual que antes (transición). */
+window._a52={uid:null,autorizado:false,admin:false,nombre:'',sinAuth:false};
+function a52Codigo(uid){return String(uid||'').slice(-4).toUpperCase();}
+function a52TipoEquipo(){var u=navigator.userAgent||'';return /Android/i.test(u)?'Android':/iPhone/i.test(u)?'iPhone':/iPad/i.test(u)?'iPad':/Windows/i.test(u)?'Computador Windows':/Mac/i.test(u)?'Mac':'Equipo';}
+function a52Esc(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function A52Candado(db,rutaPrueba,alSeguir){
+  var hecho=false,au=null,reloj=null,E=window._a52;
+  try{au=firebase.auth();}catch(e){}
+  window._a52Auth=au;window._a52Db=db;
+  function seguir(){
+    A52EsperaCerrar();
+    if(hecho)return;hecho=true;
+    try{alSeguir();}catch(e){console.warn(e);}
+  }
+  function probar(u){
+    clearTimeout(reloj);
+    E.uid=u?u.uid:null;
+    // Sin respuesta en 4 s (sin internet): sigue como antes; si después la base niega el acceso, aparece la pantalla
+    reloj=setTimeout(seguir,4000);
+    db.ref(rutaPrueba).limitToFirst(1).once('value',function(){
+      clearTimeout(reloj);
+      if(!u){seguir();return;}
+      // ¿Este equipo ya está en la lista de autorizados? (si lo quitan después, vuelve a quedar por fuera)
+      db.ref('equipos/'+u.uid).on('value',function(s){
+        var v=s.val()||{},antes=E.autorizado;
+        E.autorizado=v.ok===true;E.admin=E.autorizado&&v.admin===true;E.nombre=v.nombre||'';
+        if(antes&&!E.autorizado){location.reload();return;}
+        seguir();
+        if(typeof window.a52AlCambiarEquipo==='function')window.a52AlCambiarEquipo();
+      },function(){seguir();});
+    },function(){clearTimeout(reloj);A52Espera(u);});
+  }
+  if(!au){probar(null);return;}
+  var pidio=false;
+  au.onAuthStateChanged(function(u){
+    if(u){probar(u);return;}
+    if(pidio){probar(null);return;}
+    pidio=true;
+    au.signInAnonymously().catch(function(e){E.sinAuth=(e&&e.code)||'error';probar(null);});
+  });
+}
+function A52EsperaCerrar(){var o=document.getElementById('a52-candado');if(o)o.remove();}
+// Pantalla de un equipo que la base todavía no atiende: pide el nombre, envía la solicitud y espera la aprobación
+function A52Espera(u){
+  if(!document.body){document.addEventListener('DOMContentLoaded',function(){A52Espera(u);});return;}
+  A52EsperaCerrar();
+  var db=window._a52Db,E=window._a52;
+  var o=document.createElement('div');o.id='a52-candado';
+  o.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483000;background:#07070e;display:flex;align-items:center;justify-content:center;padding:20px;font-family:Trebuchet MS,Arial,sans-serif';
+  var caja='width:100%;max-width:340px;background:#13131f;border:1px solid #22223a;border-radius:16px;padding:22px;color:#e8e8f5;text-align:center';
+  var gris='color:#8a8ab5;font-size:12px;line-height:1.5';
+  document.body.appendChild(o);
+  if(!u){
+    var falta=E.sinAuth==='auth/operation-not-allowed'||E.sinAuth==='auth/admin-restricted-operation';
+    o.innerHTML='<div style="'+caja+'"><div style="font-size:34px">📡</div><div style="font-weight:800;font-size:17px;margin:6px 0">No se pudo identificar este equipo</div>'
+      +'<div style="'+gris+';margin-bottom:14px">'+(falta?'Falta habilitar el ingreso «Anónimo» en Firebase (Authentication → Sign-in method).':'Revise la conexión a internet y vuelva a intentar.')+'</div>'
+      +'<button onclick="location.reload()" style="width:100%;background:#a855f7;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:800;cursor:pointer">Reintentar</button></div>';
+    return;
+  }
+  var cod=a52Codigo(u.uid),enviada=false;
+  function pedir(){
+    var guardado='';try{guardado=localStorage.getItem('a52_nombreEquipo')||'';}catch(e){}
+    o.innerHTML='<form id="a52-ef" style="'+caja+'"><div style="font-size:34px">🔐</div>'
+      +'<div style="font-weight:800;font-size:17px;margin:6px 0 4px">Este equipo necesita aprobación</div>'
+      +'<div style="'+gris+';margin-bottom:14px">Escriba un nombre para reconocerlo y un administrador lo aprueba desde su pantalla. Se hace una sola vez.</div>'
+      +'<input id="a52-en" maxlength="40" placeholder="Ej.: Celular de Laura · Caja · Cocina" value="'+a52Esc(guardado)+'" style="width:100%;box-sizing:border-box;background:#07070e;border:1px solid #2a2a45;border-radius:10px;padding:12px;color:#e8e8f5;font-size:15px;margin-bottom:9px;outline:none;text-align:center">'
+      +'<div id="a52-ee" style="min-height:18px;color:#ef4444;font-size:12px;font-weight:700;margin-bottom:8px"></div>'
+      +'<button id="a52-eb" type="submit" style="width:100%;background:#a855f7;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:800;cursor:pointer">Pedir aprobación</button></form>';
+    document.getElementById('a52-ef').onsubmit=function(ev){
+      ev.preventDefault();
+      var n=document.getElementById('a52-en').value.trim().slice(0,40),err=document.getElementById('a52-ee'),b=document.getElementById('a52-eb');
+      if(n.length<2){err.textContent='Escriba un nombre para el equipo.';return false;}
+      b.disabled=true;b.textContent='Enviando...';
+      try{localStorage.setItem('a52_nombreEquipo',n);}catch(e){}
+      db.ref('solicitudes/'+u.uid).set({nombre:n,ts:Date.now(),tipo:a52TipoEquipo()}).then(function(){enviada=true;esperando(n);},
+        function(){err.textContent='No se pudo enviar. Revise el internet.';b.disabled=false;b.textContent='Pedir aprobación';});
+      return false;
+    };
+  }
+  function esperando(n,aviso){
+    o.innerHTML='<div style="'+caja+'"><div style="font-size:34px">⏳</div>'
+      +'<div style="font-weight:800;font-size:17px;margin:6px 0 4px">Esperando aprobación</div>'
+      +'<div style="'+gris+'">Pídale a un administrador que apruebe este equipo desde el POS.</div>'
+      +'<div style="margin:14px 0 4px;font-weight:800;font-size:15px">'+a52Esc(n)+'</div>'
+      +'<div style="'+gris+'">Código de este equipo</div>'
+      +'<div id="a52-cod" style="font-size:30px;font-weight:800;letter-spacing:6px;color:#f5a623;margin:2px 0 12px">'+cod+'</div>'
+      +'<div style="'+gris+'">Esta pantalla se abre sola cuando lo aprueben.</div>'
+      +'<button id="a52-eo" style="background:none;color:#8a8ab5;border:none;padding:10px;font-size:12px;cursor:pointer;margin-top:6px;text-decoration:underline">Cambiar el nombre</button></div>';
+    document.getElementById('a52-eo').onclick=pedir;
+  }
+  // Entra solo en cuanto lo aprueban
+  db.ref('equipos/'+u.uid).on('value',function(s){var v=s.val();if(v&&v.ok===true)location.reload();},function(){});
+  db.ref('solicitudes/'+u.uid).on('value',function(s){
+    var v=s.val();
+    if(v&&v.nombre){enviada=true;esperando(v.nombre);}
+    else if(enviada){enviada=false;pedir();var e=document.getElementById('a52-ee');if(e)e.textContent='La solicitud no fue aprobada. Puede pedirla de nuevo.';}
+    else pedir();
+  },function(){pedir();});
+}
 window._fbReady=false;
 window._xlsxReady=false;
 // Load XLSX
@@ -97,6 +199,8 @@ _loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js
 // Load Firebase (chain: app then database)
 _loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',function(ok){
   if(!ok){window._fbReady=false;return;}
+  // La identificación del equipo (auth) se carga antes que la base; si no carga, la base sigue como antes
+  _loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',function(){
   _loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',function(ok2){
     if(!ok2){window._fbReady=false;return;}
     window._fbReady=true;
@@ -112,10 +216,16 @@ _loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',f
         appId:"1:79314921682:web:abfa44eefbd0df7441250b"
       };
       if(!firebase.apps.length) firebase.initializeApp(cfg);
-      window._db=firebase.database();
-      // If user is already logged in, start sync
-      if(window._usuarioActivoGlobal) iniciarSync();
-    }catch(e){console.warn('Firebase init failed:',e.message);}
+      // La base queda disponible para el POS solo cuando el equipo está autorizado (o las reglas siguen abiertas)
+      var _dbTmp=firebase.database();
+      window._a52Pendiente=true;
+      A52Candado(_dbTmp,'usuarios',function(){
+        window._db=_dbTmp;window._a52Pendiente=false;
+        // If user is already logged in, start sync
+        if(window._usuarioActivoGlobal) iniciarSync();
+      });
+    }catch(e){window._a52Pendiente=false;console.warn('Firebase init failed:',e.message);}
+  });
   });
 });
 </script>
@@ -786,6 +896,8 @@ function iniciarSync(){
     }
     if(tabActual==='mesas')render();
   });
+  fbOn('equipos',function(v){a52Equipos=v||{};a52Refrescar();});
+  fbOn('solicitudes',function(v){a52Solic=v||{};a52Refrescar();});
   fbOn('paredes',function(v){
     if(v){
       paredesData={antejardIn:[],piso1:[],piso2:[]};
@@ -1059,6 +1171,102 @@ function renderSesionesModal(){
     +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;_debounceBusq(function(){renderSesionesModal();_refocusBusq(\'ses-busq\');})" style="margin-bottom:10px"/>'
     +'<div style="max-height:56vh;overflow-y:auto">'+rows+'</div>');
 }
+/* ═══ 🔐 EQUIPOS AUTORIZADOS — aprobación desde el POS (pestaña Admin) ═══ */
+var a52Equipos={},a52Solic={};
+var A52_SOLIC_VIGENCIA=30*60*1000;   // una solicitud sin atender deja de mostrarse a los 30 minutos
+function a52Pendientes(){
+  var lim=Date.now()-A52_SOLIC_VIGENCIA;
+  return Object.keys(a52Solic).filter(function(k){var s=a52Solic[k];return s&&s.nombre&&(s.ts||0)>=lim&&!(a52Equipos[k]&&a52Equipos[k].ok);})
+    .map(function(k){var s=a52Solic[k];return{uid:k,nombre:s.nombre,ts:s.ts,tipo:s.tipo||''};}).sort(function(a,b){return a.ts-b.ts;});
+}
+function a52Admins(){return Object.keys(a52Equipos).filter(function(k){var e=a52Equipos[k];return e&&e.ok===true&&e.admin===true;});}
+function a52NoPuede(){alert('Este equipo no puede aprobar ni quitar equipos.\n\nHágalo desde un equipo de administración (por ejemplo, la caja).');}
+function a52Aprobar(uid,comoAdmin){
+  var s=a52Solic[uid]||{},d=getDb();if(!d)return;
+  if(comoAdmin&&!confirm('¿Aprobar «'+(s.nombre||'Equipo')+'» como equipo de ADMINISTRACIÓN?\n\nPodrá aprobar y quitar otros equipos. Úselo solo para la caja o el celular de un socio.'))return;
+  var reg={ok:true,nombre:String(s.nombre||'Equipo').slice(0,40),tipo:s.tipo||'',ts:Date.now(),por:(usuarioActivo&&usuarioActivo.nombre)||''};
+  if(comoAdmin)reg.admin=true;
+  d.ref('equipos/'+uid).set(reg).then(function(){d.ref('solicitudes/'+uid).remove();showToast('✅ Equipo aprobado: '+reg.nombre,'#22c55e');},a52NoPuede);
+}
+function a52Rechazar(uid){var d=getDb();if(d)d.ref('solicitudes/'+uid).remove().catch(function(){});}
+function a52Quitar(uid){
+  var e=a52Equipos[uid]||{},d=getDb(),E=window._a52;if(!d)return;
+  var adm=a52Admins();
+  if(e.admin&&adm.length<=1){alert('Es el único equipo de administración.\n\nPrimero dé administración a otro equipo; si no, nadie podría aprobar equipos nuevos.');return;}
+  if(!confirm('¿Quitar «'+(e.nombre||'Equipo')+'»?\n\n'+(uid===E.uid?'ES ESTE MISMO EQUIPO: dejará de funcionar hasta que lo aprueben de nuevo.':'Ese equipo dejará de funcionar hasta que lo aprueben de nuevo.')))return;
+  d.ref('equipos/'+uid).remove().then(function(){showToast('Equipo quitado','#f5a623');},a52NoPuede);
+}
+function a52CambiarAdmin(uid,on){
+  var e=a52Equipos[uid]||{},d=getDb();if(!d)return;
+  if(!on&&a52Admins().length<=1){alert('Debe quedar al menos un equipo de administración.');return;}
+  if(on&&!confirm('¿Dar administración a «'+(e.nombre||'Equipo')+'»?\n\nPodrá aprobar y quitar otros equipos.'))return;
+  d.ref('equipos/'+uid+'/admin').set(on?true:null).catch(a52NoPuede);
+}
+// Solo sirve mientras las reglas de la base siguen abiertas: deja autorizado el equipo desde el que se está trabajando
+function a52AutorizarEste(){
+  var E=window._a52,d=getDb();if(!d)return;
+  if(!E.uid){alert(E.sinAuth?'Falta habilitar el ingreso «Anónimo» en Firebase:\nAuthentication → Sign-in method → Anónimo → Habilitar.':'Este equipo aún no se ha identificado. Revise el internet y recargue la página.');return;}
+  var prev='';try{prev=localStorage.getItem('a52_nombreEquipo')||'';}catch(x){}
+  var n=prompt('Nombre de este equipo (ej.: Caja, Celular de un socio, Cocina):',prev);
+  if(n===null)return;n=n.trim().slice(0,40);
+  if(n.length<2){alert('Escriba un nombre para el equipo.');return;}
+  var adm=!a52Admins().length||confirm('¿Este equipo podrá aprobar otros equipos?\n\nAceptar = equipo de administración (caja, celular de un socio)\nCancelar = equipo normal');
+  var reg={ok:true,nombre:n,tipo:a52TipoEquipo(),ts:Date.now(),por:(usuarioActivo&&usuarioActivo.nombre)||''};
+  if(adm)reg.admin=true;
+  try{localStorage.setItem('a52_nombreEquipo',n);}catch(x){}
+  d.ref('equipos/'+E.uid).set(reg).then(function(){d.ref('solicitudes/'+E.uid).remove().catch(function(){});showToast('✅ Este equipo quedó autorizado','#22c55e');},a52NoPuede);
+}
+function a52EquiposInner(){
+  var E=window._a52,pend=a52Pendientes(),h='';
+  var b='border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer;border:1px solid ';
+  if(!E.uid)h+='<div style="background:#ef444415;border:1px solid #ef444433;border-radius:10px;padding:10px;font-size:12px;line-height:1.45;margin-bottom:10px">⚠️ <b style="color:#ef4444">Este equipo no se pudo identificar.</b><br><span style="color:var(--muted)">'+(E.sinAuth?'Falta habilitar el ingreso «Anónimo» en Firebase (Authentication → Sign-in method).':'Revise el internet y recargue la página.')+'</span></div>';
+  else if(E.autorizado)h+='<div style="background:#22c55e12;border:1px solid #22c55e33;border-radius:10px;padding:10px;font-size:12px;line-height:1.45;margin-bottom:10px">🔐 <b>Este equipo está autorizado</b> · '+esc(E.nombre||'')+(E.admin?' · <span style="color:#f5a623;font-weight:800">administración</span>':'')+'</div>';
+  else h+='<div style="background:#f5a62315;border:1px solid #f5a62344;border-radius:10px;padding:10px;font-size:12px;line-height:1.45;margin-bottom:10px">🔓 <b style="color:#f5a623">La base sigue abierta y este equipo no está autorizado.</b><br><span style="color:var(--muted)">Autorice primero la caja y el celular de un socio. Después publique las reglas nuevas en Firebase; los demás equipos piden aprobación y usted los acepta aquí.</span>'
+    +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:#f5a623;color:#000;font-weight:800" onclick="a52AutorizarEste()">🔐 Autorizar este equipo</button></div>';
+  if(pend.length){
+    h+='<div style="font-size:11px;font-weight:800;color:#38bdf8;margin:4px 0 6px">PIDEN ENTRAR ('+pend.length+')</div>';
+    h+=pend.map(function(p){
+      return'<div style="background:#38bdf812;border:1px solid #38bdf833;border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px">'
+        +'<div style="font-weight:800">📱 '+esc(p.nombre)+' <span style="color:#f5a623;letter-spacing:2px">· '+a52Codigo(p.uid)+'</span></div>'
+        +'<div style="color:var(--muted);font-size:10px;margin:2px 0 8px">'+esc(p.tipo)+' · pidió '+fmtFechaCorta(p.ts)+' · confirme que el código sea el que muestra el equipo</div>'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+        +'<button style="'+b+'#22c55e55;background:#22c55e22;color:#22c55e" onclick="a52Aprobar(\''+p.uid+'\',false)">✓ Aprobar</button>'
+        +'<button style="'+b+'#f5a62355;background:#f5a62318;color:#f5a623" onclick="a52Aprobar(\''+p.uid+'\',true)">✓ Como administración</button>'
+        +'<button style="'+b+'#ef444455;background:#ef444418;color:#ef4444" onclick="a52Rechazar(\''+p.uid+'\')">✕ Rechazar</button>'
+        +'</div></div>';
+    }).join('');
+  }
+  var ids=Object.keys(a52Equipos).filter(function(k){return a52Equipos[k]&&a52Equipos[k].ok===true;}).sort(function(x,y){return(a52Equipos[x].ts||0)-(a52Equipos[y].ts||0);});
+  if(ids.length){
+    h+='<div style="font-size:11px;font-weight:800;color:var(--muted);margin:6px 0 4px">AUTORIZADOS ('+ids.length+')</div>';
+    h+=ids.map(function(k){
+      var e=a52Equipos[k];
+      return'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">'
+        +'<div style="flex:1;min-width:0"><span style="font-weight:700">'+esc(e.nombre||'Equipo')+'</span>'+(k===E.uid?' <span style="color:#22c55e;font-size:10px">(este)</span>':'')+(e.admin?' <span style="color:#f5a623;font-size:10px;font-weight:800">ADMINISTRACIÓN</span>':'')
+        +'<div style="color:var(--muted);font-size:10px">'+esc(e.tipo||'')+' · '+a52Codigo(k)+(e.ts?' · desde '+fmtFechaCorta(e.ts):'')+(e.por?' · '+esc(e.por):'')+'</div></div>'
+        +'<button title="'+(e.admin?'Quitar administración':'Dar administración')+'" style="'+b+'var(--border);background:var(--card2);color:'+(e.admin?'#f5a623':'var(--muted)')+'" onclick="a52CambiarAdmin(\''+k+'\','+(e.admin?'false':'true')+')">👑</button>'
+        +'<button style="'+b+'#ef444444;background:#ef444412;color:#ef4444" onclick="a52Quitar(\''+k+'\')">Quitar</button></div>';
+    }).join('');
+  } else h+='<div style="color:var(--muted);font-size:12px;padding:6px 0">Todavía no hay equipos autorizados.</div>';
+  return h;
+}
+function a52EquipoHtml(){
+  return'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:12px">📱 Equipos autorizados</div><div id="a52-equipos-box">'+a52EquiposInner()+'</div></div>';
+}
+// Aviso flotante para el administrador cuando un equipo nuevo pide entrar (no interrumpe lo que esté haciendo)
+function a52Refrescar(){
+  var box=document.getElementById('a52-equipos-box');if(box)box.innerHTML=a52EquiposInner();
+  var f=document.getElementById('a52-solic'),pend=(usuarioActivo&&usuarioActivo.rol==='admin')?a52Pendientes():[];
+  if(!pend.length){if(f)f.remove();return;}
+  if(!f){f=document.createElement('div');f.id='a52-solic';f.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:9000;max-width:460px;margin:0 auto;background:#13131f;border:1px solid #38bdf8;border-radius:14px;padding:12px;box-shadow:0 12px 30px rgba(0,0,0,.6);font-size:12px;color:#e8e8f5';document.body.appendChild(f);}
+  var p=pend[0];
+  f.innerHTML='<div style="font-weight:800;margin-bottom:2px">📱 Un equipo pide entrar'+(pend.length>1?' (y '+(pend.length-1)+' más)':'')+'</div>'
+    +'<div style="margin-bottom:8px">'+esc(p.nombre)+' · código <b style="color:#f5a623;letter-spacing:2px">'+a52Codigo(p.uid)+'</b> <span style="color:#8a8ab5">· '+esc(p.tipo)+'</span></div>'
+    +'<div style="display:flex;gap:6px"><button style="flex:1;background:#22c55e;color:#000;border:none;border-radius:8px;padding:9px;font-weight:800;cursor:pointer" onclick="a52Aprobar(\''+p.uid+'\',false)">✓ Aprobar</button>'
+    +'<button style="flex:1;background:#ef444422;color:#ef4444;border:1px solid #ef444455;border-radius:8px;padding:9px;font-weight:800;cursor:pointer" onclick="a52Rechazar(\''+p.uid+'\')">✕ Rechazar</button>'
+    +'<button style="background:none;color:#8a8ab5;border:1px solid #2a2a45;border-radius:8px;padding:9px;cursor:pointer" onclick="setTab(\'admin\')">Ver</button></div>';
+}
+window.a52AlCambiarEquipo=a52Refrescar;
 function completarLogin(){
   registrarSesion('login',usuarioSelLogin);
     usuarioActivo=usuarioSelLogin;
@@ -1100,7 +1308,8 @@ function iniciarVigilanciaRed(){
 function cerrarSesion(){
   if(usuarioActivo)registrarSesion('logout',usuarioActivo);
   window._usuarioActivoGlobal=null;
-  if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos'].forEach(fbOff);
+  if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos','equipos','solicitudes'].forEach(fbOff);
+  var _fs=document.getElementById('a52-solic');if(_fs)_fs.remove();
   usuarioActivo=null;mesaActiva=null;tabActual='mesas';
   document.getElementById('header').style.display='none';
   document.getElementById('tabs').style.display='none';
@@ -6965,7 +7174,7 @@ var CODIGO_SCRIPT_CORREO='function revisarCorreosBanco(){\n'
 +'        var texto=cuerpo.substring(i,i+400).split(\'Con llaves\')[0].split(\'Con Bre-b\')[0];\n'
 +'        UrlFetchApp.fetch(\'https://area52bar-a36aa-default-rtdb.firebaseio.com/smsBanco.json\',{\n'
 +'          method:\'post\',contentType:\'application/json\',\n'
-+'          payload:JSON.stringify({texto:texto,ts:Date.now(),origen:\'correo\'})\n'
++'          payload:JSON.stringify({texto:texto,ts:Date.now(),origen:\'correo\',llave:\'ESCRIBA-AQUI-LA-LLAVE-DE-LAS-REGLAS\'})\n'
 +'        });\n'
 +'      }\n'
 +'    });\n'
@@ -6995,7 +7204,8 @@ function verComoConectarCelular(){
     +'<b style="color:var(--muted)">📱 Alternativa por SMS (si el banco los manda a un celular):</b><br>'
     +'<span style="font-size:11px">Android con <b>MacroDroid</b>: macro con disparador "SMS recibido" (remitente contiene Bancolombia) → acción "Petición HTTP" POST a<br>'
     +'<code style="font-size:9.5px;word-break:break-all;background:var(--bg);padding:3px;border-radius:5px;display:block;margin:3px 0">https://area52bar-a36aa-default-rtdb.firebaseio.com/smsBanco.json</code>'
-    +'contenido <b>application/json</b>, cuerpo: <code style="font-size:9.5px;background:var(--bg);padding:2px 4px;border-radius:4px">{"texto":"[sms_message]","ts":0}</code><br>'
+    +'contenido <b>application/json</b>, cuerpo: <code style="font-size:9.5px;background:var(--bg);padding:2px 4px;border-radius:4px">{"texto":"[sms_message]","ts":0,"llave":"LA-LLAVE-DE-LAS-REGLAS"}</code><br>'
+    +'<span style="color:#f5a623">🔑 La <b>llave</b> es la misma que se escribió en las reglas de Firebase (smsBanco). Sin ella la base rechaza el mensaje.</span><br>'
     +'iPhone: Atajos → automatización "Cuando reciba un mensaje" con "Bancolombia" → "Obtener contenido de URL" con el mismo POST.</span><br><br>'
     +'<span style="color:var(--muted);font-size:11px">💡 Si un pago llega por los dos canales (SMS y correo), el sistema lo detecta y lo cuenta una sola vez.</span>'
     +'</div>'
@@ -12319,6 +12529,7 @@ function renderAdmin(){
     +'<button class="btn btn-sm btn-green btn-full" style="margin-top:12px" onclick="nuevoUsuario()">+ Agregar usuario</button>'
     +'<button class="btn btn-sm btn-full" style="margin-top:8px;background:var(--card2);border:1px solid var(--border);color:var(--muted)" onclick="abrirSesiones()">👥 Ver inicios de sesión</button>'
     +'</div>'
+    +a52EquipoHtml()
     +'<div class="card"><div style="color:var(--accent);font-weight:800;font-size:15px;margin-bottom:14px">🔐 Roles y permisos</div>'+rolCards+'</div>'
     +redSection
     +notifSection
@@ -13505,8 +13716,8 @@ function initApp(){
     intentos=intentos||0;
     var r=ref('usuarios');
     if(!r){
-      if(intentos<20){
-        // Firebase not ready yet, retry in 300ms
+      if(intentos<20||window._a52Pendiente){
+        // Firebase not ready yet (o el equipo aún espera aprobación), retry in 300ms
         setTimeout(function(){cargarUsuariosYLogin(intentos+1);},300);
       } else {
         // Firebase never loaded - use defaults
