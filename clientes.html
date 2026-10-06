@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
 <title>{nombre} {tipo}</title>
-<script src="negocio.js"></script>
-<script src="comun.js"></script>
+<script src="negocio.js?v=2026-10-05h"></script>
+<script src="comun.js?v=2026-10-05h"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@200;300;400;600&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -685,7 +685,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
   var N=NEGOCIO,mod=N.modulos||{},$=function(i){return document.getElementById(i);};
   function ocultar(i){var e=$(i);if(e)e.style.display='none';}
   // ── Mesa: viene en el QR de cada mesa (…?mesa=7) y se recuerda mientras la pestaña siga abierta
-  var MESA=(function(){var m=(location.search.match(/[?&]mesa=([^&#]+)/)||[])[1];try{if(m)sessionStorage.setItem('a52_mesa',decodeURIComponent(m));return sessionStorage.getItem('a52_mesa')||'';}catch(e){return m?decodeURIComponent(m):'';}})().replace(/[^0-9A-Za-z -]/g,'').slice(0,6);
+  var MESA=(function(){var m=(location.search.match(/[?&]mesa=([^&#]+)/)||[])[1];try{if(m)sessionStorage.setItem(LSK('mesa'),decodeURIComponent(m));return sessionStorage.getItem(LSK('mesa'))||'';}catch(e){return m?decodeURIComponent(m):'';}})().replace(/[^0-9A-Za-z -]/g,'').slice(0,6);
 
   // ── Datos del negocio
   $('c-sub').textContent=[N.tipo,N.ciudad].filter(Boolean).join(' · ');
@@ -733,14 +733,14 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
     if(!MESA)return;
     $('cll-mesa').textContent=MESA;
     if(!escucha){$('cll-est').style.display='none';$('cll-form').style.display='';$('cll-err').textContent='';chips();
-      try{var n=localStorage.getItem('a52_nombreCliente');if(n&&!$('cll-nombre').value)$('cll-nombre').value=n;}catch(e){}}
+      try{var n=localStorage.getItem(LSK('nombreCliente'));if(n&&!$('cll-nombre').value)$('cll-nombre').value=n;}catch(e){}}
     $('cll').classList.add('on');
   }
   function cerrar(){$('cll').classList.remove('on');}
   function enviar(){
     var db=window._cxDb,err=$('cll-err'),b=$('cll-ok');
     if(!db){err.textContent='Sin conexión. Revisa el internet e intenta de nuevo.';return;}
-    var ult=0;try{ult=parseInt(localStorage.getItem('a52_ultLlamado')||'0');}catch(e){}
+    var ult=0;try{ult=parseInt(localStorage.getItem(LSK('ultLlamado'))||'0');}catch(e){}
     if(Date.now()-ult<45000){err.textContent='Ya avisamos hace un momento. Espera unos segundos.';return;}
     var nota=$('cll-nota').value.trim().slice(0,80),nombre=$('cll-nombre').value.trim().slice(0,40);
     var ll={mesa:MESA,motivo:String(motivos[sel]).slice(0,60),ts:Date.now(),atendido:false};
@@ -748,7 +748,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
     b.disabled=true;b.textContent='Avisando...';
     var r=db.ref('llamados').push(ll);
     r.then(function(){
-      try{localStorage.setItem('a52_ultLlamado',String(Date.now()));if(nombre)localStorage.setItem('a52_nombreCliente',nombre);}catch(e){}
+      try{localStorage.setItem(LSK('ultLlamado'),String(Date.now()));if(nombre)localStorage.setItem(LSK('nombreCliente'),nombre);}catch(e){}
       b.disabled=false;b.textContent='Llamar';$('cll-nota').value='';
       estado('✅','¡Listo! Ya avisamos','La mesa '+MESA+' pidió atención. En un momento se acercan.');
       escucha=db.ref('llamados/'+r.key);

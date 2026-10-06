@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>{nombre} {tipo}</title>
 <meta name="theme-color" content="#05030d"/>
-<link rel="icon" type="image/png" href="marca/icono.png"/>
-<link rel="apple-touch-icon" href="marca/icono.png"/>
-<link rel="stylesheet" href="fuentes/fuentes.css"/>
-<script src="negocio.js"></script>
-<script src="comun.js"></script>
+<link rel="icon" type="image/png" href="marca-icono.png"/>
+<link rel="apple-touch-icon" href="marca-icono.png"/>
+<link rel="stylesheet" href="fuentes.css?v=2026-10-05h"/>
+<script src="negocio.js?v=2026-10-05h"></script>
+<script src="comun.js?v=2026-10-05h"></script>
 <style>
 /* Página de inicio: la fachada del negocio de noche. Arriba el letrero, en el centro la puerta
    principal (clientes) y a un lado la puerta de servicio (funcionarios). Los colores salen del tema. */
@@ -137,6 +137,22 @@ html[data-tema="discoteca"] .puerta{border-radius:18px;
   background:linear-gradient(160deg,rgba(var(--t-p-rgb),.34),rgba(var(--t-b2-rgb),.92) 46%,rgba(var(--t-c-rgb),.22))}
 html[data-tema="discoteca"] .insignia{border-radius:18px}
 
+html[data-tema="sobrio"] body,html[data-tema="elegante"] body{background:radial-gradient(120% 50% at 50% 0%,rgba(var(--t-p-rgb),.10),transparent 62%),rgb(var(--t-b0-rgb))}
+html[data-tema="sobrio"] .letrero{font-weight:800;font-size:clamp(2.6rem,11.5vw,6rem);letter-spacing:-.025em;animation:none;text-shadow:none;color:rgb(var(--t-tx-rgb));
+  padding-bottom:.18em;border-bottom:3px solid rgb(var(--t-p-rgb))}
+html[data-tema="elegante"] .letrero{font-weight:700;font-size:clamp(2.7rem,12vw,6.4rem);letter-spacing:.01em;animation:none;text-shadow:none;color:rgb(var(--t-p-rgb));
+  padding:.1em .4em .16em;border-top:1px solid rgba(var(--t-p-rgb),.6);border-bottom:1px solid rgba(var(--t-p-rgb),.6)}
+html[data-tema="sobrio"] .puerta,html[data-tema="elegante"] .puerta{border-width:1px;border-color:rgba(var(--t-p-rgb),.8);
+  background:linear-gradient(180deg,rgba(var(--t-p-rgb),.16),rgba(var(--t-b2-rgb),.96) 62%);
+  box-shadow:0 0 0 7px rgb(var(--t-b0-rgb)),0 0 0 8px rgba(var(--t-p-rgb),.28),0 24px 50px rgba(0,0,0,.45)}
+html[data-tema="sobrio"] .puerta{border-radius:20px}
+html[data-tema="sobrio"] .puerta::after,html[data-tema="elegante"] .puerta::after{display:none}
+html[data-tema="sobrio"] .puerta:hover,html[data-tema="sobrio"] .puerta:focus-visible,html[data-tema="elegante"] .puerta:hover,html[data-tema="elegante"] .puerta:focus-visible{
+  box-shadow:0 0 0 7px rgb(var(--t-b0-rgb)),0 0 0 8px rgba(var(--t-p-rgb),.6),0 28px 60px rgba(0,0,0,.55)}
+html[data-tema="sobrio"] .insignia{border-radius:16px}
+html[data-tema="sobrio"] .p-b{background:rgb(var(--t-p-rgb));color:#fff}
+html[data-tema="elegante"] .p-b{background:rgb(var(--t-p-rgb))}
+html[data-tema="elegante"] .que{color:rgb(var(--t-l-rgb))}
 @media(prefers-reduced-motion:reduce){.letrero{animation:none}.puerta,.servicio{transition:none}}
 </style>
 </head>

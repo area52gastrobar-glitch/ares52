@@ -4,9 +4,12 @@
 (function(){
   var N=window.NEGOCIO=window.NEGOCIO||{};
   function def(k,v){if(N[k]==null||N[k]==='')N[k]=v;}
+  // Lo que se guarda en el navegador lleva el nombre del negocio (dos negocios en el mismo dominio no se mezclan)
+  window.LSK=function(k){return'a52_'+(N.id?String(N.id).replace(/[^a-z0-9]/gi,'')+'_':'')+k;};
+  var EM0=N.emoji||'',EM2=N.emoji2||'';   // emojis propios de la marca (opcionales)
   def('nombre','Mi Negocio');def('nombreCorto',N.nombre);def('tipo','');def('ciudad','');def('pais','Colombia');
   def('lema','');def('direccion','');def('telefono','');def('whatsapp','');def('correo','');def('instagram','');def('tiktok','');
-  def('desde','');def('emoji','🍽️');def('emoji2',N.emoji);def('logo','');def('logoGrande',N.logo);def('horario','');def('fondos',[]);def('enlaces',[]);def('videoPromo','');
+  def('desde','');def('logo','');def('logoGrande',N.logo);def('horario','');def('fondos',[]);def('enlaces',[]);def('videoPromo','');
   def('rocolaPinStaff','');def('colores',{});def('firebase',null);def('decoracion',true);
   // Nombre sin tildes y en mayúsculas (tiquetes, encabezados del POS, nombres de archivo)
   def('nombreSimple',N.nombre.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase());
@@ -49,17 +52,28 @@
      Se elige en el POS (Admin → Tema) y queda guardado en la base (config/tema); negocio.js trae el tema de arranque.
      Para agregar un tema nuevo basta sumar otro bloque a esta lista. */
   var TEMAS=window.TEMAS={
-    espacial:{nombre:'Espacial',desc:'Neón violeta y verde sobre noche',muestra:['#a855f7','#7cffb2','#4de1ff','#05030d'],decoracion:true,
+    espacial:{nombre:'Espacial',desc:'Neón violeta y verde sobre noche',muestra:['#a855f7','#7cffb2','#4de1ff','#05030d'],decoracion:true,emoji:'🛸',emoji2:'👽',
       v:{p:'168,85,247',p2:'123,47,247',p3:'176,38,255',s:'124,255,178',s2:'57,255,20',c:'77,225,255',c2:'34,211,238',c3:'0,229,255',k:'255,94,200',k2:'255,77,141',o:'201,168,76',o2:'240,192,64',b0:'5,3,13',b1:'10,6,24',b2:'20,10,40',tx:'236,231,255',mu:'154,122,192',l:'185,166,255'}},
-    pub:{nombre:'Pub',desc:'Madera oscura, latón y crema',muestra:['#d9a441','#aac48c','#f4ead6','#0e0a07'],decoracion:false,
+    pub:{nombre:'Pub',desc:'Madera oscura, latón y crema',muestra:['#d9a441','#aac48c','#f4ead6','#0e0a07'],decoracion:false,emoji:'🍺',emoji2:'🍻',
       fuente:{familia:"'Abril Fatface'"},
       pos:{bg:'#0e0a07',panel:'#15100a',card:'#1c150e',card2:'#241b12',border:'#3a2c1c',accent:'#d9a441',text:'#f4ead6',muted:'#8f7a5c',dim:'#33271a'},
       v:{p:'217,164,65',p2:'166,107,42',p3:'217,164,65',s:'170,196,140',s2:'170,196,140',c:'222,184,135',c2:'222,184,135',c3:'222,184,135',k:'196,84,64',k2:'196,84,64',o:'201,168,76',o2:'240,192,64',b0:'14,10,7',b1:'24,17,11',b2:'38,27,17',tx:'244,234,214',mu:'168,146,116',l:'226,205,160'}},
-    discoteca:{nombre:'Discoteca',desc:'Negro con magenta, azul eléctrico y amarillo láser',muestra:['#ff2d95','#ffe600','#00d4ff','#050508'],decoracion:false,
+    discoteca:{nombre:'Discoteca',desc:'Negro con magenta, azul eléctrico y amarillo láser',muestra:['#ff2d95','#ffe600','#00d4ff','#050508'],decoracion:false,emoji:'🎶',emoji2:'💃',
       fuente:{familia:"'Unbounded'"},
       pos:{bg:'#050508',panel:'#0b0a12',card:'#12101c',card2:'#191628',border:'#2a2440',accent:'#ff2d95',text:'#f5f5ff',muted:'#6f6a90',dim:'#2a2545'},
-      v:{p:'255,45,149',p2:'196,0,255',p3:'196,0,255',s:'255,230,0',s2:'255,230,0',c:'0,212,255',c2:'0,212,255',c3:'0,212,255',k:'255,90,54',k2:'255,90,54',o:'255,214,10',o2:'255,214,10',b0:'5,5,8',b1:'10,8,18',b2:'20,14,32',tx:'245,245,255',mu:'150,150,178',l:'255,170,215'}}
+      v:{p:'255,45,149',p2:'196,0,255',p3:'196,0,255',s:'255,230,0',s2:'255,230,0',c:'0,212,255',c2:'0,212,255',c3:'0,212,255',k:'255,90,54',k2:'255,90,54',o:'255,214,10',o2:'255,214,10',b0:'5,5,8',b1:'10,8,18',b2:'20,14,32',tx:'245,245,255',mu:'150,150,178',l:'255,170,215'}},
+    sobrio:{nombre:'Sobrio',desc:'Grafito y azul acero, sin brillos',muestra:['#6e8caa','#d6ba8c','#e8eaee','#101216'],decoracion:false,brillo:false,emoji:'🍸',emoji2:'🥂',
+      fuente:{familia:"'Figtree'"},
+      pos:{bg:'#101216',panel:'#151920',card:'#1b2029',card2:'#232a35',border:'#323b49',accent:'#6e8caa',text:'#e8eaee',muted:'#7f8a99',dim:'#2c3440'},
+      v:{p:'110,140,170',p2:'80,105,135',p3:'110,140,170',s:'214,186,140',s2:'214,186,140',c:'150,170,190',c2:'150,170,190',c3:'150,170,190',k:'176,120,110',k2:'176,120,110',o:'190,165,110',o2:'214,186,140',b0:'16,18,22',b1:'22,25,31',b2:'32,36,44',tx:'232,234,238',mu:'140,148,160',l:'190,200,212'}},
+    elegante:{nombre:'Elegante',desc:'Negro con dorado champaña y vino',muestra:['#c8a96a','#7a2e3a','#f0ece4','#0c0c0e'],decoracion:false,brillo:false,emoji:'🍷',emoji2:'🥂',
+      fuente:{familia:"'Playfair Display'"},
+      pos:{bg:'#0c0c0e',panel:'#121214',card:'#19191c',card2:'#212125',border:'#34323a',accent:'#c8a96a',text:'#f0ece4',muted:'#8a857c',dim:'#2d2b31'},
+      v:{p:'200,169,106',p2:'150,120,70',p3:'200,169,106',s:'232,220,196',s2:'232,220,196',c:'200,169,106',c2:'200,169,106',c3:'200,169,106',k:'140,58,70',k2:'140,58,70',o:'200,169,106',o2:'214,190,130',b0:'12,12,14',b1:'19,19,22',b2:'30,29,33',tx:'240,236,228',mu:'150,144,134',l:'222,208,180'}}
   };
+  // Iconos: los del tema, salvo que el negocio fije los suyos (emojiFijo en negocio.js)
+  function emojiDe(i){var T=TEMAS[temaActual]||{},marca=i?(EM2||EM0):EM0;if(N.emojiFijo&&marca)return marca;return(i?T.emoji2:T.emoji)||marca||'🍽️';}
+  try{Object.defineProperty(N,'emoji',{get:function(){return emojiDe(0);},configurable:true});Object.defineProperty(N,'emoji2',{get:function(){return emojiDe(1);},configurable:true});}catch(e){}
   var POSV=['bg','panel','card','card2','border','accent','text','muted','dim'],temaActual=null,estiloTema=null;
   window.MarcaTemaActual=function(){return temaActual;};
   window.MarcaTema=function(id,recordar){
@@ -70,22 +84,25 @@
     if(r.getAttribute('data-app')==='pos')POSV.forEach(function(k){if(T.pos&&T.pos[k])r.style.setProperty('--'+k,T.pos[k]);else r.style.removeProperty('--'+k);});
     Object.keys(c).forEach(function(k){if(c[k])r.style.setProperty('--'+k,c[k]);});   // los colores propios del negocio mandan sobre el tema
     r.classList.toggle('sin-decoracion',T.decoracion===false||N.decoracion===false);
+    r.classList.toggle('sin-brillo',T.brillo===false);
+    r.style.setProperty('--m-emoji',JSON.stringify(N.emoji));r.style.setProperty('--m-emoji2',JSON.stringify(N.emoji2));
     if(!estiloTema){estiloTema=document.createElement('style');(document.head||r).appendChild(estiloTema);}
-    var css='.sin-decoracion .ovni,.sin-decoracion .nave,.sin-decoracion .wrap::after,.sin-decoracion .footer::before{display:none!important}';
+    var css='.sin-decoracion .ovni,.sin-decoracion .wrap::after,.sin-decoracion .footer::before{display:none!important}'
+      +'.sin-brillo *{text-shadow:none!important}.sin-brillo .logo-wrap,.sin-brillo .logo{animation:none!important;box-shadow:0 0 0 2px rgba(var(--t-p-rgb),.7)!important}';
     if(T.fuente){
       r.style.setProperty('--t-fd',T.fuente.familia);
       css+='.name,.cover-title,.wrap>h1,.top>h1{font-family:'+T.fuente.familia+',Georgia,serif!important;letter-spacing:.02em!important}';
-      if(!document.getElementById('tema-fuentes')&&!document.querySelector('link[href$="fuentes/fuentes.css"]')){var l=document.createElement('link');l.id='tema-fuentes';l.rel='stylesheet';l.href='fuentes/fuentes.css';(document.head||r).appendChild(l);}
+      if(!document.getElementById('tema-fuentes')&&!document.querySelector('link[href*="fuentes.css"]')){var l=document.createElement('link');l.id='tema-fuentes';l.rel='stylesheet';l.href='fuentes.css';(document.head||r).appendChild(l);}
     }else r.style.removeProperty('--t-fd');
     estiloTema.textContent=css;
-    if(recordar){try{localStorage.setItem('a52_tema',id);}catch(e){}}
+    if(document.body){try{window.MarcaAplicar(document);}catch(e){}}   // los iconos del tema, en lo que ya está pintado
+    if(recordar){try{localStorage.setItem(LSK('tema'),id);}catch(e){}}
     if(typeof window.alCambiarTema==='function'){try{window.alCambiarTema(id);}catch(e){}}
   };
   // Se aplica de una vez (antes de pintar la página): primero el último tema visto en este equipo, si no el de negocio.js
   (function(){
     var r=document.documentElement,porDefecto=TEMAS[N.tema]?N.tema:'espacial',visto=null;
-    try{visto=localStorage.getItem('a52_tema');}catch(e){}
-    r.style.setProperty('--m-emoji',JSON.stringify(N.emoji));r.style.setProperty('--m-emoji2',JSON.stringify(N.emoji2));
+    try{visto=localStorage.getItem(LSK('tema'));}catch(e){}
     window.MarcaTema(TEMAS[visto]?visto:porDefecto,false);
     // …y se confirma con el que el administrador dejó guardado en la base (lectura pública, sin identificar a nadie)
     try{
@@ -93,7 +110,7 @@
         fetch(N.firebase.databaseURL+'/config/tema.json').then(function(x){return x.ok?x.json():undefined;}).then(function(t){
           if(t===undefined)return;
           var debe=(typeof t==='string'&&TEMAS[t])?t:porDefecto;
-          if(debe!==temaActual)window.MarcaTema(debe,true);else{try{localStorage.setItem('a52_tema',debe);}catch(e){}}
+          if(debe!==temaActual)window.MarcaTema(debe,true);else{try{localStorage.setItem(LSK('tema'),debe);}catch(e){}}
         }).catch(function(){});
     }catch(e){}
     try{titulo();}catch(e){}
@@ -173,7 +190,7 @@ function A52Espera(u){
   var cod=a52Codigo(u.uid),enviada=false;
   function pedir(){
     if(!o.isConnected)return;
-    var guardado='';try{guardado=localStorage.getItem('a52_nombreEquipo')||'';}catch(e){}
+    var guardado='';try{guardado=localStorage.getItem(LSK('nombreEquipo'))||'';}catch(e){}
     o.innerHTML='<form id="a52-ef" style="'+caja+'"><div style="font-size:34px">🔐</div>'
       +'<div style="font-weight:800;font-size:17px;margin:6px 0 4px">Este equipo necesita aprobación</div>'
       +'<div style="'+gris+';margin-bottom:14px">Escriba un nombre para reconocerlo y un administrador lo aprueba desde su pantalla. Se hace una sola vez.</div>'
@@ -185,7 +202,7 @@ function A52Espera(u){
       var n=document.getElementById('a52-en').value.trim().slice(0,40),err=document.getElementById('a52-ee'),b=document.getElementById('a52-eb');
       if(n.length<2){err.textContent='Escriba un nombre para el equipo.';return false;}
       b.disabled=true;b.textContent='Enviando...';
-      try{localStorage.setItem('a52_nombreEquipo',n);}catch(e){}
+      try{localStorage.setItem(LSK('nombreEquipo'),n);}catch(e){}
       db.ref('solicitudes/'+u.uid).set({nombre:n,ts:Date.now(),tipo:a52TipoEquipo()}).then(function(){enviada=true;esperando(n);},
         function(){err.textContent='No se pudo enviar. Revise el internet.';b.disabled=false;b.textContent='Pedir aprobación';});
       return false;

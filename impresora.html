@@ -69,8 +69,8 @@ input[type=checkbox]{width:18px;height:18px;accent-color:#c4973a}
 
 <div id="area-print"></div>
 
-<script src="negocio.js"></script>
-<script src="comun.js"></script>
+<script src="negocio.js?v=2026-10-05h"></script>
+<script src="comun.js?v=2026-10-05h"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -106,7 +106,7 @@ function ticketHTML(t){
     +'<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>TOTAL</span><span>'+fmt(t.total)+'</span></div>'
     +(pagos?'<div style="border-top:1px dashed #000;margin:6px 0"></div>'+pagos:'')
     +(pre?'<div style="text-align:center;margin-top:10px;font-size:10px;color:#555">** No es comprobante de pago **</div>'
-        :'<div style="text-align:center;margin-top:10px;font-size:11px">¡Gracias por tu visita!</div><div style="text-align:center;font-size:18px">👽</div>')
+        :'<div style="text-align:center;margin-top:10px;font-size:11px">¡Gracias por tu visita!</div><div style="text-align:center;font-size:18px">'+NEGOCIO.emoji2+'</div>')
     +'</div>';
 }
 

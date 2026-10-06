@@ -103,15 +103,15 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
 <div class="main">
   <div class="main-header">TARJETAS GENERADAS</div>
   <div class="grid" id="grid">
-    <div class="empty"><div class="icon">🛸</div><p>1. Carga las mesas del POS (o agrega zonas)<br>2. Toca «Generar todas»</p></div>
+    <div class="empty"><div class="icon" data-m="emoji"></div><p>1. Carga las mesas del POS (o agrega zonas)<br>2. Toca «Generar todas»</p></div>
   </div>
 </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="negocio.js"></script>
-<script src="comun.js"></script>
+<script src="negocio.js?v=2026-10-05h"></script>
+<script src="comun.js?v=2026-10-05h"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -321,7 +321,7 @@ function generateAll(){
   var mesas=getMesas();
   if(!mesas.length){alert('No hay mesas para generar. Carga del POS o agrega zonas.');return;}
   var grid=document.getElementById('grid');
-  grid.innerHTML='<div class="empty"><div class="icon">🛸</div><p>Generando...</p></div>';
+  grid.innerHTML='<div class="empty"><div class="icon">'+NEGOCIO.emoji+'</div><p>Generando...</p></div>';
   // Esperar a que las fuentes (Orbitron) estén cargadas para medir bien el texto
   var fontsReady = (document.fonts&&document.fonts.ready)?document.fonts.ready:Promise.resolve();
   // Forzar la carga de las fuentes que usamos

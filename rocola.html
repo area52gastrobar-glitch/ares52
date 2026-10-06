@@ -67,7 +67,7 @@ select.inp{color:var(--tinta)}select.inp option{background:var(--t-b1);color:#ff
     <input class="inp" id="busqueda" placeholder="Ej: Bad Bunny Tití me preguntó" maxlength="90" onkeydown="if(event.key==='Enter')buscar()">
     <div class="label">🎸 Género <span style="color:#ff3b5c;font-weight:700">(obligatorio)</span></div>
     <select class="inp" id="genero">
-      <option value="" selected>👽 Elige el género…</option>
+      <option value="" selected>🎵 Elige el género…</option>
       <option value="Reggaetón">🔥 Reggaetón / Urbano</option>
       <option value="Salsa">💃 Salsa</option>
       <option value="Vallenato">🪗 Vallenato</option>
@@ -101,8 +101,8 @@ select.inp{color:var(--tinta)}select.inp option{background:var(--t-b1);color:#ff
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="negocio.js"></script>
-<script src="comun.js"></script>
+<script src="negocio.js?v=2026-10-05h"></script>
+<script src="comun.js?v=2026-10-05h"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -112,10 +112,10 @@ firebase.initializeApp(firebaseConfig);
 try{firebase.auth();}catch(e){}   // si este navegador es de un equipo autorizado, la base lo reconoce (modo staff)
 var db=firebase.database();
 // Mesa desde la que piden (viene en el QR de la mesa) y nombre recordado en este celular
-var MESA=(function(){var m=(location.search.match(/[?&]mesa=([^&#]+)/)||[])[1];try{if(m)sessionStorage.setItem('a52_mesa',decodeURIComponent(m));return sessionStorage.getItem('a52_mesa')||'';}catch(e){return m?decodeURIComponent(m):'';}})().replace(/[^0-9A-Za-z -]/g,'').slice(0,6);
+var MESA=(function(){var m=(location.search.match(/[?&]mesa=([^&#]+)/)||[])[1];try{if(m)sessionStorage.setItem(LSK('mesa'),decodeURIComponent(m));return sessionStorage.getItem(LSK('mesa'))||'';}catch(e){return m?decodeURIComponent(m):'';}})().replace(/[^0-9A-Za-z -]/g,'').slice(0,6);
 document.addEventListener('DOMContentLoaded',function(){
   var t=document.getElementById('mesaTxt');if(t&&MESA)t.textContent=' · Mesa '+MESA;
-  try{var n=localStorage.getItem('a52_nombreCliente');var i=document.getElementById('nombre');if(n&&i&&!i.value)i.value=n;}catch(e){}
+  try{var n=localStorage.getItem(LSK('nombreCliente'));var i=document.getElementById('nombre');if(n&&i&&!i.value)i.value=n;}catch(e){}
 });
 var STAFF_PIN=String(NEGOCIO.rocolaPinStaff||"");
 var staffMode=false, pedidos=[], historial=[], YT_KEY='';
@@ -241,7 +241,7 @@ function pedir(videoId,tituloEnc,canalEnc){
   var titulo=decodeURIComponent(tituloEnc), canal=decodeURIComponent(canalEnc);
   var pedido={cancion:titulo,artista:canal,genero:genero,nombre:nombre,videoId:videoId,ts:Date.now(),played:false};
   if(MESA)pedido.mesa=MESA;
-  try{localStorage.setItem('a52_nombreCliente',nombre);}catch(e){}
+  try{localStorage.setItem(LSK('nombreCliente'),nombre);}catch(e){}
   db.ref('musica').push(pedido).then(function(){
     localStorage.setItem('a52_ultPedido',Date.now());
     document.getElementById('busqueda').value='';

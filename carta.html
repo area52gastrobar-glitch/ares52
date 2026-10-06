@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Carta · {nombre}</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet"/>
-<script src="negocio.js"></script>
-<script src="comun.js"></script>
+<script src="negocio.js?v=2026-10-05h"></script>
+<script src="comun.js?v=2026-10-05h"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -370,7 +370,7 @@ body.cliente-mode #doc{
     </div>
     <div class="opt-group" style="flex:2">
       <label>Frase portada</label>
-      <input type="text" id="cfg-tagline" value="Craft Beer · Coctelería · Gastronomía" oninput="regenerar()" style="width:100%"/>
+      <input type="text" id="cfg-tagline" value="" oninput="regenerar()" style="width:100%"/>
     </div>
   </div>
   <div id="status">⏳ Cargando carta...</div>
@@ -484,6 +484,9 @@ function imprimirSinFondo(){aplicarFondo(false);toggleFondo();imprimirModo();}
 firebase.initializeApp(NEGOCIO.firebase);
 var db=firebase.database();
 var menuData=[];
+var fotosData={};   // fotos de los productos (las sube el negocio desde el POS)
+function fotoDe(id){var f=fotosData['p'+id];return(typeof f==='string'&&f.indexOf('data:image/')===0)?f:'';}
+function verFoto(src){var o=document.createElement('div');o.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:18px;cursor:zoom-out';o.onclick=function(){o.remove();};var i=document.createElement('img');i.src=src;i.style.cssText='max-width:100%;max-height:100%;border-radius:14px';o.appendChild(i);document.body.appendChild(o);}
 var combosData=[];
 var promosData=[];
 var DIAS_CORT=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -525,6 +528,7 @@ function recargar(){
   };
   var _deMenu=function(){db.ref("menu").once("value",function(s2){_usa(s2.val());},function(e){document.getElementById("status").textContent="Sin carta.";});};
   db.ref("cartaPublica").on("value",function(snap){var v=snap.val();if(v)_usa(v);else _deMenu();},_deMenu);
+  db.ref("config/fotos").on("value",function(snap){fotosData=snap.val()||{};if(menuData.length)regenerar();},function(){});
   db.ref("combos").on("value",function(snap){var v=snap.val();combosData=v?Object.values(v).filter(function(c){return c&&c.nombre;}):[];if(menuData.length)regenerar();});
   db.ref("promos").on("value",function(snap){var v=snap.val();promosData=v?(Array.isArray(v)?v:Object.values(v)).filter(function(p){return p&&p.on!==false;}):[];if(menuData.length)regenerar();});
 }
@@ -560,7 +564,7 @@ function regenerar(){
         +'</div>';
       }).join(''):'';
       return'<div class="menu-item">'
-        +'<span class="item-emoji">'+(p.emoji||"·")+"</span>"
+        +'<span class="item-emoji">'+(fotoDe(p.id)?'<img src="'+fotoDe(p.id)+'" alt="" onclick="verFoto(this.src)" style="width:56px;height:56px;border-radius:10px;object-fit:cover;display:block;cursor:zoom-in">':(p.emoji||"·"))+"</span>"
         +'<div style="flex:1;min-width:0">'
         +'<span class="item-name">'+esc(p.nombre)+"</span>"
         +(p.descripcion?'<div style="font-size:14px;color:#bbb;font-style:italic;margin-top:3px;line-height:1.4">'+esc(p.descripcion)+'</div>':'')
@@ -721,6 +725,7 @@ function regenerar(){
   aplicarFondo(_fondoActivo);
 }
 
+document.getElementById('cfg-tagline').value=NEGOCIO.lema||'';
 recargar();
 </script>
 </body>
