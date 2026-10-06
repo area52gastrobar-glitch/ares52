@@ -12,15 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="POS"/>
 <link rel="apple-touch-icon" href="marca-icono.png"/>
 <link rel="icon" type="image/png" href="marca-icono.png"/>
-<script src="negocio.js?v=2026-10-05h"></script>
-<script src="comun.js?v=2026-10-05h"></script>
+<script src="negocio.js?v=2026-10-05k"></script>
+<script src="comun.js?v=2026-10-05k"></script>
 <script>
 // ═══ Auto-detección de versiones nuevas (por CONTENIDO, no por ETag) ═══
 // El ETag de GitHub Pages cambia entre nodos del CDN aunque el archivo sea el
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-10-05h';
+var APP_BUILD='2026-10-05k';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -732,6 +732,7 @@ function iniciarSync(){
   }
   var dot=document.getElementById('sync-dot');
   if(dot){dot.style.background='#22c55e';dot.title='Conectado a Firebase';}
+  a52ConIniciar();
   fbOn('pedidos',function(v){
     pedidos=v||{};
     Object.keys(pedidos).forEach(function(k){if(!Array.isArray(pedidos[k]))pedidos[k]=Object.values(pedidos[k]||{});});
@@ -1323,6 +1324,85 @@ function a52FotoGuardar(id){
   if(v)a52Fotos['p'+id]=v;else delete a52Fotos['p'+id];
   var r=ref('config/fotos/p'+id);if(r){if(v)r.set(v).catch(function(){alert('La foto no se pudo guardar en la base.');});else r.remove().catch(function(){});}
 }
+
+/* ═══ 📶 CONEXIÓN ═══ avisa cuando el equipo se queda sin internet, cuenta lo que falta por enviar
+   y no deja trabajar a ciegas un equipo que abrió la página sin haber cargado los datos. */
+var a52Con={on:null,vio:false,aviso:false,pend:0,fallos:0,volvio:0,reloj:null,listo:false,seguir:false};
+function a52ConCuenta(r){
+  if(!r||typeof r.then!=='function')return;
+  a52Con.pend++;a52ConPintar();
+  r.then(function(){a52Con.pend=Math.max(0,a52Con.pend-1);a52ConPintar();},
+         function(){a52Con.pend=Math.max(0,a52Con.pend-1);a52Con.fallos++;a52ConPintar();});
+}
+function a52ConIniciar(){
+  var d=getDb();if(!d||a52Con.listo)return;a52Con.listo=true;
+  try{
+    var P=Object.getPrototypeOf(d.ref());
+    ['set','update','remove','transaction','push'].forEach(function(m){
+      var f=P[m];if(typeof f!=='function'||f._a52)return;
+      P[m]=function(){var r=f.apply(this,arguments);if(m!=='push'||(arguments.length&&arguments[0]!==undefined))a52ConCuenta(r);return r;};
+      P[m]._a52=true;
+    });
+  }catch(e){console.warn('conexión: no se pudo contar lo pendiente',e);}
+  function espera(ms){clearTimeout(a52Con.reloj);a52Con.reloj=setTimeout(function(){if(a52Con.on!==true){a52Con.aviso=true;a52ConPintar();}},ms);}
+  espera(8000);   // al abrir: margen para conectarse
+  d.ref('.info/connected').on('value',function(s){
+    if(s.val()===true){
+      clearTimeout(a52Con.reloj);
+      if(a52Con.aviso)a52Con.volvio=Date.now();
+      a52Con.on=true;a52Con.vio=true;a52Con.aviso=false;a52ConPintar();
+    }else{
+      a52Con.on=false;
+      if(a52Con.vio&&!a52Con.aviso)espera(4000);   // cortes de un instante no molestan
+    }
+  });
+  window.addEventListener('beforeunload',function(ev){
+    if(a52Con.on===false&&a52Con.pend>0){ev.preventDefault();ev.returnValue='Hay cambios sin enviar';return ev.returnValue;}
+  });
+}
+function a52ConPintar(){
+  var dot=document.getElementById('sync-dot'),lab=dot&&dot.nextElementSibling,sin=a52Con.aviso&&a52Con.on!==true;
+  if(dot){dot.style.background=sin?'#ef4444':'#22c55e';dot.title=sin?'Sin conexión':'Conectado';}
+  if(lab&&lab.tagName==='SPAN'){lab.textContent=sin?'Sin conexión':'En vivo';lab.style.color=sin?'#ef4444':'';lab.style.fontWeight=sin?'800':'';}
+  var n=a52Con.pend,txtN=n?(' · <b>'+n+(n===1?' cambio':' cambios')+' por enviar</b>'):'';
+  // 1) Abrió la página y nunca ha conectado: no hay datos cargados, no se debe trabajar
+  var tapa=document.getElementById('a52-con-tapa');
+  if(sin&&!a52Con.vio&&!a52Con.seguir){
+    if(!tapa){
+      tapa=document.createElement('div');tapa.id='a52-con-tapa';
+      tapa.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:99980;background:rgba(7,7,14,.94);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
+      tapa.innerHTML='<div style="width:100%;max-width:360px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;color:var(--text);text-align:center">'
+        +'<div style="font-size:34px">📡</div><div style="font-weight:800;font-size:17px;margin:6px 0">Sin internet</div>'
+        +'<div style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:14px">Este equipo todavía no ha podido cargar los datos del negocio. Revise el wifi o los datos del celular. La pantalla se abre sola cuando vuelva la conexión.</div>'
+        +'<button class="btn btn-green btn-full" onclick="location.reload()">Reintentar</button>'
+        +'<div style="margin-top:12px"><a href="#" onclick="a52Con.seguir=true;a52ConPintar();return false" style="color:var(--muted);font-size:11px">Seguir sin conexión (no recomendado: lo que anote puede no guardarse)</a></div></div>';
+      document.body.appendChild(tapa);
+    }
+  }else if(tapa){tapa.remove();}
+  // 2) Barra de aviso
+  var b=document.getElementById('a52-con'),html='',fondo='';
+  if(sin&&a52Con.vio){fondo='#f5a623';html='📡 <b>Sin conexión.</b> Lo que anote queda en este equipo y se envía solo cuando vuelva el internet. No cierre ni recargue esta página'+txtN+'.';}
+  else if(sin&&a52Con.seguir){fondo='#f5a623';html='📡 <b>Sin conexión y sin datos cargados.</b> Lo que anote puede no guardarse'+txtN+'.';}
+  else if(a52Con.on===true&&a52Con.volvio){
+    if(n>0){fondo='#38bdf8';html='🔄 <b>Volvió la conexión.</b> Enviando '+n+(n===1?' cambio':' cambios')+'…';}
+    else if(Date.now()-a52Con.volvio<6000||!a52Con.cerrando){
+      fondo='#22c55e';html='✅ <b>Volvió la conexión.</b> Todo quedó guardado.';
+      if(!a52Con.cerrando){a52Con.cerrando=setTimeout(function(){a52Con.volvio=0;a52Con.cerrando=null;a52ConPintar();},5000);}
+    }
+  }
+  if(html){
+    if(!b){b=document.createElement('div');b.id='a52-con';b.style.cssText='position:sticky;top:0;z-index:9990;color:#111;font-size:13px;line-height:1.35;padding:9px 14px;text-align:center';document.body.insertBefore(b,document.body.firstChild);}
+    b.style.background=fondo;b.innerHTML=html;
+  }else if(b){b.remove();}
+  // 3) Un cambio que la base rechazó
+  var f=document.getElementById('a52-con-fallo');
+  if(a52Con.fallos>0){
+    if(!f){f=document.createElement('div');f.id='a52-con-fallo';f.style.cssText='position:sticky;top:0;z-index:9991;background:#ef4444;color:#fff;font-size:13px;line-height:1.35;padding:9px 14px;text-align:center';document.body.insertBefore(f,document.body.firstChild);}
+    f.innerHTML='⚠️ <b>'+(a52Con.fallos===1?'Un cambio no se guardó':a52Con.fallos+' cambios no se guardaron')+'.</b> Revise lo último que anotó y vuelva a registrarlo. <a href="#" onclick="a52Con.fallos=0;a52ConPintar();return false" style="color:#fff;font-weight:800;margin-left:8px">Entendido ✕</a>';
+  }else if(f){f.remove();}
+}
+// Arranca apenas hay base, sin esperar al ingreso: así el aviso también sale en la pantalla de claves
+(function a52ConArranque(){var d=null;try{d=getDb();}catch(e){}if(d){a52ConIniciar();return;}setTimeout(a52ConArranque,700);})();
 /* ═══ ⚙️ AJUSTES DEL NEGOCIO ═══
    Lo que cambia de un negocio a otro dentro del POS: zonas, socios, medios de pago y qué módulos usa.
    Orden de mando: lo que el administrador guardó (base: «ajustes») → lo de negocio.js (NEGOCIO.pos) → lo de fábrica. */
@@ -4554,7 +4634,7 @@ function abrirIngresoInventario(){
     alert('Primero crea al menos un proveedor. Pídele al administrador que agregue proveedores en 🏭 Proveedores.');
     return;
   }
-  var hoy=new Date().toISOString().slice(0,10);
+  var hoy=_fechaKey(new Date());
   // Lista de productos (carta + ingredientes)
   var prodOpts='<option value="">— Producto —</option>'
     +'<optgroup label="Carta">'+menu.map(function(m){return'<option value="p:'+m.id+'">'+esc(m.nombre)+'</option>';}).join('')+'</optgroup>'
@@ -4584,7 +4664,7 @@ function guardarIngresoInventario(){
   var provId=(document.getElementById('ing-prov')||{}).value||'';
   var factura=((document.getElementById('ing-factura')||{}).value||'').trim();
   var valorFactura=moneyVal('ing-valor')||0;
-  var fecha=(document.getElementById('ing-fecha')||{}).value||new Date().toISOString().slice(0,10);
+  var fecha=(document.getElementById('ing-fecha')||{}).value||_fechaKey(new Date());
   if(!prodVal){alert('Selecciona el producto.');return;}
   if(cant<=0){alert('La cantidad debe ser mayor a 0.');return;}
   if(!provId){alert('Selecciona el proveedor.');return;}
@@ -5189,7 +5269,7 @@ function renderCarta(){
           +'<option'+(p.und==='lts'?' selected':'')+' value="lts">lts</option>'
           +'</select></div></div>'
       +'</div>'
-      +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
+      +'<label style="display:'+(a52Mod('cubetazos')?'flex':'none')+';align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
         +'<input type="checkbox" id="f-cerveza" '+(p.esCerveza?'checked':'')+' onchange="toggleCubF()"/> '
         +'🍺 Es cerveza — habilitar precio cubetazo</label>'
       +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px">'
@@ -5886,7 +5966,7 @@ function exportarInventarioExcel(){
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = NEGOCIO.archivo+'-Inventario-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.download = NEGOCIO.archivo+'-Inventario-' + _fechaKey(new Date()) + '.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -6574,60 +6654,20 @@ var _SERV_DEF={
   gas:     {emoji:'🔥',label:'Gas',     unidad:'m³', frecuencia:'mensual'},
   internet:{emoji:'🌐',label:'Internet',unidad:'',   frecuencia:'mensual'}
 };
-function _servSeedAgua(){
-  // Históricos de la factura del Acueducto (AC 53 85H-10, bimestral)
-  if(serviciosPublicos.agua&&serviciosPublicos.agua.recibos&&Object.keys(serviciosPublicos.agua.recibos).length)return;
-  serviciosPublicos.agua={
-    diaRecibo:2,diaSuspension:22,frecuencia:'bimestral',cuenta:'11686180 · pago: 12559293910',
-    recibos:{
-      r1:{id:'r1',ts:new Date(2026,1,15).getTime(),periodo:'ENE-FEB 2026',valor:235892,consumo:17},
-      r2:{id:'r2',ts:new Date(2026,3,15).getTime(),periodo:'FEB-ABR 2026',valor:259979,consumo:19},
-      r3:{id:'r3',ts:new Date(2026,5,15).getTime(),periodo:'ABR-JUN 2026',valor:407369,consumo:31},
-      r4:{id:'r4',ts:new Date(2026,8,2).getTime(), periodo:'JUN-AGO 2026',valor:302920,consumo:21,limite:'2026-09-17',suspension:'2026-09-22'}
-    }
-  };
-  fbSet('serviciosPublicos/agua',serviciosPublicos.agua);
+function _servSeed(k){
+  // Recibos de arranque: solo si el negocio los trae en negocio.js (pos.serviciosSemilla)
+  var s=((window.NEGOCIO||{}).pos||{}).serviciosSemilla;if(!s||!s[k])return;
+  if(serviciosPublicos[k]&&serviciosPublicos[k].recibos&&Object.keys(serviciosPublicos[k].recibos).length){
+    if(!serviciosPublicos[k].cuenta&&s[k].cuenta){serviciosPublicos[k].cuenta=s[k].cuenta;fbSet('serviciosPublicos/'+k+'/cuenta',s[k].cuenta);}
+    return;
+  }
+  serviciosPublicos[k]=JSON.parse(JSON.stringify(s[k]));
+  fbSet('serviciosPublicos/'+k,serviciosPublicos[k]);
 }
-function _servSeedGas(){
-  // Factura Vanti (cuenta 62219304, uso comercial) — Jul-Ago 2026
-  if(serviciosPublicos.gas&&serviciosPublicos.gas.recibos&&Object.keys(serviciosPublicos.gas.recibos).length)return;
-  serviciosPublicos.gas={
-    diaRecibo:11,diaSuspension:25,frecuencia:'mensual',factor:0.90529,cuenta:'62219304',
-    recibos:{
-      g1:{id:'g1',ts:new Date(2026,7,11).getTime(),periodo:'JUL-AGO 2026',valor:1149540,consumo:417,limite:'2026-08-24',suspension:'2026-08-25',lecturaIni:15320,lecturaFin:15781}
-    },
-    lecturas:{
-      l1:{id:'l1',ts:new Date(2026,6,7).getTime(),fecha:'2026-07-07',valor:15320,uidNombre:'Vanti (factura)'},
-      l2:{id:'l2',ts:new Date(2026,7,7).getTime(),fecha:'2026-08-07',valor:15781,uidNombre:'Vanti (factura)'}
-    }
-  };
-  fbSet('serviciosPublicos/gas',serviciosPublicos.gas);
-}
-function _servSeedLuz(){
-  // Factura Enel (cliente 2692722-8, comercial) — Oct-Nov 2025
-  if(serviciosPublicos.luz&&serviciosPublicos.luz.recibos&&Object.keys(serviciosPublicos.luz.recibos).length)return;
-  serviciosPublicos.luz={
-    diaRecibo:8,diaSuspension:21,frecuencia:'mensual',factor:1,cuenta:'2692722-8',
-    recibos:{
-      e1:{id:'e1',ts:new Date(2025,10,8).getTime(),periodo:'OCT-NOV 2025',valor:460070,consumo:467,limite:'2025-11-19',suspension:'2025-11-21',lecturaIni:41335,lecturaFin:41802}
-    },
-    lecturas:{
-      k1:{id:'k1',ts:new Date(2025,9,4).getTime(),fecha:'2025-10-04',valor:41335,uidNombre:'Enel (factura)'},
-      k2:{id:'k2',ts:new Date(2025,10,4).getTime(),fecha:'2025-11-04',valor:41802,uidNombre:'Enel (factura)'}
-    }
-  };
-  fbSet('serviciosPublicos/luz',serviciosPublicos.luz);
-}
-function _servSeedCuentas(){
-  // Servicios ya guardados de antes sin número de cuenta: completarlos una sola vez
-  var defs={agua:'11686180 · pago: 12559293910',gas:'62219304',luz:'2692722-8'};
-  Object.keys(defs).forEach(function(k){
-    if(serviciosPublicos[k]&&!serviciosPublicos[k].cuenta){
-      serviciosPublicos[k].cuenta=defs[k];
-      fbSet('serviciosPublicos/'+k+'/cuenta',defs[k]);
-    }
-  });
-}
+function _servSeedAgua(){_servSeed('agua');}
+function _servSeedGas(){_servSeed('gas');}
+function _servSeedLuz(){_servSeed('luz');}
+function _servSeedCuentas(){}
 function abrirServiciosPublicos(){
   _servSeedAgua();
   _servSeedGas();
@@ -6679,7 +6719,7 @@ function abrirServiciosPublicos(){
     +'<div style="background:var(--bg);border-radius:10px;padding:9px 12px;margin-bottom:10px">'
       +'<div style="font-size:11px;font-weight:800;color:#06b6d4;margin-bottom:6px">'+def.emoji+' '+def.label+' · configuración</div>'
       +'<div style="color:var(--muted);font-size:10px;margin-bottom:2px">Cuenta / referencia de pago</div>'
-      +'<input class="inp inp-sm" id="sv-cuenta" value="'+esc(sv.cuenta||'')+'" placeholder="Ej: 62219304" style="margin-bottom:8px"/>'
+      +'<input class="inp inp-sm" id="sv-cuenta" value="'+esc(sv.cuenta||'')+'" placeholder="Ej: número de cuenta o referencia" style="margin-bottom:8px"/>'
       +'<div style="display:flex;gap:8px">'
         +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Día que llega el recibo</div><input class="inp inp-sm" id="sv-dia" type="number" min="1" max="31" value="'+(sv.diaRecibo||'')+'" placeholder="Ej: 2"/></div>'
         +'<div style="flex:1"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">Día de suspensión</div><input class="inp inp-sm" id="sv-susp" type="number" min="1" max="31" value="'+(sv.diaSuspension||'')+'" placeholder="Ej: 22"/></div>'
@@ -6962,7 +7002,7 @@ function exportarGastosExcel(){
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
   a.href=url;
-  a.download=NEGOCIO.archivo+'-Gastos-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download=NEGOCIO.archivo+'-Gastos-'+_fechaKey(new Date())+'.csv';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
@@ -8993,7 +9033,7 @@ function exportarVentasCatExcel(){
     });
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(h2),'Por producto');
-  XLSX.writeFile(wb,NEGOCIO.archivo+'-Ventas-por-categoria-'+new Date().toISOString().slice(0,10)+'.xlsx');
+  XLSX.writeFile(wb,NEGOCIO.archivo+'-Ventas-por-categoria-'+_fechaKey(new Date())+'.xlsx');
   showToast('📥 Resumen por categoría exportado ('+etiqueta+')','#22c55e');
 }
 
@@ -12463,7 +12503,7 @@ function exportarRespaldoCompleto(){
     ds.forEach(function(d){crRows.push([cl.nombre||'',cl.telefono||'',d.valor||d.monto||0,fmtFecha(d.ts),d.nota||d.concepto||'']);});
   });
   hoja('Créditos',crRows);
-  var fecha=new Date().toISOString().slice(0,10);
+  var fecha=_fechaKey(new Date());
   XLSX.writeFile(wb,NEGOCIO.archivo+'-Respaldo-Completo-'+fecha+'.xlsx');
   showToast('💾 Respaldo completo descargado<br><span style="font-size:12px;opacity:.85">Guárdalo en un lugar seguro (Drive, USB...)</span>','#22c55e',5000);
 }
@@ -12581,8 +12621,8 @@ function renderAdmin(){
         +'<div style="text-align:center;font-weight:900;letter-spacing:4px;font-size:'+(ticketConfig.fontSize+6)+'px">'+M('nombreSimple')+'</div>'
         +'<div style="text-align:center;font-size:'+(ticketConfig.fontSize-3)+'px;color:#888">'+MU('tipo')+'</div>'
         +'<hr style="border:1px dashed #ccc"/>'
-        +'<div>🍺 Cerveza Águila ×2</div>'
-        +'<div>🪣 Cubetazo ×1</div>'
+        +'<div>🍺 Cerveza ×2</div>'
+        +'<div>🍔 Hamburguesa ×1</div>'
         +'<hr style="border:1px dashed #ccc"/>'
         +'<div style="text-align:right;font-weight:900;font-size:'+(ticketConfig.fontSize+4)+'px">$85.000</div>'
         +'<div style="background:#000;color:#fff;text-align:center;padding:3px;font-size:'+(ticketConfig.fontSize-1)+'px">💵 Efectivo</div>'
@@ -12654,7 +12694,7 @@ function renderAdmin(){
       +'</button>'
     +'</div>'
     // Precios de cubetazos y promo (editables)
-    +'<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:14px">'
+    +'<div style="'+(a52Mod('cubetazos')?'':'display:none;')+'border-top:1px solid var(--border);margin-top:8px;padding-top:14px">'
       +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">🪣 Precios de cubetazos y promo</div>'
       +'<div style="color:var(--muted);font-size:11px;margin-bottom:12px">Cambia estos precios cuando quieras. Aplican de inmediato a todas las mesas.</div>'
       +'<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:8px">'

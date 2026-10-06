@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Carta · {nombre}</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet"/>
-<script src="negocio.js?v=2026-10-05h"></script>
-<script src="comun.js?v=2026-10-05h"></script>
+<script src="negocio.js?v=2026-10-05k"></script>
+<script src="comun.js?v=2026-10-05k"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -210,8 +210,9 @@ body.cliente-mode #doc{
   font-family:"Rajdhani",sans-serif;font-weight:600;
   font-size:19px;color:var(--white);flex:1;letter-spacing:.3px;
 }
+.menu-item.con-foto{align-items:center;gap:10px}
 .item-dots{
-  flex:1;border-bottom:1px dotted rgba(255,255,255,.15);
+  flex:1 1 8px;border-bottom:1px dotted rgba(255,255,255,.15);
   align-self:baseline;position:relative;top:-3px;min-width:8px;
 }
 .item-price{
@@ -563,9 +564,9 @@ function regenerar(){
             +'<span style="font-family:Orbitron,sans-serif;font-weight:700;font-size:14px;white-space:nowrap;color:'+color+'">'+fmt(v.precio||0)+'</span>':'')
         +'</div>';
       }).join(''):'';
-      return'<div class="menu-item">'
+      return'<div class="menu-item'+(fotoDe(p.id)?' con-foto':'')+'">'
         +'<span class="item-emoji">'+(fotoDe(p.id)?'<img src="'+fotoDe(p.id)+'" alt="" onclick="verFoto(this.src)" style="width:56px;height:56px;border-radius:10px;object-fit:cover;display:block;cursor:zoom-in">':(p.emoji||"·"))+"</span>"
-        +'<div style="flex:1;min-width:0">'
+        +'<div style="flex:0 1 auto;min-width:0">'
         +'<span class="item-name">'+esc(p.nombre)+"</span>"
         +(p.descripcion?'<div style="font-size:14px;color:#bbb;font-style:italic;margin-top:3px;line-height:1.4">'+esc(p.descripcion)+'</div>':'')
         +varsHtml

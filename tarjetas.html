@@ -110,29 +110,28 @@ h2{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="negocio.js?v=2026-10-05h"></script>
-<script src="comun.js?v=2026-10-05h"></script>
+<script src="negocio.js?v=2026-10-05k"></script>
+<script src="comun.js?v=2026-10-05k"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 var ZONE_COLORS=['#a855f7','#38bdf8','#22c55e','#f5a623','#ef4444','#ec4899'];
-var zones=[
-  {id:1,name:'Antejardín',from:1,to:6},
-  {id:2,name:'Piso 1',from:7,to:16},
-  {id:3,name:'Piso 2',from:17,to:26}
-];
-var nextId=4, generatedCards=[];
+var _pz=((window.NEGOCIO||{}).pos||{}).zonas||[{id:'salon',label:'Salón'}],_pm=((window.NEGOCIO||{}).pos||{}).tarjetasMesas||((window.NEGOCIO||{}).pos||{}).mesasIniciales||[];
+var zones=(function(){var n=1;return _pz.map(function(z,i){var c=parseInt(_pm[i])||6,o={id:i+1,name:z.label,from:n,to:n+c-1};n+=c;return o;});})();
+var nextId=zones.length+1, generatedCards=[];
 var mesasPOS=null;
 
-var ZONA_LABELS={'antejardín':'Antejardín','antejardIn':'Antejardín','piso1':'Piso 1','piso2':'Piso 2'};
-var ZONA_ORDER=['antejardín','antejardIn','piso1','piso2'];
-var _fb=null;
+var ZONA_LABELS={},ZONA_ORDER=[];
+function _zonasReg(l){(l||[]).forEach(function(z){if(z&&z.id){ZONA_LABELS[z.id]=z.label||z.id;if(ZONA_ORDER.indexOf(z.id)<0)ZONA_ORDER.push(z.id);}});}
+_zonasReg(_pz);ZONA_LABELS['antejardIn']=ZONA_LABELS['antejardín']||'';if(!ZONA_LABELS['antejardIn'])delete ZONA_LABELS['antejardIn'];
+var _fb=null,_fbListo=false,_fbCola=[];
+function _alEstarListo(f){if(_fbListo)f();else _fbCola.push(f);}
 function initFB(){
   if(_fb)return _fb;
   var cfg=NEGOCIO.firebase;
   firebase.initializeApp(cfg);_fb=firebase.database();
-  A52Candado(_fb,'mesas',function(){});   // 🔐 solo equipos autorizados (o reglas abiertas)
+  A52Candado(_fb,'mesas',function(){_fbListo=true;var c=_fbCola;_fbCola=[];c.forEach(function(f){f();});});   // 🔐 solo equipos autorizados (o reglas abiertas)
   return _fb;
 }
 function cargarMesasPOS(){
@@ -140,7 +139,7 @@ function cargarMesasPOS(){
   est.textContent='🔄 Conectando con el POS...';
   try{
     var db=initFB();
-    db.ref('mesas').once('value').then(function(snap){
+    new Promise(function(r){_alEstarListo(r);}).then(function(){return db.ref('ajustes/zonas').once('value');}).then(function(z){var v=z.val();if(v){ZONA_ORDER=[];_zonasReg(Array.isArray(v)?v:Object.values(v));}},function(){}).then(function(){return db.ref('mesas').once('value');}).then(function(snap){
       var v=snap.val();
       if(!v){est.innerHTML='<span style="color:#ef4444">No se encontraron mesas en el POS.</span>';return;}
       var arr=Array.isArray(v)?v:Object.values(v);
@@ -270,13 +269,13 @@ function makeCardCanvas(mesa){
   // Alien aparte (el emoji mide mal junto al texto)
   ctx.font="50px sans-serif";
   ctx.fillText(NEGOCIO.emoji2, CARD_W/2, 110);
-  // Título "ÁREA 52" sin emoji, se ajusta para que siempre quepa
+  // Título sin emoji, se ajusta para que siempre quepa
   ctx.fillStyle='#c9a0ff';
   fitFont(NEGOCIO.nombre,'900',66,'Orbitron',MAXW);
   ctx.fillText(NEGOCIO.nombre, CARD_W/2, 182);
   ctx.fillStyle='#9a7ac0';
   ctx.font="700 24px 'Orbitron', sans-serif";
-  ctx.fillText('G A S T R O   B A R', CARD_W/2, 222);
+  ctx.fillText(String(NEGOCIO.tipo||'').toUpperCase().split('').join(' '), CARD_W/2, 222);
 
   // Badge de zona
   if(mesa.zone){
