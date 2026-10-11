@@ -15,7 +15,7 @@
         ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 40 && newData.child('nombre').val().length >= 2 && newData.child('ts').isNumber() && (!newData.child('tipo').exists() || (newData.child('tipo').isString() && newData.child('tipo').val().length <= 40))))"
       }
     },
-    "menu": {
+    "cartaPublica": {
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
     },
@@ -35,14 +35,22 @@
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
       "$id": {
-        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['cancion','videoId','ts']) && newData.child('cancion').isString() && newData.child('cancion').val().length <= 200 && newData.child('videoId').isString() && newData.child('videoId').val().length <= 20 && newData.child('ts').isNumber() && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 60)) && (!newData.child('genero').exists() || (newData.child('genero').isString() && newData.child('genero').val().length <= 40)) && (!newData.child('artista').exists() || (newData.child('artista').isString() && newData.child('artista').val().length <= 200)) && newData.child('played').val() === false)"
+        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['cancion','videoId','ts']) && newData.child('cancion').isString() && newData.child('cancion').val().length <= 200 && newData.child('videoId').isString() && newData.child('videoId').val().length <= 20 && newData.child('ts').isNumber() && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 60)) && (!newData.child('genero').exists() || (newData.child('genero').isString() && newData.child('genero').val().length <= 40)) && (!newData.child('artista').exists() || (newData.child('artista').isString() && newData.child('artista').val().length <= 200)) && (!newData.child('mesa').exists() || (newData.child('mesa').isString() && newData.child('mesa').val().length <= 6)) && newData.child('played').val() === false)"
       }
     },
     "historialRocola": {
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
       "$id": {
-        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['cancion','videoId','ts']) && newData.child('cancion').isString() && newData.child('cancion').val().length <= 200 && newData.child('videoId').isString() && newData.child('videoId').val().length <= 20 && newData.child('ts').isNumber() && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 60)) && (!newData.child('genero').exists() || (newData.child('genero').isString() && newData.child('genero').val().length <= 40)) && (!newData.child('artista').exists() || (newData.child('artista').isString() && newData.child('artista').val().length <= 200)))"
+        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['cancion','videoId','ts']) && newData.child('cancion').isString() && newData.child('cancion').val().length <= 200 && newData.child('videoId').isString() && newData.child('videoId').val().length <= 20 && newData.child('ts').isNumber() && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 60)) && (!newData.child('genero').exists() || (newData.child('genero').isString() && newData.child('genero').val().length <= 40)) && (!newData.child('artista').exists() || (newData.child('artista').isString() && newData.child('artista').val().length <= 200)) && (!newData.child('mesa').exists() || (newData.child('mesa').isString() && newData.child('mesa').val().length <= 6)))"
+      }
+    },
+    "llamados": {
+      ".read": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      "$id": {
+        ".read": true,
+        ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || (!data.exists() && newData.hasChildren(['mesa','motivo','ts']) && newData.child('mesa').isString() && newData.child('mesa').val().length <= 6 && newData.child('motivo').isString() && newData.child('motivo').val().length <= 60 && newData.child('ts').isNumber() && newData.child('atendido').val() === false && (!newData.child('nota').exists() || (newData.child('nota').isString() && newData.child('nota').val().length <= 80)) && (!newData.child('nombre').exists() || (newData.child('nombre').isString() && newData.child('nombre').val().length <= 40)) && !newData.child('por').exists())"
       }
     },
     "smsBanco": {

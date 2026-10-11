@@ -12,15 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="POS"/>
 <link rel="apple-touch-icon" href="marca-icono.png"/>
 <link rel="icon" type="image/png" href="marca-icono.png"/>
-<script src="negocio.js?v=2026-10-05k"></script>
-<script src="comun.js?v=2026-10-05k"></script>
+<script src="negocio.js?v=2026-10-10a"></script>
+<script src="comun.js?v=2026-10-10a"></script>
 <script>
 // ═══ Auto-detección de versiones nuevas (por CONTENIDO, no por ETag) ═══
 // El ETag de GitHub Pages cambia entre nodos del CDN aunque el archivo sea el
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-10-05k';
+var APP_BUILD='2026-10-10a';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -1403,6 +1403,72 @@ function a52ConPintar(){
 }
 // Arranca apenas hay base, sin esperar al ingreso: así el aviso también sale en la pantalla de claves
 (function a52ConArranque(){var d=null;try{d=getDb();}catch(e){}if(d){a52ConIniciar();return;}setTimeout(a52ConArranque,700);})();
+/* ═══ 📱 APP PARA ANDROID: avisos con el teléfono bloqueado ═══
+   En el navegador no cambia nada. Dentro de la app (APK) los avisos de administrador salen como notificaciones del teléfono
+   y un servicio de Android mantiene el POS conectado a la base con la pantalla apagada: así llegan las mesas nuevas, los
+   pedidos, los cobros y los pagos aunque el teléfono esté bloqueado. No usa servidores ni servicios de pago. */
+var A52APP=(function(){
+  var C=null,nat=false,listo=false;
+  function ver(){C=window.Capacitor;nat=!!(C&&C.isNativePlatform&&C.isNativePlatform());return nat;}
+  var P=function(n){return ver()&&C.Plugins?C.Plugins[n]:null;};
+  var activa=true,canal=false,reloj=null,fondoOn=false,ultimoTxt='';
+  function id(tag){var h=0,t=String(tag||Date.now()+Math.random());for(var i=0;i<t.length;i++){h=(h*31+t.charCodeAt(i))|0;}return (Math.abs(h)%2000000000)+1;}
+  function crearCanal(){
+    var LN=P('LocalNotifications');if(!LN||canal)return Promise.resolve();
+    canal=true;
+    return LN.createChannel({id:'avisos',name:'Avisos del negocio',description:'Mesas nuevas, pedidos, cobros y pagos',importance:5,visibility:1,vibration:true,lights:true}).catch(function(){canal=false;});
+  }
+  function notificar(titulo,cuerpo,tag){
+    var LN=P('LocalNotifications');if(!LN)return;
+    crearCanal().then(function(){
+      LN.schedule({notifications:[{id:id(tag),title:String(titulo||''),body:String(cuerpo||''),channelId:'avisos',smallIcon:'ic_tracking',iconColor:'#C9A84C'}]}).catch(function(){});
+    });
+  }
+  function instalar(){
+    if(listo||!ver())return;listo=true;
+    // Las notificaciones del navegador no existen dentro de la app: se reemplazan por las del teléfono
+    var permiso='default';try{permiso=localStorage.getItem('_a52_app_perm')||'default';}catch(e){}
+    var N=function(titulo,op){op=op||{};notificar(titulo,op.body,op.tag);};
+    Object.defineProperty(N,'permission',{get:function(){return permiso;}});
+    N.requestPermission=function(){
+      var LN=P('LocalNotifications');if(!LN)return Promise.resolve('denied');
+      return LN.requestPermissions().then(function(r){
+        permiso=r&&r.display==='granted'?'granted':'denied';try{localStorage.setItem('_a52_app_perm',permiso);}catch(e){}
+        if(permiso==='granted')crearCanal();
+        return permiso;
+      }).catch(function(){return 'denied';});
+    };
+    window.Notification=N;
+    var LN0=P('LocalNotifications');
+    if(LN0&&LN0.checkPermissions)LN0.checkPermissions().then(function(r){permiso=r&&r.display==='granted'?'granted':(r&&r.display==='denied'?'denied':'default');}).catch(function(){});
+    var AP=P('App');
+    if(AP&&AP.addListener)AP.addListener('appStateChange',function(s){activa=!!(s&&s.isActive);});
+    reloj=setInterval(fondo,60000);setTimeout(fondo,3000);
+  }
+  // El puente con Android puede llegar un instante después de cargar la página
+  instalar();
+  if(!listo){document.addEventListener('DOMContentLoaded',instalar);window.addEventListener('load',instalar);}
+  // El aviso fijo de Android: mientras esté, el teléfono no duerme el POS. Se renueva cada minuto con el número de mesas.
+  function texto(){
+    try{var n=_mesasOcupadasIds().length;return n===0?'Sin mesas ocupadas':n===1?'1 mesa ocupada':n+' mesas ocupadas';}catch(e){return '';}
+  }
+  function fondo(){
+    var RF=P('RadioFondo');if(!RF)return;
+    var quiere=nat&&_notifOn&&usuarioActivo&&usuarioActivo.rol==='admin';
+    if(!quiere){if(fondoOn){fondoOn=false;RF.detener().catch(function(){});}return;}
+    var t=texto();ultimoTxt=t;
+    RF.iniciar({titulo:(NEGOCIO.nombreSimple||NEGOCIO.nombreCorto||'POS')+' · recibiendo avisos',texto:t}).then(function(){fondoOn=true;}).catch(function(){});
+  }
+  function revisarBateria(){
+    var RF=P('RadioFondo');if(!RF)return;
+    RF.estado().then(function(e){
+      if(e&&!e.sinRestriccion&&confirm('Para que los avisos lleguen con el teléfono bloqueado, Android debe dejar esta app sin ahorro de batería.\n\nToque Aceptar y en la ventana que sale escoja «Permitir».'))RF.bateria().catch(function(){});
+    }).catch(function(){});
+  }
+  var api={oculta:function(){return (typeof document!=='undefined'&&document.hidden)||(nat&&!activa);},fondo:fondo,revisarBateria:revisarBateria,texto:texto};
+  Object.defineProperty(api,'es',{get:function(){return ver();}});
+  return api;
+})();
 /* ═══ ⚙️ AJUSTES DEL NEGOCIO ═══
    Lo que cambia de un negocio a otro dentro del POS: zonas, socios, medios de pago y qué módulos usa.
    Orden de mando: lo que el administrador guardó (base: «ajustes») → lo de negocio.js (NEGOCIO.pos) → lo de fábrica. */
@@ -1582,7 +1648,7 @@ function iniciarVigilanciaRed(){
     });
   }
 }
-function cerrarSesion(){
+function cerrarSesion(){if(A52APP.es)setTimeout(A52APP.fondo,500);
   if(usuarioActivo)registrarSesion('logout',usuarioActivo);
   window._usuarioActivoGlobal=null;
   if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos','equipos','solicitudes','cartaPublica','llamados','ajustes','config/fotos'].forEach(fbOff);
@@ -2386,14 +2452,14 @@ function notifDisponible(){return typeof Notification!=='undefined';}
 function toggleNotifAdmin(){
   if(!notifDisponible()){alert('Este navegador no soporta notificaciones.');return;}
   if(_notifOn){
-    _notifOn=false;
+    _notifOn=false;if(A52APP.es)setTimeout(A52APP.fondo,300);
     try{localStorage.setItem('_a52_notif','0');}catch(e){}
     showToast('🔕 Notificaciones de admin apagadas en este equipo','#6b7280');
     render();return;
   }
   Notification.requestPermission().then(function(perm){
     if(perm==='granted'){
-      _notifOn=true;
+      _notifOn=true;if(A52APP.es){setTimeout(A52APP.fondo,300);A52APP.revisarBateria();}
       try{localStorage.setItem('_a52_notif','1');}catch(e){}
       try{new Notification(NEGOCIO.emoji+' '+NEGOCIO.nombreSimple,{body:'Notificaciones de administrador activas en este equipo.',tag:'a52-test'});}catch(e){}
       showToast('🔔 Notificaciones activas<br><span style="font-size:12px;opacity:.85">Te avisarán de pedidos y cobros con la app minimizada</span>','#22c55e');
@@ -2406,7 +2472,7 @@ function toggleNotifAdmin(){
 function _notifAdmin(titulo,cuerpo,tag){
   if(!_notifOn||!notifDisponible())return;
   if(!usuarioActivo||usuarioActivo.rol!=='admin')return;   // SOLO administrador
-  if(typeof document!=='undefined'&&!document.hidden)return; // con la app visible ya se ve/oye en pantalla
+  if(!A52APP.oculta())return; // con la app visible ya se ve/oye en pantalla
   if(Notification.permission!=='granted')return;
   try{new Notification(titulo,{body:cuerpo,tag:tag||('a52-'+Date.now()),silent:false});}catch(e){}
 }
@@ -2446,7 +2512,7 @@ function _sndChequearPedidos(){
   var ocup=_mesasOcupadasIds();
   if(_sndPrevOcup!==null){
     var nuevas=ocup.filter(function(id){return _sndPrevOcup.indexOf(id)<0;});
-    if(nuevas.length)sonidoMesaNueva();
+    if(nuevas.length){sonidoMesaNueva();var _nOc=ocup.length;nuevas.forEach(function(id){_notifAdmin('🟢 '+_nombreMesaNotif(id)+' abierta','Van '+_nOc+(_nOc===1?' mesa ocupada':' mesas ocupadas'),'a52-mesas');});}if(A52APP.es)A52APP.fondo();
   }
   _sndPrevOcup=ocup;
 }
