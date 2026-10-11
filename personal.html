@@ -12,15 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="POS"/>
 <link rel="apple-touch-icon" href="marca-icono.png"/>
 <link rel="icon" type="image/png" href="marca-icono.png"/>
-<script src="negocio.js?v=2026-10-10a"></script>
-<script src="comun.js?v=2026-10-10a"></script>
+<script src="negocio.js?v=2026-10-10b"></script>
+<script src="comun.js?v=2026-10-10b"></script>
 <script>
 // ═══ Auto-detección de versiones nuevas (por CONTENIDO, no por ETag) ═══
 // El ETag de GitHub Pages cambia entre nodos del CDN aunque el archivo sea el
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-10-10a';
+var APP_BUILD='2026-10-10b';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -1444,6 +1444,38 @@ var A52APP=(function(){
     var AP=P('App');
     if(AP&&AP.addListener)AP.addListener('appStateChange',function(s){activa=!!(s&&s.isActive);});
     reloj=setInterval(fondo,60000);setTimeout(fondo,3000);
+    // Dentro de la app no hay ventanas aparte: los tiquetes, cuadres y reportes que el POS abre en una ventana nueva
+    // se muestran encima del POS, con «Cerrar» para volver. Sin esto el POS se reemplazaba por la hoja y quedaba en negro.
+    var abrirOrig=window.open;
+    window.open=function(url){
+      var u=String(url||'');
+      if(u&&u!=='about:blank'){
+        try{var dest=new URL(u,location.href);if(dest.origin!==location.origin)return abrirOrig.apply(window,arguments);}catch(e){return abrirOrig.apply(window,arguments);}
+        return hoja(null,u);
+      }
+      return hoja('',null);
+    };
+  }
+  function hoja(html,src){
+    var caja=document.createElement('div');
+    caja.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#fff;display:flex;flex-direction:column';
+    var barra=document.createElement('div');
+    barra.style.cssText='display:flex;gap:10px;justify-content:flex-end;padding:10px;padding-top:calc(10px + env(safe-area-inset-top));background:#111;border-bottom:1px solid #333';
+    var cerrar=document.createElement('button');cerrar.textContent='✕ Cerrar';
+    cerrar.style.cssText='font-size:16px;font-weight:700;padding:10px 18px;border-radius:10px;border:0;background:#c9a84c;color:#111';
+    barra.appendChild(cerrar);
+    var marco=document.createElement('iframe');marco.style.cssText='flex:1;border:0;width:100%;background:#fff';
+    caja.appendChild(barra);caja.appendChild(marco);document.body.appendChild(caja);
+    var buf=html||'',pintado=false;
+    function pintar(){pintado=false;if(src)return;try{marco.srcdoc=buf;}catch(e){}}
+    function pedir(){if(!pintado){pintado=true;setTimeout(pintar,0);}}
+    if(src)marco.src=src;
+    var falsa={closed:false,
+      document:{write:function(t){buf+=String(t);pedir();},writeln:function(t){buf+=String(t)+'\n';pedir();},open:function(){buf='';},close:function(){pedir();},title:''},
+      print:function(){},focus:function(){},blur:function(){},addEventListener:function(ev,fn){if(ev==='load')setTimeout(fn,50);},
+      close:function(){falsa.closed=true;caja.remove();}};
+    cerrar.onclick=function(){falsa.close();};
+    return falsa;
   }
   // El puente con Android puede llegar un instante después de cargar la página
   instalar();
