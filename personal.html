@@ -12,15 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="POS"/>
 <link rel="apple-touch-icon" href="marca-icono.png"/>
 <link rel="icon" type="image/png" href="marca-icono.png"/>
-<script src="negocio.js?v=2026-10-10b"></script>
-<script src="comun.js?v=2026-10-10b"></script>
+<script src="negocio.js?v=2026-10-16a"></script>
+<script src="comun.js?v=2026-10-16a"></script>
 <script>
 // ═══ Auto-detección de versiones nuevas (por CONTENIDO, no por ETag) ═══
 // El ETag de GitHub Pages cambia entre nodos del CDN aunque el archivo sea el
 // mismo, lo que causaba avisos falsos en bucle. Ahora se descarga solo el
 // encabezado del archivo publicado y se compara el sello APP_BUILD embebido:
 // el aviso aparece únicamente cuando el archivo publicado ES otro de verdad.
-var APP_BUILD='2026-10-10b';
+var APP_BUILD='2026-10-16a';
 (function(){
   var avisadoBuild=null;
   function leerBuildRemoto(cb){
@@ -309,6 +309,7 @@ select.inp{cursor:pointer}
     <div style="background:var(--card);border:1px solid var(--border);border-radius:99px;padding:5px 12px;display:flex;align-items:center;gap:8px">
       <span id="h-emoji" style="font-size:15px"></span>
       <div><div id="h-nombre" style="font-size:12px;font-weight:700"></div><div id="h-rol" style="font-size:10px;color:var(--muted)"></div></div>
+      <button onclick="toggleNotifAdmin()" id="a52Campana" title="Avisos en este celular" style="background:transparent;border:none;font-size:15px;cursor:pointer;padding:0 4px">🔕</button>
       <button onclick="cerrarSesion()" style="background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;margin-left:2px">Salir</button>
       <button onclick="window.open(MarcaUrl('carta.html'),'_blank')" style="background:#c4973a18;color:#c4973a;border:1px solid #c4973a44;border-radius:7px;font-size:11px;padding:3px 10px;cursor:pointer;font-weight:700;margin-left:6px">📋 Carta</button>
     </div>
@@ -1205,6 +1206,7 @@ function a52LlamadosPintar(){
   var nuevos=pend.filter(function(l){return !_llVistos[l._k];});
   pend.forEach(function(l){_llVistos[l._k]=1;});
   if(nuevos.length){
+    nuevos.forEach(function(l){try{_notifAdmin('🔔 Mesa '+l.mesa+' llama',(l.motivo||'Llama a la mesera')+(l.nota?' · «'+l.nota+'»':''),'a52-ll-'+l._k);}catch(e){}});
     try{var ctx=_sndAudio();if(ctx){[[880,140,0],[880,140,220],[1175,260,440]].forEach(function(n){var t0=ctx.currentTime+n[2]/1000,o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=n[0];g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(0.3,t0+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t0+n[1]/1000);o.connect(g);g.connect(ctx.destination);o.start(t0);o.stop(t0+n[1]/1000+0.05);});}}catch(e){}
     try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}
   }
@@ -1410,7 +1412,21 @@ function a52ConPintar(){
 var A52APP=(function(){
   var C=null,nat=false,listo=false;
   function ver(){C=window.Capacitor;nat=!!(C&&C.isNativePlatform&&C.isNativePlatform());return nat;}
-  var P=function(n){return ver()&&C.Plugins?C.Plugins[n]:null;};
+  // Las funciones del teléfono se piden por el puente de Capacitor; en la página remota Capacitor.Plugins puede no estar
+  function llamar(pl,m,d){
+    if(!ver())return Promise.reject(new Error('sin app'));
+    var o=C.Plugins&&C.Plugins[pl];
+    if(o&&typeof o[m]==='function')return o[m](d||{});
+    if(typeof C.nativePromise==='function')return C.nativePromise(pl,m,d||{});
+    return Promise.reject(new Error('sin '+pl));
+  }
+  var P=function(n){
+    if(!ver())return null;
+    var f=function(m){return function(d){return llamar(n,m,d);};};
+    return {createChannel:f('createChannel'),schedule:f('schedule'),requestPermissions:f('requestPermissions'),checkPermissions:f('checkPermissions'),
+      iniciar:f('iniciar'),detener:f('detener'),estado:f('estado'),bateria:f('bateria'),
+      addListener:function(ev,cb){try{var o=C.Plugins&&C.Plugins[n];if(o&&o.addListener)return o.addListener(ev,cb);}catch(e){}}};
+  };
   var activa=true,canal=false,reloj=null,fondoOn=false,ultimoTxt='';
   function id(tag){var h=0,t=String(tag||Date.now()+Math.random());for(var i=0;i<t.length;i++){h=(h*31+t.charCodeAt(i))|0;}return (Math.abs(h)%2000000000)+1;}
   function crearCanal(){
@@ -1486,7 +1502,7 @@ var A52APP=(function(){
   }
   function fondo(){
     var RF=P('RadioFondo');if(!RF)return;
-    var quiere=nat&&_notifOn&&usuarioActivo&&usuarioActivo.rol==='admin';
+    var quiere=nat&&_notifOn&&!!usuarioActivo;   // cualquier usuario que haya encendido los avisos en su celular
     if(!quiere){if(fondoOn){fondoOn=false;RF.detener().catch(function(){});}return;}
     var t=texto();ultimoTxt=t;
     RF.iniciar({titulo:(NEGOCIO.nombreSimple||NEGOCIO.nombreCorto||'POS')+' · recibiendo avisos',texto:t}).then(function(){fondoOn=true;}).catch(function(){});
@@ -1641,7 +1657,7 @@ function a52PrimerAdmin(){
 }
 // Si una tarjeta nueva falla, Admin sigue abriendo con las demás
 function a52Seguro(f){try{return f();}catch(e){console.warn(e);return'<div class="card" style="color:var(--muted);font-size:12px">Esta sección no cargó. Recargue la página (Ctrl + F5).</div>';}}
-function completarLogin(){
+function completarLogin(){setTimeout(a52CampanaPintar,100);
   registrarSesion('login',usuarioSelLogin);
     usuarioActivo=usuarioSelLogin;
   window._usuarioActivoGlobal=usuarioActivo;
@@ -2481,12 +2497,13 @@ function _mesasOcupadasIds(){
 var _notifOn=false;
 try{_notifOn=localStorage.getItem('_a52_notif')==='1';}catch(e){}
 function notifDisponible(){return typeof Notification!=='undefined';}
+function a52CampanaPintar(){var b=document.getElementById('a52Campana');if(b){b.textContent=_notifOn?'🔔':'🔕';b.title=_notifOn?'Avisos encendidos en este celular (toque para apagar)':'Encender los avisos en este celular';}}
 function toggleNotifAdmin(){
   if(!notifDisponible()){alert('Este navegador no soporta notificaciones.');return;}
   if(_notifOn){
     _notifOn=false;if(A52APP.es)setTimeout(A52APP.fondo,300);
     try{localStorage.setItem('_a52_notif','0');}catch(e){}
-    showToast('🔕 Notificaciones de admin apagadas en este equipo','#6b7280');
+    showToast('🔕 Avisos apagados en este equipo','#6b7280');a52CampanaPintar();
     render();return;
   }
   Notification.requestPermission().then(function(perm){
@@ -2494,7 +2511,7 @@ function toggleNotifAdmin(){
       _notifOn=true;if(A52APP.es){setTimeout(A52APP.fondo,300);A52APP.revisarBateria();}
       try{localStorage.setItem('_a52_notif','1');}catch(e){}
       try{new Notification(NEGOCIO.emoji+' '+NEGOCIO.nombreSimple,{body:'Notificaciones de administrador activas en este equipo.',tag:'a52-test'});}catch(e){}
-      showToast('🔔 Notificaciones activas<br><span style="font-size:12px;opacity:.85">Te avisarán de pedidos y cobros con la app minimizada</span>','#22c55e');
+      a52CampanaPintar();showToast('🔔 Notificaciones activas<br><span style="font-size:12px;opacity:.85">Te avisarán de pedidos y cobros con la app minimizada</span>','#22c55e');
     }else{
       alert('El navegador bloqueó las notificaciones. Revisa los permisos del sitio (candado junto a la dirección) y vuelve a intentar.');
     }
@@ -2503,7 +2520,7 @@ function toggleNotifAdmin(){
 }
 function _notifAdmin(titulo,cuerpo,tag){
   if(!_notifOn||!notifDisponible())return;
-  if(!usuarioActivo||usuarioActivo.rol!=='admin')return;   // SOLO administrador
+  if(!usuarioActivo)return;
   if(!A52APP.oculta())return; // con la app visible ya se ve/oye en pantalla
   if(Notification.permission!=='granted')return;
   try{new Notification(titulo,{body:cuerpo,tag:tag||('a52-'+Date.now()),silent:false});}catch(e){}
