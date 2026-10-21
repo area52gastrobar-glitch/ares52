@@ -1,6 +1,8 @@
 /* comun.js — lo que comparten todas las páginas del sistema.
    1) La marca: todo lo propio del negocio viene de negocio.js (window.NEGOCIO). El programa no nombra a ningún negocio.
    2) Equipos autorizados: la base solo atiende a los equipos que un administrador aprobó. */
+/* Hora de los registros: el reloj del servidor de Firebase (el desfase lo mide el POS al conectar) */
+function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
 (function(){
   var N=window.NEGOCIO=window.NEGOCIO||{};
   function def(k,v){if(N[k]==null||N[k]==='')N[k]=v;}
