@@ -210,7 +210,10 @@ function a52TemaHtml(){
         +(on?'<span style="color:var(--accent);font-weight:800;font-size:12px">En uso</span>':'')+'</button>';
     }).join('')+'</div>';
 }
-window.alCambiarTema=function(){try{TAB_LABELS.mesas=NEGOCIO.emoji+' Mesas';if(usuarioActivo)renderTabs();}catch(e){}};
+var TAB_NOMBRES={};Object.keys(TAB_LABELS).forEach(function(k){TAB_NOMBRES[k]=TAB_LABELS[k].replace(/^\S+\s/,'');});
+function a52TabIconos(){Object.keys(TAB_NOMBRES).forEach(function(k){TAB_LABELS[k]=(window.MarcaIcono?MarcaIcono(k):'')+' '+TAB_NOMBRES[k];});}
+a52TabIconos();
+window.alCambiarTema=function(){try{a52TabIconos();if(usuarioActivo){renderTabs();render();}}catch(e){}};
 function a52Tema(id){
   if(!TEMAS[id])return;
   MarcaTema(id,true);

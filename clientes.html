@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
 <title>{nombre} {tipo}</title>
-<script src="negocio.js?v=2026-10-21a"></script>
-<script src="comun.js?v=2026-10-21a"></script>
+<script src="negocio.js?v=2026-10-21b"></script>
+<script src="comun.js?v=2026-10-21b"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@200;300;400;600&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -465,10 +465,10 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
   <!-- Links -->
   <div class="links">
 
-    <div class="section-label">🍽️ Nuestra carta</div>
+    <div class="section-label"><span data-ic="nuestracarta">🍽️</span> Nuestra carta</div>
 
     <a href="#carta" class="link-btn featured">
-      <div class="link-icon">📋</div>
+      <div class="link-icon" data-ic="carta">📋</div>
       <div class="link-text">
         <span class="link-title">Ver Carta Digital</span>
         <span class="link-desc">Menú completo · Bebidas · Comidas · Precios</span>
@@ -476,7 +476,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
       <span class="link-arrow">›</span>
     </a>
     <a href="#rocola" class="link-btn featured" id="c-l-rocola">
-      <div class="link-icon">🎵</div>
+      <div class="link-icon" data-ic="rocola">🎵</div>
       <div class="link-text">
         <span class="link-title">Rocola · Pide tu canción</span>
         <span class="link-desc">Elige la música que quieres escuchar</span>
@@ -484,7 +484,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
       <span class="link-arrow">›</span>
     </a>
     <a href="#" class="link-btn featured" id="c-l-llamar" data-llamar style="display:none">
-      <div class="link-icon">🔔</div>
+      <div class="link-icon" data-ic="llamar">🔔</div>
       <div class="link-text">
         <span class="link-title">Llamar a la mesera</span>
         <span class="link-desc" id="c-l-llamar-d">Alguien se acerca a tu mesa</span>
@@ -494,7 +494,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 
     <div id="c-extra"></div>
 
-    <div class="section-label" id="c-enc">📍 Encuéntranos</div>
+    <div class="section-label" id="c-enc"><span data-ic="encuentranos">📍</span> Encuéntranos</div>
 
     <a data-m-href="mapaUrl" class="link-btn" target="_blank">
       <div class="link-icon">📍</div>
@@ -651,16 +651,16 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 <div id="cv-carta" class="cv"><iframe title="Carta"></iframe></div>
 <div id="cv-rocola" class="cv"><iframe title="Rocola" allow="autoplay"></iframe></div>
 <nav id="cnav">
-  <a href="#inicio" data-v="inicio"><i>🏠</i><span>Inicio</span></a>
-  <a href="#carta" data-v="carta"><i>📋</i><span>Carta</span></a>
-  <a href="#rocola" data-v="rocola" id="cnav-rocola"><i>🎵</i><span>Rocola</span></a>
-  <a href="#" class="llamar" id="cnav-llamar" data-llamar style="display:none"><i>🔔</i><span>Mesera</span></a>
+  <a href="#inicio" data-v="inicio"><i data-ic="inicio">🏠</i><span>Inicio</span></a>
+  <a href="#carta" data-v="carta"><i data-ic="carta">📋</i><span>Carta</span></a>
+  <a href="#rocola" data-v="rocola" id="cnav-rocola"><i data-ic="rocola">🎵</i><span>Rocola</span></a>
+  <a href="#" class="llamar" id="cnav-llamar" data-llamar style="display:none"><i data-ic="mesera">🔔</i><span>Mesera</span></a>
 </nav>
 
 <!-- Llamar a la mesera (solo cuando se entra con el QR de una mesa) -->
 <div id="cll" class="cll">
   <div class="cll-box">
-    <div class="cll-t">🔔 Llamar a la mesera</div>
+    <div class="cll-t"><span data-ic="llamar">🔔</span> Llamar a la mesera</div>
     <div class="cll-m">MESA <span id="cll-mesa"></span></div>
     <div id="cll-form">
       <div class="cll-chips" id="cll-chips"></div>

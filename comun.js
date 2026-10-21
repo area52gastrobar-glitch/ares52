@@ -36,6 +36,7 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     raiz.querySelectorAll('[data-m-src]').forEach(function(e){var v=N[e.getAttribute('data-m-src')];if(v)e.src=v;else e.style.display='none';});
     raiz.querySelectorAll('[data-m-href]').forEach(function(e){var v=N[e.getAttribute('data-m-href')];if(v)e.href=v;else e.style.display='none';});
     raiz.querySelectorAll('[data-m-si]').forEach(function(e){if(!N[e.getAttribute('data-m-si')])e.style.display='none';});
+    raiz.querySelectorAll('[data-ic]').forEach(function(e){var k=e.getAttribute('data-ic');if(window.MarcaIcono)e.textContent=window.MarcaIcono(k);});
     // Logo pequeño (POS): el dibujo propio del negocio, su imagen o, si no hay, su emoji
     raiz.querySelectorAll('[data-m-logo]').forEach(function(e){
       var d=(e.getAttribute('data-m-logo')||'40x26').split('x'),w=+d[0]||40,h=+d[1]||26;
@@ -89,6 +90,21 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
       pos:{bg:'#120807',panel:'#1a0c0a',card:'#22100d',card2:'#2d1612',border:'#4a2620',accent:'#e8502a',text:'#ffe3c8',muted:'#a8827a',dim:'#3a1e19'},
       v:{p:'232,80,42',p2:'180,35,46',p3:'232,80,42',s:'255,190,60',s2:'255,190,60',c:'255,150,100',c2:'255,150,100',c3:'255,150,100',k:'180,35,46',k2:'180,35,46',o:'255,170,60',o2:'255,200,90',b0:'18,8,7',b1:'26,12,10',b2:'45,22,18',tx:'255,227,200',mu:'168,130,122',l:'255,190,160'}}
   };
+  // Juego de iconos de la interfaz (pestañas del POS, navegación y tarjetas de los clientes): cada tema trae el suyo
+  var ICONOS_BASE={mesas:'🛸',inventario:'📦',carta:'📋',combos:'🎁',caja:'💰',gastos:'📋',ventas:'📊',rappi:'🛵',socios:'🤝',empleados:'👷',creditos:'📒',saneamiento:'🧼',cocina:'👨‍🍳',admin:'⚙️',
+    inicio:'🏠',rocola:'🎵',llamar:'🔔',mesera:'🙋',nuestracarta:'🍽️',encuentranos:'📍',video:'🎬'};
+  var ICONOS_TEMA={
+    espacial:{mesas:'🛸',carta:'📋',rocola:'🎵',llamar:'🔔',inicio:'🏠',caja:'💰',ventas:'📊',admin:'⚙️',mesera:'👽',nuestracarta:'🍽️',video:'🎬'},
+    pub:{mesas:'🍺',carta:'📜',rocola:'🎻',llamar:'🛎️',inicio:'🏡',caja:'🪙',gastos:'🧾',ventas:'📈',admin:'🔧',mesera:'🧑‍🍳',nuestracarta:'🍖',encuentranos:'🗺️',video:'📽️'},
+    discoteca:{mesas:'🪩',carta:'🍸',rocola:'🎧',llamar:'📣',inicio:'✨',caja:'💳',gastos:'🧾',ventas:'📈',admin:'🎛️',mesera:'💃',nuestracarta:'🍹',encuentranos:'📍',video:'🎥'},
+    sobrio:{mesas:'▦',carta:'☰',rocola:'♪',llamar:'◎',inicio:'⌂',caja:'◇',gastos:'▭',ventas:'▲',admin:'⚙',mesera:'◉',nuestracarta:'☰',encuentranos:'➤',video:'▶'},
+    elegante:{mesas:'🍷',carta:'📖',rocola:'🎼',llamar:'🕯️',inicio:'🏛️',caja:'💎',gastos:'🧾',ventas:'📈',admin:'🗝️',mesera:'🥂',nuestracarta:'🍽️',encuentranos:'📍',video:'🎞️'},
+    claro:{mesas:'☕',carta:'📋',rocola:'🎶',llamar:'🔔',inicio:'🏠',caja:'💵',gastos:'🧾',ventas:'📈',admin:'⚙️',mesera:'🥐',nuestracarta:'🥗',encuentranos:'📍',video:'🎬'},
+    negro:{mesas:'■',carta:'≡',rocola:'♫',llamar:'◆',inicio:'⌂',caja:'●',gastos:'▬',ventas:'▲',admin:'⚙',mesera:'◉',nuestracarta:'≡',encuentranos:'➤',video:'▶'},
+    cerveceria:{mesas:'🍻',carta:'🥨',rocola:'🪕',llamar:'🛎️',inicio:'🏠',caja:'🪙',gastos:'🧾',ventas:'📈',admin:'🔧',mesera:'🧑‍🍳',nuestracarta:'🍺',encuentranos:'🗺️',video:'🎬'},
+    cantina:{mesas:'🌶️',carta:'🌮',rocola:'🎸',llamar:'🔔',inicio:'🏠',caja:'💰',gastos:'🧾',ventas:'📈',admin:'⚙️',mesera:'🎺',nuestracarta:'🌮',encuentranos:'📍',video:'🎬'}
+  };
+  window.MarcaIcono=function(k){var j=ICONOS_TEMA[temaActual]||{};return j[k]||ICONOS_BASE[k]||'';};
   // Iconos: los del tema, salvo que el negocio fije los suyos (emojiFijo en negocio.js)
   function emojiDe(i){var T=TEMAS[temaActual]||{},marca=i?(EM2||EM0):EM0;if(N.emojiFijo&&marca)return marca;return(i?T.emoji2:T.emoji)||marca||'🍽️';}
   try{Object.defineProperty(N,'emoji',{get:function(){return emojiDe(0);},configurable:true});Object.defineProperty(N,'emoji2',{get:function(){return emojiDe(1);},configurable:true});}catch(e){}
