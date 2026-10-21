@@ -71,7 +71,23 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     elegante:{nombre:'Elegante',desc:'Negro con dorado champaña y vino',muestra:['#c8a96a','#7a2e3a','#f0ece4','#0c0c0e'],decoracion:false,brillo:false,emoji:'🍷',emoji2:'🥂',
       fuente:{familia:"'Playfair Display'"},
       pos:{bg:'#0c0c0e',panel:'#121214',card:'#19191c',card2:'#212125',border:'#34323a',accent:'#c8a96a',text:'#f0ece4',muted:'#8a857c',dim:'#2d2b31'},
-      v:{p:'200,169,106',p2:'150,120,70',p3:'200,169,106',s:'232,220,196',s2:'232,220,196',c:'200,169,106',c2:'200,169,106',c3:'200,169,106',k:'140,58,70',k2:'140,58,70',o:'200,169,106',o2:'214,190,130',b0:'12,12,14',b1:'19,19,22',b2:'30,29,33',tx:'240,236,228',mu:'150,144,134',l:'222,208,180'}}
+      v:{p:'200,169,106',p2:'150,120,70',p3:'200,169,106',s:'232,220,196',s2:'232,220,196',c:'200,169,106',c2:'200,169,106',c3:'200,169,106',k:'140,58,70',k2:'140,58,70',o:'200,169,106',o2:'214,190,130',b0:'12,12,14',b1:'19,19,22',b2:'30,29,33',tx:'240,236,228',mu:'150,144,134',l:'222,208,180'}},
+    claro:{nombre:'Claro',desc:'Blanco con azul, para locales de día y cafeterías',muestra:['#2563eb','#15181f','#eef1f5','#ffffff'],decoracion:false,brillo:false,claro:true,emoji:'☕',emoji2:'🥐',
+      fuente:{familia:"'Figtree'"},
+      pos:{bg:'#f3f4f7',panel:'#ffffff',card:'#ffffff',card2:'#e9edf3',border:'#cfd5de',accent:'#2563eb',text:'#15181f',muted:'#5b6472',dim:'#dde2e9'},
+      v:{p:'37,99,235',p2:'29,78,216',p3:'37,99,235',s:'22,163,74',s2:'22,163,74',c:'14,116,144',c2:'14,116,144',c3:'14,116,144',k:'190,24,93',k2:'190,24,93',o:'180,120,20',o2:'202,138,4',b0:'243,244,247',b1:'255,255,255',b2:'233,237,243',tx:'21,24,31',mu:'91,100,114',l:'29,78,216'}},
+    negro:{nombre:'Negro',desc:'Negro total con blanco, sin colores',muestra:['#ffffff','#9a9a9a','#1a1a1a','#000000'],decoracion:false,brillo:false,emoji:'🖤',emoji2:'🤍',
+      fuente:{familia:"'Figtree'"},
+      pos:{bg:'#000000',panel:'#0a0a0a',card:'#121212',card2:'#1c1c1c',border:'#2e2e2e',accent:'#ffffff',text:'#f2f2f2',muted:'#8c8c8c',dim:'#262626'},
+      v:{p:'255,255,255',p2:'200,200,200',p3:'255,255,255',s:'220,220,220',s2:'220,220,220',c:'190,190,190',c2:'190,190,190',c3:'190,190,190',k:'255,255,255',k2:'200,200,200',o:'230,230,230',o2:'255,255,255',b0:'0,0,0',b1:'10,10,10',b2:'20,20,20',tx:'242,242,242',mu:'140,140,140',l:'220,220,220'}},
+    cerveceria:{nombre:'Cervecería',desc:'Verde botella y ámbar, como una taberna artesanal',muestra:['#e0a526','#2f7d4f','#f1e9d2','#0b1510'],decoracion:false,brillo:false,emoji:'🍻',emoji2:'🥨',
+      fuente:{familia:"'Abril Fatface'"},
+      pos:{bg:'#0b1510',panel:'#101d16',card:'#15261d',card2:'#1c3126',border:'#2b4a39',accent:'#e0a526',text:'#f1e9d2',muted:'#8fa394',dim:'#24392d'},
+      v:{p:'224,165,38',p2:'184,130,20',p3:'224,165,38',s:'122,184,120',s2:'122,184,120',c:'150,200,170',c2:'150,200,170',c3:'150,200,170',k:'200,90,60',k2:'200,90,60',o:'224,165,38',o2:'240,190,70',b0:'11,21,16',b1:'16,29,22',b2:'28,49,38',tx:'241,233,210',mu:'143,163,148',l:'235,205,140'}},
+    cantina:{nombre:'Cantina',desc:'Rojo vino y naranja sobre negro cálido',muestra:['#e8502a','#b4232e','#ffe3c8','#120807'],decoracion:false,brillo:false,emoji:'🌶️',emoji2:'🎸',
+      fuente:{familia:"'Unbounded'"},
+      pos:{bg:'#120807',panel:'#1a0c0a',card:'#22100d',card2:'#2d1612',border:'#4a2620',accent:'#e8502a',text:'#ffe3c8',muted:'#a8827a',dim:'#3a1e19'},
+      v:{p:'232,80,42',p2:'180,35,46',p3:'232,80,42',s:'255,190,60',s2:'255,190,60',c:'255,150,100',c2:'255,150,100',c3:'255,150,100',k:'180,35,46',k2:'180,35,46',o:'255,170,60',o2:'255,200,90',b0:'18,8,7',b1:'26,12,10',b2:'45,22,18',tx:'255,227,200',mu:'168,130,122',l:'255,190,160'}}
   };
   // Iconos: los del tema, salvo que el negocio fije los suyos (emojiFijo en negocio.js)
   function emojiDe(i){var T=TEMAS[temaActual]||{},marca=i?(EM2||EM0):EM0;if(N.emojiFijo&&marca)return marca;return(i?T.emoji2:T.emoji)||marca||'🍽️';}
@@ -87,10 +103,13 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     Object.keys(c).forEach(function(k){if(c[k])r.style.setProperty('--'+k,c[k]);});   // los colores propios del negocio mandan sobre el tema
     r.classList.toggle('sin-decoracion',T.decoracion===false||N.decoracion===false);
     r.classList.toggle('sin-brillo',T.brillo===false);
+    r.classList.toggle('tema-claro',T.claro===true);
     r.style.setProperty('--m-emoji',JSON.stringify(N.emoji));r.style.setProperty('--m-emoji2',JSON.stringify(N.emoji2));
     if(!estiloTema){estiloTema=document.createElement('style');(document.head||r).appendChild(estiloTema);}
     var css='.sin-decoracion .ovni,.sin-decoracion .wrap::after,.sin-decoracion .footer::before{display:none!important}'
-      +'.sin-brillo *{text-shadow:none!important}.sin-brillo .logo-wrap,.sin-brillo .logo{animation:none!important;box-shadow:0 0 0 2px rgba(var(--t-p-rgb),.7)!important}';
+      +'.sin-brillo *{text-shadow:none!important}.sin-brillo .logo-wrap,.sin-brillo .logo{animation:none!important;box-shadow:0 0 0 2px rgba(var(--t-p-rgb),.7)!important}'
+      // Negro: el acento es blanco, así que lo que va escrito encima se pone en negro
+      +'html[data-tema="negro"] [style*="background:var(--accent)"],html[data-tema="negro"] .btn-accent,html[data-tema="negro"] .tab.active{color:#000!important}';
     if(T.fuente){
       r.style.setProperty('--t-fd',T.fuente.familia);
       css+='.name,.cover-title,.wrap>h1,.top>h1{font-family:'+T.fuente.familia+',Georgia,serif!important;letter-spacing:.02em!important}';
@@ -98,6 +117,7 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     }else r.style.removeProperty('--t-fd');
     estiloTema.textContent=css;
     if(document.body){try{window.MarcaAplicar(document);}catch(e){}}   // los iconos del tema, en lo que ya está pintado
+    try{window.dispatchEvent(new CustomEvent('marca-tema',{detail:{tema:id}}));}catch(e){}
     if(recordar){try{localStorage.setItem(LSK('tema'),id);}catch(e){}}
     if(typeof window.alCambiarTema==='function'){try{window.alCambiarTema(id);}catch(e){}}
   };

@@ -204,8 +204,9 @@ function a52TemaHtml(){
     +Object.keys(TEMAS).map(function(id){
       var T=TEMAS[id],on=id===act;
       return'<button onclick="a52Tema(\''+id+'\')" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:'+(on?'var(--card2)':'var(--bg)')+';border:'+(on?'2px solid var(--accent)':'1px solid var(--border)')+';border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;color:var(--text)">'
+        +'<span style="font-size:26px;flex:none;width:36px;text-align:center" title="Iconos del tema">'+T.emoji+'</span>'
         +'<span style="display:flex;flex:none;border-radius:8px;overflow:hidden;border:1px solid var(--border)">'+T.muestra.map(function(c){return'<i style="display:block;width:18px;height:34px;background:'+c+'"></i>';}).join('')+'</span>'
-        +'<span style="flex:1;min-width:0"><b style="font-size:14px">'+esc(T.nombre)+'</b><br><span style="color:var(--muted);font-size:11px">'+esc(T.desc)+'</span></span>'
+        +'<span style="flex:1;min-width:0"><b style="font-size:14px">'+esc(T.nombre)+'</b> <span style="font-size:13px">'+T.emoji+' '+T.emoji2+'</span><br><span style="color:var(--muted);font-size:11px">'+esc(T.desc)+'</span></span>'
         +(on?'<span style="color:var(--accent);font-weight:800;font-size:12px">En uso</span>':'')+'</button>';
     }).join('')+'</div>';
 }
