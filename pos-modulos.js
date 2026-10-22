@@ -350,7 +350,7 @@ function a52ConPintar(){
 }
 // Arranca apenas hay base, sin esperar al ingreso: así el aviso también sale en la pantalla de claves
 (function a52ConArranque(){var d=null;try{d=getDb();}catch(e){}if(d){a52ConIniciar();return;}setTimeout(a52ConArranque,700);})();
-/* ═══ 📱 APP PARA ANDROID: avisos con el teléfono bloqueado ═══
+/* ═══ 📱 APP PARA ANDROID: avisos con el teléfono bloqueado y voz de pagos ═══
    En el navegador no cambia nada. Dentro de la app (APK) los avisos de administrador salen como notificaciones del teléfono
    y un servicio de Android mantiene el POS conectado a la base con la pantalla apagada: así llegan las mesas nuevas, los
    pedidos, los cobros y los pagos aunque el teléfono esté bloqueado. No usa servidores ni servicios de pago. */
@@ -400,6 +400,16 @@ var A52APP=(function(){
       }).catch(function(){return 'denied';});
     };
     window.Notification=N;
+    // El navegador de la app no trae voz (speechSynthesis): se reemplaza por la voz del teléfono (plugin Voz)
+    if(typeof window.speechSynthesis==='undefined'||!window.speechSynthesis||typeof window.speechSynthesis.speak!=='function'){
+      window.SpeechSynthesisUtterance=function(t){this.text=String(t||'');this.lang='es-CO';this.rate=1;this.volume=1;this.voice=null;};
+      window.speechSynthesis={
+        speak:function(u){var V=P('Voz');if(!V)return;llamar('Voz','hablar',{texto:String(u&&u.text||'')}).catch(function(){});},
+        cancel:function(){llamar('Voz','callar',{}).catch(function(){});},
+        getVoices:function(){return [];},
+        speaking:false,pending:false,paused:false,pause:function(){},resume:function(){},onvoiceschanged:null,addEventListener:function(){},removeEventListener:function(){}
+      };
+    }
     var LN0=P('LocalNotifications');
     if(LN0&&LN0.checkPermissions)LN0.checkPermissions().then(function(r){permiso=r&&r.display==='granted'?'granted':(r&&r.display==='denied'?'denied':'default');}).catch(function(){});
     var AP=P('App');
