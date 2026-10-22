@@ -185,6 +185,7 @@ function eliminarReciboServ(sk,rid){
   abrirServiciosPublicos();
 }
 function renderGastos(){
+  var _fg=gFormGuardar();   // lo que el cajero lleva escrito sobrevive a los repintados (ventas o arqueos de otros equipos)
   var hoy=gastosTurno();
   var totalH=hoy.reduce(function(a,g){return a+g.valor;},0);
 
@@ -240,6 +241,13 @@ function renderGastos(){
         +'<input class="inp money" id="g-valor" type="text" placeholder="0" inputmode="numeric"/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Notas (opcional)</div>'
         +'<input class="inp" id="g-notas" placeholder="Notas adicionales..."/></div>'
+      +'<div id="g-inv-wrap" style="grid-column:1/-1;display:none;background:var(--bg);border:1px solid #38bdf844;border-radius:10px;padding:10px">'
+        +'<div style="color:#38bdf8;font-weight:800;font-size:12px">📦 Ingresar al inventario lo que llegó</div>'
+        +'<div style="color:var(--muted);font-size:10.5px;margin:2px 0 8px">Busca cada producto o insumo y pon cuánto llegó. Se suma al stock al registrar el gasto. Si no es mercancía para vender, déjalo vacío.</div>'
+        +'<input class="inp" id="g-inv-busq" placeholder="🔍 Escribe el producto o insumo..." oninput="gInvBuscar(this.value)" autocomplete="off"/>'
+        +'<div id="g-inv-sug" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px"></div>'
+        +'<div id="g-inv-lineas" style="margin-top:6px"></div>'
+      +'</div>'
     +'</div>'
     +'<button class="btn btn-gold btn-full" onclick="guardarGasto()">💾 Registrar gasto</button>'
     +'</div>';
@@ -264,6 +272,7 @@ function renderGastos(){
             +'<div style="font-size:13px;font-weight:600">'+esc(g.concepto)+'</div>'
             +(function(){var f=FPAGO.find(function(x){return x.id===g.fp;});return f?'<span style="background:'+f.color+'22;color:'+f.color+';border:1px solid '+f.color+'44;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700">'+f.emoji+' '+f.label+'</span> ':'';})()
             +'<div style="color:var(--muted);font-size:11px">'+g.categoria+' · 🕐 '+fmtFechaCorta(g.ts)+' · '+esc(g.uidNombre||g.uid||'')+(g.notas?' · '+esc(g.notas):'')+'</div>'
+            +(g.entradas&&g.entradas.length?'<div style="color:#38bdf8;font-size:10.5px;margin-top:2px">📦 '+g.entradas.map(function(l){return '+'+l.cant+' '+esc(l.nombre);}).join(' · ')+'</div>':'')
           +'</div>'
           +'<span style="color:var(--red);font-weight:700;font-size:13px">'+fmt(g.valor)+'</span>'
           +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="borrarGasto(\''+g.id+'\')" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px">✕</button>':'')
@@ -308,7 +317,14 @@ function renderGastos(){
     ):'')
   +'</div>';
 
+  setTimeout(function(){gFormRestaurar(_fg);},0);
   return arqueoBanner+form+resHoy+resumen+historial;
+}
+var G_FORM_IDS=['g-concepto','g-cat','g-fp','g-valor','g-notas','g-emp','g-prov','g-inv-busq'];
+function gFormGuardar(){var f=null;G_FORM_IDS.forEach(function(id){var e=document.getElementById(id);if(e&&e.value){f=f||{};f[id]=e.value;}});return f;}
+function gFormRestaurar(f){
+  if(f)Object.keys(f).forEach(function(id){var e=document.getElementById(id);if(e&&!e.value)e.value=f[id];});
+  if(f||_gInv.length){toggleGastoExtras();}
 }
 
 function fmtFecha(ts){
@@ -386,6 +402,17 @@ function guardarGasto(){
     var rm=ref('movEmpleados');if(rm)rm.push(mov);else fbSet('movEmpleados',movEmpleados);
     showToast('💸 Gasto enlazado a '+(emp?esc(emp.nombre):'empleado')+'<br><span style="font-size:12px;opacity:.85">Se descuenta de su nómina esta semana</span>','#ef4444');
   }
+  if((categoria==='Mercancía'||categoria==='Insumos')&&_gInv.length){
+    var ent=_gInv.filter(function(l){return (parseInt(l.cant)||0)>0;}).map(function(l){return {t:l.t,id:l.id,nombre:l.nombre,cant:parseInt(l.cant)||0,costo:l.t==='p'?(parseInt(l.costo)||0):0};});
+    if(ent.length){
+      g.entradas=ent;
+      gInvAplicar(ent,concepto,1);
+      var tot=ent.reduce(function(a,l){return a+l.cant;},0);
+      showToast('📦 '+tot+' unidad'+(tot===1?'':'es')+' ingresada'+(tot===1?'':'s')+' al inventario ('+ent.length+' producto'+(ent.length===1?'':'s')+')','#38bdf8');
+    }
+  }
+  _gInv=[];
+  G_FORM_IDS.forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});   // formulario limpio para el siguiente
   fbPush('gastos',g);
   render();
 }
@@ -395,10 +422,71 @@ function toggleGastoExtras(){
   if(we)we.style.display=(cat==='Personal')?'block':'none';
   var wp=document.getElementById('g-prov-wrap');
   if(wp)wp.style.display=(cat==='Mercancía'||cat==='Insumos')?'block':'none';
+  var wi=document.getElementById('g-inv-wrap');
+  if(wi){wi.style.display=(cat==='Mercancía'||cat==='Insumos')?'block':'none';gInvPintar();}
+}
+/* ── 📦 Entrada de inventario desde el gasto (compra) ──
+   Cualquier usuario que registre la compra puede decir qué llegó: queda en el gasto (g.entradas),
+   suma al stock por cambiarStock (kardex con el concepto) y, si pone el costo, promedia el precio de compra. */
+var _gInv=[];
+function gInvBuscar(q){
+  var box=document.getElementById('g-inv-sug');if(!box)return;
+  q=_normTxt(q).trim();
+  if(q.length<2){box.innerHTML='';return;}
+  var ya={};_gInv.forEach(function(l){ya[l.t+l.id]=1;});
+  var r=[];
+  menu.forEach(function(m){if(m.sinStock||m.activo===false)return;if(_normTxt(m.nombre).indexOf(q)>=0&&!ya['p'+m.id])r.push({t:'p',id:m.id,nombre:m.nombre,emoji:m.emoji||'📦',und:m.und||'und'});});
+  ingredientes.forEach(function(i){if(_normTxt(i.nombre).indexOf(q)>=0&&!ya['i'+i.id])r.push({t:'i',id:i.id,nombre:i.nombre,emoji:'🧂',und:i.und||'und'});});
+  box.innerHTML=r.slice(0,8).map(function(x,k){
+    window._gInvSug=r.slice(0,8);
+    return'<button type="button" onclick="gInvAgregar('+k+')" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:99px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">'+x.emoji+' '+esc(x.nombre)+'</button>';
+  }).join('')||'<div style="color:var(--dim);font-size:11px">Nada con ese nombre. Si es un producto nuevo, créelo primero en Inventario.</div>';
+}
+function gInvAgregar(k){
+  var x=(window._gInvSug||[])[k];if(!x)return;
+  _gInv.push({t:x.t,id:x.id,nombre:x.nombre,emoji:x.emoji,und:x.und,cant:1,costo:0});
+  var b=document.getElementById('g-inv-busq');if(b){b.value='';b.focus();}
+  var sg=document.getElementById('g-inv-sug');if(sg)sg.innerHTML='';
+  gInvPintar();
+}
+function gInvQuitar(k){_gInv.splice(k,1);gInvPintar();}
+function gInvCambio(k,campo,v){var l=_gInv[k];if(!l)return;if(campo==='cant')l.cant=parseInt(v)||0;else l.costo=parseInt(String(v).replace(/[^0-9]/g,''),10)||0;}
+function gInvPintar(){
+  var box=document.getElementById('g-inv-lineas');if(!box)return;
+  box.innerHTML=_gInv.map(function(l,k){
+    return'<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--border)">'
+      +'<div style="flex:1;min-width:0;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+l.emoji+' '+esc(l.nombre)+'</div>'
+      +'<input type="number" inputmode="numeric" min="1" value="'+l.cant+'" oninput="gInvCambio('+k+',\'cant\',this.value)" title="Cantidad que llegó" style="width:64px;background:var(--card);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;font-size:13px;text-align:center;font-weight:800"/>'
+      +'<span style="color:var(--muted);font-size:10px">'+esc(l.und)+'</span>'
+      +(l.t==='p'?'<input type="text" inputmode="numeric" placeholder="$ c/u" value="'+(l.costo?moneyFmt(l.costo):'')+'" oninput="this.value=moneyFmt(this.value);gInvCambio('+k+',\'costo\',this.value)" title="Precio de compra por unidad (opcional)" style="width:84px;background:var(--card);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;font-size:12px;text-align:right"/>':'')
+      +'<button type="button" onclick="gInvQuitar('+k+')" style="background:#ef444418;color:#ef4444;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px">✕</button>'
+    +'</div>';
+  }).join('');
+}
+/* Suma al stock lo que llegó; con costo, promedia el precio de compra (igual que «Llegó mercancía») */
+function gInvAplicar(entradas,concepto,signo){
+  signo=signo||1;var tocoMenu=false;
+  (entradas||[]).forEach(function(l){
+    var cant=(parseInt(l.cant)||0)*signo;if(!cant)return;
+    if(l.t==='i'){cambiarStock('i',l.id,cant,(signo>0?'🛒 Compra: ':'↩️ Compra eliminada: ')+concepto);return;}
+    var p=menu.find(function(m){return String(m.id)===String(l.id);});if(!p)return;
+    var motivo=(signo>0?'🛒 Compra: ':'↩️ Compra eliminada: ')+concepto;
+    if(signo>0&&l.costo>0){
+      var stAnt=Math.max(0,parseInt(p.stock)||0),costoAnt=p.costo||0;
+      p.costo=(costoAnt>0&&stAnt>0)?Math.round((stAnt*costoAnt+cant*l.costo)/(stAnt+cant)):l.costo;
+      motivo+=' (a '+fmt(l.costo).replace(/\u00A0/g,' ')+' c/u'+(p.costo!==l.costo?' · costo promedio: '+fmt(p.costo).replace(/\u00A0/g,' '):'')+')';
+      tocoMenu=true;
+    }
+    cambiarStock('p',p.id,cant,motivo);
+  });
+  if(tocoMenu){var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);}
 }
 function toggleGastoEmpleado(){toggleGastoExtras();}
 function borrarGasto(id){
-  if(!confirm('¿Eliminar este gasto?'))return;
+  var gx=gastos.find(function(g){return g.id===id;});
+  var conInv=!!(gx&&gx.entradas&&gx.entradas.length);
+  if(!confirm(conInv?'¿Eliminar este gasto?\n\nTambién se descuenta del inventario lo que ingresó con esta compra.':'¿Eliminar este gasto?'))return;
+  if(conInv)gInvAplicar(gx.entradas,gx.concepto||'',-1);
   gastos=gastos.filter(function(g){return g.id!==id;});
   var go={};gastos.forEach(function(g){go[g.id]=g;});fbSet('gastos',go);render();
 }

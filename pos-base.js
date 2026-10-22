@@ -180,7 +180,8 @@ var _mesesOpen={};  // meses expandidos en historial
 var deudasCredito=[];  // [{id, ts, clienteId, mesa, items, total, pagado, pagos:[{ts,valor,fp}]}]
 var _socioActivo='';  // currently selected socio
 var _socCatFiltro='';  // categoría abierta en el acordeón de socios (vacío = todas cerradas)
-var ventaSinStock=false;  // admin toggle: allow selling without stock
+var ventaSinStock=false;  // admin toggle: allow selling without stock (se guarda en configBar: vale para todos los equipos)
+var otroHabilitado=true;  // admin toggle: botón «✏️ Otro» (producto personalizado) para meseros y cajeros
 var descuentoHabilitado=true;  // admin toggle: permitir el 10% de descuento
 var descuentos={};        // {mesaId: {pct:10, auth:'Nombre'}}
 var _invTab='carta';      // 'carta' or 'ingredientes'
@@ -410,6 +411,9 @@ function iniciarSync(){
   fbOn('mesas',function(v){if(v){mesas=Object.values(v);_mesasDeFabrica=false;a52ZonasArmar();}if(tabActual==='mesas')render();});
   fbOn('configBar',function(v){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
+    if(v&&typeof v.ventaSinStock!=='undefined')ventaSinStock=!!v.ventaSinStock;
+    if(v&&typeof v.otroHabilitado!=='undefined')otroHabilitado=!!v.otroHabilitado;
+    if(usuarioActivo&&(tabActual==='mesas'||tabActual==='admin'||tabActual==='carta'))render();
     if(v&&typeof v.cubeMixPrecio!=='undefined'&&v.cubeMixPrecio)CUBE_MIX_PRECIO=parseInt(v.cubeMixPrecio)||CUBE_MIX_PRECIO;
     if(v&&typeof v.cubeNacPrecio!=='undefined'&&v.cubeNacPrecio)CUBE_NAC_PRECIO=parseInt(v.cubeNacPrecio)||CUBE_NAC_PRECIO;
     if(v&&typeof v.promoNacPrecio!=='undefined'&&v.promoNacPrecio)PROMO_NACIONAL_PRECIO=parseInt(v.promoNacPrecio)||PROMO_NACIONAL_PRECIO;

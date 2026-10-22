@@ -306,6 +306,7 @@ function bindAdminEvents(){
 
 function abrirItemPersonalizado(){
   if(!mesaActiva)return;
+  if(!puedeUsarOtro()){alert('El administrador desactivó el botón «Otro». Pida que agreguen el producto a la carta.');return;}
   modal2(
     '<div style="color:var(--gold);font-weight:900;font-size:16px;margin-bottom:16px">✏️ Agregar producto personalizado</div>'
     +'<div style="color:var(--muted);font-size:12px;margin-bottom:14px">Úsalo para cobrar servicios, productos no listados o cualquier valor a tu criterio.</div>'
@@ -860,8 +861,21 @@ function exportarInventarioExcel(){
 
 function toggleVentaSinStock(){
   ventaSinStock=!ventaSinStock;
+  var r=ref('configBar/ventaSinStock');
+  if(r)r.set(ventaSinStock);
+  else fbSet('configBar',{ventaSinStock:ventaSinStock});
+  showToast(ventaSinStock?'📦 Se puede vender sin stock (el inventario queda en negativo)':'📦 Ya no se vende sin stock',ventaSinStock?'#22c55e':'#ef4444');
   render();
 }
+function toggleOtroHabilitado(){
+  otroHabilitado=!otroHabilitado;
+  var r=ref('configBar/otroHabilitado');
+  if(r)r.set(otroHabilitado);
+  else fbSet('configBar',{otroHabilitado:otroHabilitado});
+  showToast(otroHabilitado?'✏️ Botón «Otro» habilitado para todos':'🔒 Botón «Otro» solo para administradores',otroHabilitado?'#22c55e':'#ef4444');
+  render();
+}
+function puedeUsarOtro(){return otroHabilitado||!!(usuarioActivo&&usuarioActivo.rol==='admin');}
 
 function guardarPreciosCubetazo(){
   var mix=moneyVal('cfg-cubemix')||0;

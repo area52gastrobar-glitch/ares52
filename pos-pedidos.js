@@ -922,7 +922,7 @@ function renderDistribModal(){
   var filas=d.productos.map(function(p){
     var q=d.cantidades[p.id]||0;
     var maxStock=parseInt(p.stock);if(isNaN(maxStock))maxStock=0;
-    var puedeMas=(restante>0)&&(q<maxStock);
+    var puedeMas=(restante>0)&&(ventaSinStock||q<maxStock);
     return'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">'
       +'<span style="font-size:20px">'+p.emoji+'</span>'
       +'<div style="flex:1"><div style="font-size:13px;font-weight:700">'+esc(p.nombre)+'</div>'

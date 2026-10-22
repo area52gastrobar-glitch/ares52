@@ -422,7 +422,7 @@ function renderPanelPedido(){
       +(busqActiva?'<button onclick="limpiarBusqPed()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:800;cursor:pointer">✕</button>':'')
     +'</div>'
     +'<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center" class="mb8">'+pills
-  +'<button onclick="abrirItemPersonalizado()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✏️ Otro</button>'
+  +(puedeUsarOtro()?'<button onclick="abrirItemPersonalizado()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✏️ Otro</button>':'')
   +a52AgotadosBtn()
   +(!a52Mod('cubetazos')?'':'<button onclick="abrirCubetazoMixto()" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo mixto</button>'+'<button onclick="abrirCubetazoNacional()" style="background:#f5a62322;color:#f5a623;border:1px solid #f5a62344;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo nacional</button>'+'<button onclick="abrirCubetazoMitica()" style="background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🪣 Cubetazo Mítica</button>')
   +'</div>'
