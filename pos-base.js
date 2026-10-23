@@ -118,6 +118,7 @@ var prestamosSocios=[];  // préstamos de socios al negocio [{id,ts,socio,tipo:'
 var consumoEmpleados=[];  // [{id,ts,empId,empNombre,prodNombre,cantidad,stockDetalle,uid,uidNombre}] consumo interno del personal (sin valor, solo inventario)
 var proveedores=[];  // [{id, nombre}]
 var ingresosInv=[];  // [{id, ts, fecha, prodId, prodNombre, cantidad, proveedor, factura, uid, uidNombre}]
+var cxp=[];  // 🧾 gastos por pagar (compras a crédito): [{id,ts,concepto,categoria,valor,abonado,pagado,vence,provId,provNombre,entradas,uid,uidNombre}]
 var empleados=[];      // [{id, nombre, cargo, activo, pagoDiario}]
 var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid, largoPlazo, semanaKey}]
 var asistenciaEmp={};  // {empId_YYYY-MM-DD: true} días trabajados
@@ -424,6 +425,7 @@ function iniciarSync(){
   });
   fbOn('proveedores',function(v){proveedores=v?(Array.isArray(v)?v:Object.values(v)):[];if(tabActual==='inventario')render();});
   fbOn('ingresosInv',function(v){ingresosInv=v?(Array.isArray(v)?v:Object.values(v)):[];if(tabActual==='inventario')render();});
+  fbOn('cuentasPorPagar',function(v){cxp=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];if(tabActual==='gastos'||tabActual==='inventario')render();});
   fbOn('formas',function(v){
     formasData={};
     if(v){

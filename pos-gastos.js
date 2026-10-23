@@ -233,10 +233,13 @@ function renderGastos(){
         +proveedores.map(function(pv){return'<option value="'+pv.id+'">'+esc(pv.nombre)+'</option>';}).join('')
         +'</select></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago *</div>'
-        +'<select class="inp" id="g-fp">'
+        +'<select class="inp" id="g-fp" onchange="toggleGastoExtras()">'
         +'<option value="" selected disabled>👆 Elige la forma de pago...</option>'
         +FPV().sort(function(a,b){return (a.id==='efectivo'?-1:b.id==='efectivo'?1:0);}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
+        +'<option value="credito">🧾 A crédito (queda debiendo al proveedor)</option>'
         +'</select></div>'
+      +'<div id="g-vence-wrap" style="display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">📅 Fecha en que hay que pagarla</div>'
+        +'<input class="inp" id="g-vence" type="date"/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
         +'<input class="inp money" id="g-valor" type="text" placeholder="0" inputmode="numeric"/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Notas (opcional)</div>'
@@ -318,9 +321,80 @@ function renderGastos(){
   +'</div>';
 
   setTimeout(function(){gFormRestaurar(_fg);},0);
-  return arqueoBanner+form+resHoy+resumen+historial;
+  return arqueoBanner+form+cxpCard()+resHoy+resumen+historial;
 }
-var G_FORM_IDS=['g-concepto','g-cat','g-fp','g-valor','g-notas','g-emp','g-prov','g-inv-busq'];
+/* ═══ 🧾 GASTOS POR PAGAR (compras a crédito) ═══ */
+function cxpPendientes(){return cxp.filter(function(c){return !c.pagado;}).slice().sort(function(a,b){return String(a.vence||'').localeCompare(String(b.vence||''))||a.ts-b.ts;});}
+function cxpSaldo(c){return Math.max(0,(c.valor||0)-(c.abonado||0));}
+function cxpCard(){
+  var pend=cxpPendientes();
+  var puedePagar=usuarioActivo&&usuarioActivo.rol!=='mesero'&&usuarioActivo.rol!=='cocinero';
+  var pagadas=cxp.filter(function(c){return c.pagado;}).sort(function(a,b){return (b.pagadoTs||0)-(a.pagadoTs||0);}).slice(0,5);
+  if(!pend.length&&!pagadas.length)return'';
+  var hoyK=_fechaKey(new Date()),total=pend.reduce(function(a,c){return a+cxpSaldo(c);},0),vencidas=pend.filter(function(c){return c.vence&&c.vence<hoyK;}).length;
+  var rows=pend.map(function(c){
+    var venc=c.vence&&c.vence<hoyK,hoyV=c.vence===hoyK;
+    return'<div class="gasto-row" style="'+(venc?'background:#ef44440d;border-radius:8px;':'')+'">'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:13px;font-weight:700">🏭 '+esc(c.provNombre||'Proveedor')+' <span style="color:var(--muted);font-weight:600">· '+esc(c.concepto)+'</span></div>'
+        +'<div style="font-size:11px;color:'+(venc?'#ef4444':hoyV?'#f5a623':'var(--muted)')+'">'+(venc?'⚠️ VENCIDA · ':hoyV?'📅 Vence HOY · ':'📅 Vence ')+(c.vence?c.vence.split('-').reverse().join('/'):'sin fecha')+' · registró '+esc(c.uidNombre||'')+((c.abonado||0)>0?' · abonado '+fmt(c.abonado):'')+'</div>'
+        +(c.entradas&&c.entradas.length?'<div style="color:#38bdf8;font-size:10.5px">📦 '+c.entradas.map(function(l){return '+'+l.cant+' '+esc(l.nombre);}).join(' · ')+'</div>':'')
+      +'</div>'
+      +'<span style="color:#f5a623;font-weight:800;font-size:13px">'+fmt(cxpSaldo(c))+'</span>'
+      +(puedePagar?'<button onclick="cxpPagar(\''+c.id+'\')" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:800;cursor:pointer">💵 Pagar</button>':'')
+      +(usuarioActivo&&usuarioActivo.rol==='admin'?'<button onclick="cxpBorrar(\''+c.id+'\')" style="background:#ef444418;color:#ef4444;border:none;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px">✕</button>':'')
+    +'</div>';
+  }).join('');
+  var hist=pagadas.map(function(c){
+    return'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0"><span>✅ '+esc(c.provNombre||'')+' · '+esc(c.concepto)+' · pagada '+(c.pagadoTs?fmtFechaCorta(c.pagadoTs):'')+'</span><span>'+fmt(c.valor||0)+'</span></div>';
+  }).join('');
+  return'<div class="card mb12" style="border:1px solid #f5a62344">'
+    +'<div class="flex-between mb8"><div class="section-title" style="margin-bottom:0">🧾 Gastos por pagar'+(vencidas?' <span style="color:#ef4444;font-size:11px">· '+vencidas+' vencida'+(vencidas>1?'s':'')+'</span>':'')+'</div>'
+    +'<span style="color:#f5a623;font-weight:900;font-size:15px">'+fmt(total)+'</span></div>'
+    +(pend.length?rows:'<div style="color:var(--dim);font-size:12px;text-align:center;padding:8px">Nada pendiente 👌</div>')
+    +(hist?'<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px"><div style="color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.5px;margin-bottom:3px">ÚLTIMAS PAGADAS</div>'+hist+'</div>':'')
+  +'</div>';
+}
+function cxpPagar(id){
+  var c=cxp.find(function(x){return x.id===id;});if(!c||c.pagado)return;
+  var saldo=cxpSaldo(c);
+  var fpOpts=FPV().sort(function(a,b){return (a.id==='efectivo'?-1:b.id==='efectivo'?1:0);}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('');
+  modal2('<div style="font-weight:800;font-size:15px;margin-bottom:4px">💵 Pagar a '+esc(c.provNombre||'proveedor')+'</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-bottom:12px">'+esc(c.concepto)+' · saldo <b style="color:#f5a623">'+fmt(saldo)+'</b></div>'
+    +'<div style="margin-bottom:10px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor que paga hoy (puede ser un abono)</div>'
+      +'<input class="inp money" id="cxp-valor" type="text" inputmode="numeric" value="'+moneyFmt(saldo)+'"/></div>'
+    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Sale de (forma de pago)</div>'
+      +'<select class="inp" id="cxp-fp">'+fpOpts+'</select></div>'
+    +'<div style="display:flex;gap:8px"><button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
+    +'<button class="btn btn-green btn-full" onclick="cxpConfirmarPago(\''+id+'\')">✓ Registrar pago</button></div>');
+}
+function cxpConfirmarPago(id){
+  var c=cxp.find(function(x){return x.id===id;});if(!c||c.pagado)return;
+  var valor=moneyVal('cxp-valor')||0,fp=(document.getElementById('cxp-fp')||{}).value||'efectivo',saldo=cxpSaldo(c);
+  if(valor<=0){alert('Escribe el valor.');return;}
+  if(valor>saldo){alert('El pago no puede ser mayor al saldo ('+fmt(saldo)+').');return;}
+  var g={id:'g'+a52Ahora(),ts:a52Ahora(),concepto:(valor<saldo?'Abono: ':'Pago: ')+c.concepto,categoria:c.categoria||'Mercancía',valor:valor,notas:'Gasto por pagar'+(c.vence?' · vencía '+c.vence.split('-').reverse().join('/'):''),fp:fp,provId:c.provId||'',provNombre:c.provNombre||'',cxpId:c.id,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  fbPush('gastos',g);
+  c.abonado=(c.abonado||0)+valor;
+  if(c.abonado>=(c.valor||0)){c.pagado=true;c.pagadoTs=a52Ahora();c.pagadoPor=usuarioActivo.nombre;}
+  var k=c._fbkey;var o=Object.assign({},c);delete o._fbkey;
+  if(k)fbSet('cuentasPorPagar/'+k,o);
+  closeModal2();
+  showToast((c.pagado?'✅ Factura pagada a ':'💵 Abono a ')+esc(c.provNombre||'proveedor')+'<br><span style="font-size:12px;opacity:.85">'+fmt(valor)+' sale de caja'+(c.pagado?'':' · queda '+fmt(cxpSaldo(c)))+'</span>','#22c55e');
+  render();
+}
+function cxpBorrar(id){
+  var c=cxp.find(function(x){return x.id===id;});if(!c)return;
+  var conInv=!!(c.entradas&&c.entradas.length);
+  if(!confirm('¿Eliminar esta cuenta por pagar?'+(conInv?'\n\nTambién se descuenta del inventario lo que ingresó con esta compra.':'')+((c.abonado||0)>0?'\n\nLos abonos ya registrados quedan como gastos.':'')))return;
+  if(conInv)gInvAplicar(c.entradas,c.concepto||'',-1);
+  if(c._fbkey)fbSet('cuentasPorPagar/'+c._fbkey,null);
+  cxp=cxp.filter(function(x){return x.id!==id;});
+  render();
+}
+/* Lo que un proveedor tiene facturado por compras a crédito (pagadas o no): entra al FACTURADO de 🏭 Proveedores */
+function cxpFacturadoProv(pv){return cxp.filter(function(c){return c.provId===pv.id||(c.provNombre&&c.provNombre===pv.nombre);}).reduce(function(a,c){return a+(c.valor||0);},0);}
+var G_FORM_IDS=['g-concepto','g-cat','g-fp','g-valor','g-notas','g-emp','g-prov','g-inv-busq','g-vence'];
 function gFormGuardar(){var f=null;G_FORM_IDS.forEach(function(id){var e=document.getElementById(id);if(e&&e.value){f=f||{};f[id]=e.value;}});return f;}
 function gFormRestaurar(f){
   if(f)Object.keys(f).forEach(function(id){var e=document.getElementById(id);if(e&&!e.value)e.value=f[id];});
@@ -385,6 +459,21 @@ function guardarGasto(){
   if(!fp){alert('👆 Elige de dónde salió la plata (forma de pago).');return;}
   var empId=(document.getElementById('g-emp')||{}).value||'';
   var provId=(document.getElementById('g-prov')||{}).value||'';
+  if(fp==='credito'){
+    if(categoria!=='Mercancía'&&categoria!=='Insumos'){alert('A crédito solo se registran compras de Mercancía o Insumos.');return;}
+    if(!provId){alert('👆 Elige el proveedor al que le quedas debiendo.');return;}
+    var vence=(document.getElementById('g-vence')||{}).value||'';
+    if(!vence){alert('Pon la fecha en que hay que pagar la factura.');return;}
+    var pvC=proveedores.find(function(p){return p.id===provId;});
+    var c={id:'cxp'+a52Ahora(),ts:a52Ahora(),concepto:concepto,categoria:categoria,valor:valor,abonado:0,pagado:false,vence:vence,notas:notas,provId:provId,provNombre:pvC?pvC.nombre:'',uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+    var entC=_gInv.filter(function(l){return (parseInt(l.cant)||0)>0;}).map(function(l){return {t:l.t,id:l.id,nombre:l.nombre,cant:parseInt(l.cant)||0,costo:l.t==='p'?(parseInt(l.costo)||0):0};});
+    if(entC.length){c.entradas=entC;gInvAplicar(entC,concepto,1);}
+    _gInv=[];
+    G_FORM_IDS.forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    fbPush('cuentasPorPagar',c);
+    showToast('🧾 Queda por pagar '+fmt(valor)+' a '+esc(c.provNombre||'proveedor')+'<br><span style="font-size:12px;opacity:.85">No sale de la caja hasta que se pague · vence '+vence.split('-').reverse().join('/')+(entC.length?' · inventario ingresado':'')+'</span>','#f5a623');
+    render();return;
+  }
   var g={id:'g'+a52Ahora(),ts:a52Ahora(),concepto:concepto,categoria:categoria,valor:valor,notas:notas,fp:fp,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   if((categoria==='Mercancía'||categoria==='Insumos')&&provId){
     var pv=proveedores.find(function(p){return p.id===provId;});
@@ -424,6 +513,10 @@ function toggleGastoExtras(){
   if(wp)wp.style.display=(cat==='Mercancía'||cat==='Insumos')?'block':'none';
   var wi=document.getElementById('g-inv-wrap');
   if(wi){wi.style.display=(cat==='Mercancía'||cat==='Insumos')?'block':'none';gInvPintar();}
+  var fp=(document.getElementById('g-fp')||{}).value||'';
+  var wv=document.getElementById('g-vence-wrap');
+  if(wv){wv.style.display=fp==='credito'?'block':'none';var dv=document.getElementById('g-vence');if(dv&&!dv.value&&fp==='credito'){var d=new Date();d.setDate(d.getDate()+8);dv.value=_fechaKey(d);}}
+  if(fp==='credito'&&wp)wp.style.display='block';
 }
 /* ── 📦 Entrada de inventario desde el gasto (compra) ──
    Cualquier usuario que registre la compra puede decir qué llegó: queda en el gasto (g.entradas),

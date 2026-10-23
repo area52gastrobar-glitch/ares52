@@ -10,7 +10,7 @@ function abrirProveedores(){
     var gs=gastosProv(pv);
     var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
     var ents=ingresosProv(pv);
-    var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+    var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0)+cxpFacturadoProv(pv);
     var saldo=totalFacturado-totalPagado;
     var saldoColor=saldo>0?'#ef4444':(saldo<0?'#f5a623':'#22c55e');
     var saldoLabel=saldo>0?'DEBE':(saldo<0?'A FAVOR':'AL DÍA');
@@ -79,7 +79,7 @@ function confirmarPagoProveedor(provId){
   fbPush('gastos',g);
   // Calcular saldo restante después de este pago
   var pagadoPrev=gastos.filter(function(x){return x.provId===pv.id||(x.provNombre&&x.provNombre===pv.nombre);}).reduce(function(s,x){return s+(x.valor||0);},0);
-  var facturado=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;}).reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+  var facturado=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;}).reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0)+cxpFacturadoProv(pv);
   var saldoRest=facturado-(pagadoPrev+valor);
   var restTxt=saldoRest>0?' · queda debiendo '+fmt(saldoRest):(saldoRest<0?' · quedó a favor '+fmt(-saldoRest):' · ✅ saldado');
   closeModal1();
@@ -92,9 +92,11 @@ function verCuentaProveedor(provId){
   var gs=gastos.filter(function(g){return g.provId===pv.id||(g.provNombre&&g.provNombre===pv.nombre);}).slice().sort(function(a,b){return b.ts-a.ts;});
   var ents=ingresosInv.filter(function(r){return r.proveedor===pv.nombre;}).slice().sort(function(a,b){return b.ts-a.ts;});
   var totalPagado=gs.reduce(function(s,g){return s+(g.valor||0);},0);
-  var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0);
+  var cxpProv=cxp.filter(function(c){return c.provId===pv.id||(c.provNombre&&c.provNombre===pv.nombre);}).slice().sort(function(a,b){return b.ts-a.ts;});
+  var totalFacturado=ents.reduce(function(s,r){return s+(parseInt(r.valorFactura)||0);},0)+cxpProv.reduce(function(a,c){return a+(c.valor||0);},0);
   var saldo=totalFacturado-totalPagado;
   var saldoColor=saldo>0?'#ef4444':(saldo<0?'#f5a623':'#22c55e');
+  var cxpRows=cxpProv.map(function(c){return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>🧾 '+esc(c.concepto)+'<br><span style="color:var(--muted);font-size:10px">'+(c.pagado?'✅ pagada':'vence '+(c.vence||'').split('-').reverse().join('/'))+' · '+fmtFechaCorta(c.ts)+'</span></span><span style="font-weight:700">'+fmt(c.valor||0)+'</span></div>';}).join('');
   var pagosRows=gs.length?gs.map(function(g){
     return'<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)"><span>💵 '+esc(g.concepto)+'<br><span style="color:var(--muted);font-size:10px">'+fmtFechaCorta(g.ts)+' · '+esc(g.categoria)+'</span></span><span style="color:#22c55e;font-weight:700;white-space:nowrap">'+fmt(g.valor)+'</span></div>';
   }).join(''):'<div style="color:var(--muted);font-size:12px;padding:8px 0">Sin pagos registrados.</div>';
@@ -108,6 +110,7 @@ function verCuentaProveedor(provId){
       +'<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center"><div style="color:var(--muted);font-size:9px">FACTURADO</div><div style="color:var(--text);font-weight:800;font-size:14px">'+fmt(totalFacturado)+'</div></div>'
       +'<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center"><div style="color:var(--muted);font-size:9px">PAGADO</div><div style="color:#22c55e;font-weight:800;font-size:14px">'+fmt(totalPagado)+'</div></div>'
     +'</div>'
+    +(cxpRows?'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">🧾 COMPRAS A CRÉDITO</div><div style="max-height:25vh;overflow-y:auto;margin-bottom:12px">'+cxpRows+'</div>':'')
     +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">💵 PAGOS</div>'
     +'<div style="max-height:25vh;overflow-y:auto;margin-bottom:12px">'+pagosRows+'</div>'
     +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px">📦 ENTRADAS DE INVENTARIO</div>'
