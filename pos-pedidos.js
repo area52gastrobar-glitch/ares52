@@ -553,7 +553,14 @@ function ajustarStockItem(item,delta,motivo){
           (Array.isArray(rg.det)?rg.det:Object.values(rg.det)).forEach(function(d){
             cambiarStock('i',d.ingId,Math.round(d.cant*factor)*s,mot+' ('+ri.grupo+': '+d.nombre+' · '+p.nombre+')');
           });
+          return;
         }
+        // ⚠️ Sin reparto (venta vieja o por otra vía): antes no se descontaba nada y el inventario quedaba inflado.
+        // Se descuenta del insumo del grupo con más existencia y queda marcado en el kardex para revisarlo.
+        var cantG=(ri.cantidad||1)*Math.abs(delta)*mult;
+        var delG=ingredientes.filter(function(i){return (i.grupo||'').trim()===ri.grupo;}).sort(function(a,b){return (parseInt(b.stock)||0)-(parseInt(a.stock)||0);})[0];
+        if(delG&&cantG)cambiarStock('i',delG.id,cantG*s,mot+' (⚠️ '+ri.grupo+' sin reparto → '+delG.nombre+' · '+p.nombre+')');
+        else if(cantG)logKardex('i','',ri.grupo,cantG*s,'⚠️ NO DESCONTADO: el grupo «'+ri.grupo+'» no tiene insumos ('+p.nombre+')',null);
         return;
       }
       var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
@@ -654,8 +661,8 @@ function _renderRepartoModal(){
       }).join('')
     +'</div>';
   });
-  html+='<button class="btn btn-green btn-full" '+(completo?'':'disabled style="opacity:.45"')+' onclick="confirmarReparto()">✅ Listo, agregar a la mesa</button>'
-    +'<button class="btn btn-full" onclick="window._repCtx=null;closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>';
+  html+='<button class="btn btn-green btn-full" '+(completo?'':'disabled style="opacity:.45"')+' onclick="confirmarReparto()">'+(window._repRappi?'✅ Listo, agregar al pedido':'✅ Listo, agregar a la mesa')+'</button>'
+    +'<button class="btn btn-full" onclick="window._repCtx=null;window._repRappi=null;closeModal2()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:8px">Cancelar</button>';
   modal2(html);
 }
 function repMas(grupo,ingId){
@@ -689,9 +696,10 @@ function confirmarReparto(){
     txtP.push(det.map(function(d){return d.cant+'× '+d.nombre.replace(base,'');}).join(' · '));
   });
   if(!ok){alert('Completa el reparto exacto.');return;}
-  window._repartoListo={recGrupos:recGrupos,txt:txtP.join(' | ')};
   window._repCtx=null;
   closeModal2();
+  if(window._repRappi){var RR=window._repRappi;window._repRappi=null;agregarRappiItem(RR.pid,RR.vi,{recGrupos:recGrupos,txt:txtP.join(' | ')});return;}
+  window._repartoListo={recGrupos:recGrupos,txt:txtP.join(' | ')};
   agregarItemQty(C.pid,C.cubeta,C.cantidad,C.varianteNombre,C.variantePrecio);
 }
 function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){

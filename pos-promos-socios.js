@@ -676,17 +676,25 @@ function renderRappi(){
   +'</div>';
 }
 
-function agregarRappiItem(pid,vi){
+function agregarRappiItem(pid,vi,recGrupos){
   var p=menu.find(function(m){return Number(m.id)===Number(pid);});
   if(!p)return;
   var vars=p.variantes?(Array.isArray(p.variantes)?p.variantes:Object.values(p.variantes)):[];
   var v=(vi!=null&&vars[vi])?vars[vi]:null;
   var vNom=v?v.nombre:'';
-  var idx=_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid)&&(it.varianteNombre||'')===vNom;});
+  // 🎛 Receta con grupos (sabores de alitas, etc.): se reparte igual que en la mesa; si no, esas alas no se descontaban
+  var gruposRec=(p.receta||[]).filter(function(r){return r.grupo;});
+  if(gruposRec.length&&!recGrupos){
+    window._repRappi={pid:pid,vi:vi};
+    abrirRepartoGrupos(p.id,false,1,vNom||undefined,null);
+    return;
+  }
+  var idx=recGrupos?-1:_rappiPedido.findIndex(function(it){return Number(it.pid)===Number(pid)&&(it.varianteNombre||'')===vNom&&!it.recGrupos;});
   if(idx>=0)_rappiPedido[idx].qty++;
   else _rappiPedido.push({pid:pid,qty:1,valor:(v?(v.precioRappi||v.precio||0):(p.precioRappi||p.precio||0)),
-    nombre:p.nombre+(v?' ('+v.nombre+')':''),
-    varianteNombre:v?v.nombre:undefined,varianteUnd:v?(parseInt(v.und)||1):undefined});
+    nombre:p.nombre+(v?' ('+v.nombre+')':'')+(recGrupos&&recGrupos.txt?' · '+recGrupos.txt:''),
+    varianteNombre:v?v.nombre:undefined,varianteUnd:v?(parseInt(v.und)||1):undefined,
+    recGrupos:recGrupos?recGrupos.recGrupos:undefined});
   render();
 }
 
@@ -730,14 +738,15 @@ function registrarVentaRappi(){
   if(!_rappiPedido.length){alert('Agrega productos al pedido.');return;}
   var total=_rappiPedido.reduce(function(a,it){return a+(it.valor||0)*it.qty;},0);
   if(total<=0){alert('Asigna un valor a los productos.');return;}
-  // Descontar inventario por el motor central: variantes multiplican y las recetas (insumos) corren en cascada
-  _rappiPedido.forEach(function(it){
-    ajustarStockItem({pid:it.pid,qty:1,varianteNombre:it.varianteNombre,varianteUnd:it.varianteUnd},-it.qty,'Venta Rappi');
-  });
-  // Registrar venta Rappi (separada)
   var efectivo=moneyVal(document.getElementById('rap-efectivo'));
   if(efectivo<0)efectivo=0;
   if(efectivo>total){alert('El efectivo recibido ('+fmt(efectivo).replace(/\u00A0/g,' ')+') no puede superar el total de la venta ('+fmt(total).replace(/\u00A0/g,' ')+').');return;}
+  // Descontar inventario por el motor central (solo cuando la venta ya pasó las validaciones; antes se descontaba aunque luego fallara):
+  // variantes multiplican, las recetas (insumos) corren en cascada y el reparto de sabores viaja en el ítem
+  var aPlat=APPS_DOMI[_appPlat]||APPS_DOMI.rappi;
+  _rappiPedido.forEach(function(it){
+    ajustarStockItem({pid:it.pid,qty:1,varianteNombre:it.varianteNombre,varianteUnd:it.varianteUnd,recGrupos:it.recGrupos},-it.qty,'Venta '+aPlat.n);
+  });
   var venta={id:'rap'+a52Ahora(),ts:a52Ahora(),plataforma:_appPlat,
     items:JSON.parse(JSON.stringify(_rappiPedido)),total:total,
     efectivo:efectivo,saldo:total-efectivo,
