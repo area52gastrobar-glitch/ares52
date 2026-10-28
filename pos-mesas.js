@@ -222,13 +222,13 @@ function renderMesas(){
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+cards+'</div>'
       +'</div>';
     }).join('');
-    return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vistaToggle
+    return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vrPendientesHtml()+vistaToggle
       +'<div class="'+(mesaActiva?'grid2':'grid1')+'">'
       +'<div>'+listaHtml+'</div>'
       +panelPedido+'</div>';
   }
 
-  return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vistaToggle+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
+  return '<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">'+ventaRapidaBtn.replace('margin-bottom:10px;','')+sndBtn+'</div>'+vrPendientesHtml()+vistaToggle+'<div class="flex-between mb12" style="flex-wrap:wrap;gap:8px">'
     +alertaBanner
     +'<div class="flex">'+zonaBtns+'</div>'
     +ctrlBtns+'</div>'
@@ -342,7 +342,8 @@ function renderPanelPedido(){
     ?'<div style="background:var(--card2);border-radius:10px;border:1px solid var(--border);padding:10px 12px">'
       +'<div class="flex-between mb8"><span style="color:var(--muted);font-weight:800;font-size:12px">TOTAL</span>'
       +'<span style="color:var(--gold);font-size:20px;font-weight:900">'+fmt(total)+'</span></div>'
-      +'<div style="background:#22c55e18;border:1px solid #22c55e33;border-radius:8px;padding:8px;text-align:center;color:#22c55e;font-size:12px;font-weight:700">✓ Pedido registrado</div></div>'
+      +'<div style="background:#22c55e18;border:1px solid #22c55e33;border-radius:8px;padding:8px;text-align:center;color:#22c55e;font-size:12px;font-weight:700">✓ Pedido registrado</div>'
+      +(mesaActiva.rapida&&ped.length&&vrPuedeCancelar(mesaActiva.id)?'<button class="btn btn-sm btn-full" onclick="cancelarVentaRapida(\''+mesaActiva.id+'\')" style="margin-top:7px;background:#ef444418;color:#ef4444;border:1px solid #ef444433">🗑️ Cancelar esta venta rápida</button>':'')+'</div>'
     :'<div style="background:var(--card2);border-radius:10px;border:1px solid var(--border);padding:10px 12px">'
       +'<div class="flex-between mb8"><span style="color:var(--muted);font-weight:800;font-size:12px">TOTAL</span>'
       +'<span style="color:var(--gold);font-size:22px;font-weight:900">'+fmt(total)+'</span></div>'
@@ -381,6 +382,7 @@ function renderPanelPedido(){
       +'<button class="btn btn-sm btn-full" onclick="abrirNovedadMesa()" style="margin-top:7px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333">📝 Anotar novedad (descuento, se voló, cortesía...)</button>'
       +((usuarioActivo.rol!=='mesero'&&a52Mod('socios'))?'<button class="btn btn-sm btn-full" onclick="abrirSocioAsumeMesa()" style="margin-top:7px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833">🤝 Un socio asume parte de la cuenta</button>':'')
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+' style="margin-top:7px">💳 Cobrar todo</button>'
+      +(mesaActiva.rapida&&ped.length&&vrPuedeCancelar(mesaActiva.id)?'<button class="btn btn-sm btn-full" onclick="cancelarVentaRapida(\''+mesaActiva.id+'\')" style="margin-top:7px;background:#ef444418;color:#ef4444;border:1px solid #ef444433">🗑️ Cancelar esta venta rápida</button>':'')
       +'</div>';
 
   // Build combo items for pedido panel
@@ -776,16 +778,65 @@ function _sndChequearVentas(){
 }
 
 /* ═══ Venta rápida: cliente sin mesa que paga de una (barra / para llevar) ═══ */
-function ventaRapida(){
+function ventaRapida(vid){
   if(!usuarioActivo)return;
-  var vid='vr_'+usuarioActivo.id;
-  mesaActiva={id:vid,num:'',nombre:'⚡ Venta rápida',zona:zonaActual,rapida:true};
+  vid=vid||('vr_'+usuarioActivo.id);
+  var due=usuarios.find(function(x){return 'vr_'+x.id===vid;});
+  var propia=vid==='vr_'+usuarioActivo.id;
+  mesaActiva={id:vid,num:'',nombre:'⚡ Venta rápida'+(!propia&&due?' · '+due.nombre:''),zona:zonaActual,rapida:true};
   catFiltroPed='Todos';_busqPed='';_pedSubAbierta={};
   render();
   setTimeout(function(){
     var pp=document.getElementById('panel-pedido');
     if(pp)pp.scrollIntoView({behavior:'smooth',block:'start'});
   },150);
+}
+
+/* Ventas rápidas a medias (de cualquier usuario): cada una vive en pedidos/vr_<usuario> y antes solo la veía su dueño,
+   así que la de un mesero que se fue quedaba colgada para siempre. Aquí se ven todas, se abren y se cancelan. */
+function vrPuedeCancelar(vid){
+  if(!usuarioActivo)return false;
+  return usuarioActivo.rol==='admin'||usuarioActivo.rol==='subadmin'||usuarioActivo.rol==='cajero'||vid==='vr_'+usuarioActivo.id;
+}
+function vrPendientesHtml(){
+  var lista=Object.keys(pedidos).filter(function(k){return String(k).indexOf('vr_')===0&&(pedidos[k]||[]).length;});
+  if(!lista.length)return '';
+  var esMes=usuarioActivo&&usuarioActivo.rol==='mesero';
+  return '<div class="card mb12" style="border:1px solid #f5a62355;padding:10px 12px">'
+    +'<div style="color:#f5a623;font-weight:800;font-size:12px;margin-bottom:6px">⚡ Ventas rápidas sin cobrar ('+lista.length+')</div>'
+    +lista.map(function(k){
+      var u=usuarios.find(function(x){return 'vr_'+x.id===k;});
+      var ped=pedidos[k]||[],n=ped.reduce(function(a,it){return a+(it.qty||1);},0);
+      var propia=usuarioActivo&&k==='vr_'+usuarioActivo.id;
+      var puedeAbrir=propia||!esMes;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border)">'
+        +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">'+(u?(u.emoji||'')+' '+esc(u.nombre):esc(k))+(propia?' <span style="color:var(--muted);font-weight:600;font-size:11px">(la mía)</span>':'')+'</div>'
+        +'<div style="color:var(--muted);font-size:11px">'+n+' ítem'+(n===1?'':'s')+' · '+fmt(totalPedido(k))+'</div></div>'
+        +(puedeAbrir?'<button onclick="ventaRapida(\''+k+'\')" style="background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">Abrir</button>':'')
+        +(vrPuedeCancelar(k)?'<button onclick="cancelarVentaRapida(\''+k+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">🗑️ Cancelar</button>':'')
+      +'</div>';
+    }).join('')
+  +'</div>';
+}
+function cancelarVentaRapida(vid){
+  if(!vrPuedeCancelar(vid)){showToast('🔒 Solo quien la abrió, el cajero o el administrador pueden cancelar esta venta rápida.','#ef4444',3500);return;}
+  var raw=pedidos[vid]||[],ped=Array.isArray(raw)?raw:Object.values(raw);
+  var u=usuarios.find(function(x){return 'vr_'+x.id===vid;});
+  var total=totalPedido(vid),n=ped.reduce(function(a,it){return a+(it.qty||1);},0);
+  if(!confirm('¿Cancelar la venta rápida'+(u?' de '+u.nombre:'')+'?\n\n'+n+' producto'+(n===1?'':'s')+' por '+fmt(total).replace(/\u00A0/g,' ')+'. No se cobra nada y los productos vuelven al inventario. Queda anotado en novedades.'))return;
+  ped.forEach(function(it){ajustarStockItem(it,+(it.qty||1),'Venta rápida cancelada: devolución');});
+  var det=ped.map(function(it){var p=it.isCustom||it.isCombo?null:menu.find(function(m){return m.id===it.pid;});return (it.qty||1)+'× '+(it.customNombre||it.comboNombre||it.cubMixNombre||(p?p.nombre:'ítem'));}).join(', ');
+  fbPush('novedades',{id:'nov_'+Date.now(),ts:Date.now(),mesa:'⚡ Venta rápida'+(u?' · '+u.nombre:''),tipo:'otra',tipoLabel:'⚡ Venta rápida cancelada',monto:total,
+    nota:'Cancelada por '+(usuarioActivo?usuarioActivo.nombre:'')+' · productos devueltos al inventario: '+det,uid:usuarioActivo?usuarioActivo.id:'',uidNombre:usuarioActivo?usuarioActivo.nombre:''});
+  delete pedidos[vid];
+  var rp=ref('pedidos/'+vid);if(rp)rp.set(null);
+  if(abonosMesa[vid]){delete abonosMesa[vid];fbSet('abonosMesa',abonosMesa);}
+  if(descuentos[vid])delete descuentos[vid];
+  if(pedidoLog[vid]){delete pedidoLog[vid];fbSet('pedidoLog/'+vid,null);}
+  limpiarCocinaMesa(vid);
+  if(mesaActiva&&mesaActiva.id===vid)mesaActiva=null;
+  showToast('🗑️ Venta rápida cancelada · '+fmt(total)+' · inventario devuelto','#ef4444');
+  render();
 }
 
 function abrirTrasladoMesa(){

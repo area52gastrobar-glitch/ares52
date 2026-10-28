@@ -516,7 +516,9 @@ function eliminarPrestamo(pid){
   var msj='¿Eliminar este préstamo de '+p.socio+' por '+fmt(p.monto).replace(/\u00A0/g,' ')+'?';
   if(p.tipo==='dinero')msj+='\n• El dinero que entró a la caja se retira del saldo.';
   if((p.devuelto||0)>0)msj+='\n• Las devoluciones hechas ('+fmt(p.devuelto).replace(/\u00A0/g,' ')+') vuelven a la caja.';
+  if(p.entradas&&p.entradas.length)msj+='\n• Se descuenta del inventario lo que ingresó con esta compra.';
   if(!confirm(msj))return;
+  if(p.entradas&&p.entradas.length&&typeof gInvAplicar==='function')gInvAplicar(p.entradas,p.concepto||'',-1);
   // Revertir: el ingreso del préstamo sale de la caja
   if(p.tipo==='dinero'){
     cajaHoy['ini_'+(p.fp||'efectivo')]=(cajaHoy['ini_'+(p.fp||'efectivo')]||0)-p.monto;

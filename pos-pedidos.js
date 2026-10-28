@@ -390,7 +390,7 @@ function descontarConsumosEmp(empId){
   var semKeyC=_fechaKey(_sanLunes(_empSemanaOffset));
   var movC={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'consumo',valor:tot,nota:'🍺 Consumos ('+und+' und)',semanaKey:semKeyC,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   movEmpleados.push(movC);
-  var rC=ref('movEmpleados');if(rC)rC.push(movC);else fbSet('movEmpleados',movEmpleados);
+  var rC=ref('movEmpleados');if(rC)rC.push(movC);else guardarMovs();
   // Respaldo para registros viejos sin clave de Firebase: reescribir la colección completa
   if(pend.some(function(c){return !c._fbkey;})){
     var ob={};consumoEmpleados.forEach(function(c,i){ob[c._fbkey||('ce'+i)]=c;});

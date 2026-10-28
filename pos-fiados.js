@@ -409,11 +409,11 @@ function guardarPrestamoEmpleado(empId){
   if(valor<=0){alert('Escribe el valor.');return;}
   var largoPlazo=(tipoSel==='largo');
   var semKey=_fechaKey(_sanLunes(_empSemanaOffset));
-  var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'prestamo',valor:valor,fp:fp,nota:nota,largoPlazo:largoPlazo,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'prestamo',valor:valor,fp:fp,nota:nota,largoPlazo:largoPlazo,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,gastoId:'g'+a52Ahora()};
   movEmpleados.push(mov);
-  var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
-  // SALE DE CAJA: registrar como gasto
-  var g={id:'g'+a52Ahora(),ts:a52Ahora(),concepto:'Préstamo a '+emp.nombre,categoria:'Personal',valor:valor,notas:(largoPlazo?'Largo plazo':'Semana')+(nota?' · '+nota:''),fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var r=ref('movEmpleados');if(r)r.push(mov);else guardarMovs();
+  // SALE DE CAJA: registrar como gasto (🔗 enlazado al movimiento)
+  var g={id:mov.gastoId,ts:a52Ahora(),concepto:'Préstamo a '+emp.nombre,categoria:'Personal',valor:valor,notas:(largoPlazo?'Largo plazo':'Semana')+(nota?' · '+nota:''),fp:fp,empId:empId,movId:mov.id,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   gastos.push(g);var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
   closeModal1();
   showToast('💸 Préstamo registrado<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(valor)+' · '+(largoPlazo?'largo plazo':'esta semana')+'</span>','#ef4444');
@@ -441,11 +441,11 @@ function confirmarPagoSaldo(empId,semKey){
   var valor=moneyVal('pago-valor')||0;
   if(valor<=0){alert('Escribe cuánto vas a pagar.');return;}
   var fp=(document.getElementById('pago-fp')||{}).value||'efectivo';
-  var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'salario',valor:valor,fp:fp,nota:'Pago semana '+semKey,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'salario',valor:valor,fp:fp,nota:'Pago semana '+semKey,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,gastoId:'g'+a52Ahora()};
   movEmpleados.push(mov);
-  var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
-  // SALE DE CAJA
-  var g={id:'g'+a52Ahora(),ts:a52Ahora(),concepto:'Pago nómina '+emp.nombre,categoria:'Personal',valor:valor,notas:'Semana '+semKey,fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  var r=ref('movEmpleados');if(r)r.push(mov);else guardarMovs();
+  // SALE DE CAJA (🔗 enlazado al movimiento)
+  var g={id:mov.gastoId,ts:a52Ahora(),concepto:'Pago nómina '+emp.nombre,categoria:'Personal',valor:valor,notas:'Semana '+semKey,fp:fp,empId:empId,movId:mov.id,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   gastos.push(g);var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
   closeModal1();
   // Recalcular saldo tras el pago
@@ -489,7 +489,7 @@ function confirmarPasarSaldo(empId,semKey){
   // Lo traslada a la próxima
   var m2={id:'me'+(ts+1),ts:ts+1,empId:empId,tipo:'ajuste',valor:s,fp:'',nota:(s>0?'Saldo traído de semana anterior':'Adelanto traído de semana anterior'),semanaKey:next,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   movEmpleados.push(m1);movEmpleados.push(m2);
-  var r=ref('movEmpleados');if(r){r.push(m1);r.push(m2);}else fbSet('movEmpleados',movEmpleados);
+  var r=ref('movEmpleados');if(r){r.push(m1);r.push(m2);}else guardarMovs();
   closeModal1();
   showToast('↪️ Saldo pasado a la próxima semana<br><span style="font-size:12px;opacity:.85">'+esc(emp.nombre)+' · '+fmt(Math.abs(s))+'</span>','#c9b8f0');
   render();
@@ -517,14 +517,16 @@ function guardarMovEmpleado(empId,tipo){
   var fp=(document.getElementById('mov-fp')||{}).value||'efectivo';
   var nota=((document.getElementById('mov-nota')||{}).value||'').trim();
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
+  var conGasto=(tipo==='prestamo'||tipo==='salario'||tipo==='otro');
   var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:tipo,valor:valor,fp:fp,nota:nota,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+  if(conGasto)mov.gastoId='g'+a52Ahora();
   movEmpleados.push(mov);
-  var r=ref('movEmpleados');if(r)r.push(mov);else fbSet('movEmpleados',movEmpleados);
+  var r=ref('movEmpleados');if(r)r.push(mov);else guardarMovs();
 
-  // Préstamo, salario y otro = gasto automático (sale dinero). Abono NO (entra dinero).
-  if(tipo==='prestamo'||tipo==='salario'||tipo==='otro'){
+  // Préstamo, salario y otro = gasto automático (sale dinero). Abono NO (entra dinero). 🔗 Enlazado al movimiento.
+  if(conGasto){
     var conceptos={prestamo:'Préstamo a '+emp.nombre,salario:'Salario '+emp.nombre,otro:(nota||'Movimiento')+' - '+emp.nombre};
-    var g={id:'g'+a52Ahora(),ts:a52Ahora(),concepto:conceptos[tipo],categoria:'Personal',valor:valor,notas:'Auto desde Empleados',fp:fp,empId:empId,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+    var g={id:mov.gastoId,ts:a52Ahora(),concepto:conceptos[tipo],categoria:'Personal',valor:valor,notas:'Auto desde Empleados',fp:fp,empId:empId,movId:mov.id,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
     gastos.push(g);
     var rg=ref('gastos');if(rg)rg.push(g);else fbSet('gastos',gastos);
   }
@@ -535,10 +537,30 @@ function guardarMovEmpleado(empId,tipo){
   render();
 }
 
+/* 🔗 Gasto de caja ⇄ movimiento del empleado: se crean juntos y se borran juntos.
+   Los registros viejos no traen el enlace: se emparejan por empleado, valor y hora (mismos 5 segundos). */
+function gastoDeMov(m){
+  if(!m)return null;
+  if(m.gastoId){var g=gastos.find(function(x){return x.id===m.gastoId;});if(g)return g;}
+  if(m.tipo==='abono'||m.tipo==='ajuste')return null;
+  return gastos.find(function(x){return x.movId===m.id})||gastos.find(function(x){return x.categoria==='Personal'&&x.empId===m.empId&&(x.valor||0)===(m.valor||0)&&Math.abs((x.ts||0)-(m.ts||0))<5000;})||null;
+}
+function movDeGasto(g){
+  if(!g)return null;
+  if(g.movId){var m=movEmpleados.find(function(x){return x.id===g.movId;});if(m)return m;}
+  if(g.categoria!=='Personal'||!g.empId)return null;
+  return movEmpleados.find(function(x){return x.gastoId===g.id;})||movEmpleados.find(function(x){return x.empId===g.empId&&x.tipo!=='abono'&&x.tipo!=='ajuste'&&(x.valor||0)===(g.valor||0)&&Math.abs((x.ts||0)-(g.ts||0))<5000;})||null;
+}
+// La lista completa se guarda como objeto por id (no como lista numerada): así los nuevos movimientos se agregan sin pisar nada
+function guardarMovs(){var mo={};movEmpleados.forEach(function(m){if(m&&m.id)mo[m.id]=m;});fbSet('movEmpleados',Object.keys(mo).length?mo:null);}
 function borrarMovEmpleado(movId){
-  if(!confirm('¿Eliminar este movimiento? (No elimina el gasto asociado)'))return;
-  movEmpleados=movEmpleados.filter(function(m){return m.id!==movId;});
-  fbSet('movEmpleados',movEmpleados);
+  var m=movEmpleados.find(function(x){return x.id===movId;});if(!m)return;
+  var g=gastoDeMov(m);
+  if(!confirm('¿Eliminar este movimiento de '+fmt(m.valor||0).replace(/\u00A0/g,' ')+'?'+(g?'\n\nTambién se elimina el gasto de caja «'+g.concepto+'» para que el cierre no muestre esa salida.':'')))return;
+  movEmpleados=movEmpleados.filter(function(x){return x.id!==movId;});
+  guardarMovs();
+  if(g){gastos=gastos.filter(function(x){return x.id!==g.id;});var go={};gastos.forEach(function(x){go[x.id]=x;});fbSet('gastos',go);}
+  showToast(g?'🗑️ Movimiento y gasto de caja eliminados':'🗑️ Movimiento eliminado','#ef4444');
   render();
 }
 

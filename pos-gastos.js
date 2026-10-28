@@ -237,7 +237,10 @@ function renderGastos(){
         +'<option value="" selected disabled>👆 Elige la forma de pago...</option>'
         +FPV().sort(function(a,b){return (a.id==='efectivo'?-1:b.id==='efectivo'?1:0);}).map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+'</option>';}).join('')
         +'<option value="credito">🧾 A crédito (queda debiendo al proveedor)</option>'
+        +(a52Mod('socios')?'<option value="socio">🤝 Lo pagó un socio (el negocio le queda debiendo)</option>':'')
         +'</select></div>'
+      +'<div id="g-socio-wrap" style="display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">🤝 ¿Qué socio lo pagó?</div>'
+        +'<select class="inp" id="g-socio">'+SOCIOS.map(function(x){return'<option value="'+esc(x.id)+'">'+esc(x.nombre||socNom(x.id))+'</option>';}).join('')+'</select></div>'
       +'<div id="g-vence-wrap" style="display:none"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">📅 Fecha en que hay que pagarla</div>'
         +'<input class="inp" id="g-vence" type="date"/></div>'
       +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor (COP) *</div>'
@@ -459,6 +462,23 @@ function guardarGasto(){
   if(!fp){alert('👆 Elige de dónde salió la plata (forma de pago).');return;}
   var empId=(document.getElementById('g-emp')||{}).value||'';
   var provId=(document.getElementById('g-prov')||{}).value||'';
+  if(fp==='socio'){
+    // 🤝 Un socio pagó con su plata: no sale de la caja; queda como préstamo del socio (se le devuelve desde Caja → préstamos de socios)
+    var socId=(document.getElementById('g-socio')||{}).value||socDef();
+    if(!socId){alert('👆 Elige el socio que lo pagó.');return;}
+    var regS={id:'ps_'+a52Ahora(),ts:a52Ahora(),socio:socId,tipo:'compra',monto:valor,fp:'',concepto:concepto+(categoria?' ('+categoria+')':''),categoria:categoria,devuelto:0,devoluciones:[],uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
+    if(categoria==='Mercancía'||categoria==='Insumos'){
+      var entS=_gInv.filter(function(l){return (parseInt(l.cant)||0)>0;}).map(function(l){return {t:l.t,id:l.id,nombre:l.nombre,cant:parseInt(l.cant)||0,costo:l.t==='p'?(parseInt(l.costo)||0):0};});
+      if(entS.length){regS.entradas=entS;gInvAplicar(entS,concepto,1);}
+    }
+    if(provId){var pvS=proveedores.find(function(p){return p.id===provId;});regS.provId=provId;regS.provNombre=pvS?pvS.nombre:'';}
+    _gInv=[];
+    G_FORM_IDS.forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    prestamosSocios.push(regS);
+    var rS=ref('prestamosSocios');if(rS)rS.push(regS);else fbSet('prestamosSocios',prestamosSocios);
+    showToast('🤝 '+esc(socNom(socId))+' pagó '+fmt(valor)+'<br><span style="font-size:12px;opacity:.85">No sale de la caja · el negocio se lo debe (Caja → préstamos de socios)'+(regS.entradas?' · inventario ingresado':'')+'</span>','#f5a623');
+    render();return;
+  }
   if(fp==='credito'){
     if(categoria!=='Mercancía'&&categoria!=='Insumos'){alert('A crédito solo se registran compras de Mercancía o Insumos.');return;}
     if(!provId){alert('👆 Elige el proveedor al que le quedas debiendo.');return;}
@@ -486,9 +506,10 @@ function guardarGasto(){
     g.empId=empId;
     // Registrar como préstamo (esta semana) en la nómina del empleado
     var semKey=_fechaKey(_sanLunes(0));
-    var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'prestamo',valor:valor,fp:fp,nota:concepto,largoPlazo:false,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,fromGasto:true};
+    var mov={id:'me'+a52Ahora(),ts:a52Ahora(),empId:empId,tipo:'prestamo',valor:valor,fp:fp,nota:concepto,largoPlazo:false,semanaKey:semKey,uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre,fromGasto:true,gastoId:g.id};
+    g.movId=mov.id;   // 🔗 gasto y movimiento van de la mano: si se borra uno, se borra el otro
     movEmpleados.push(mov);
-    var rm=ref('movEmpleados');if(rm)rm.push(mov);else fbSet('movEmpleados',movEmpleados);
+    var rm=ref('movEmpleados');if(rm)rm.push(mov);else guardarMovs();
     showToast('💸 Gasto enlazado a '+(emp?esc(emp.nombre):'empleado')+'<br><span style="font-size:12px;opacity:.85">Se descuenta de su nómina esta semana</span>','#ef4444');
   }
   if((categoria==='Mercancía'||categoria==='Insumos')&&_gInv.length){
@@ -517,6 +538,8 @@ function toggleGastoExtras(){
   var wv=document.getElementById('g-vence-wrap');
   if(wv){wv.style.display=fp==='credito'?'block':'none';var dv=document.getElementById('g-vence');if(dv&&!dv.value&&fp==='credito'){var d=new Date();d.setDate(d.getDate()+8);dv.value=_fechaKey(d);}}
   if(fp==='credito'&&wp)wp.style.display='block';
+  var ws=document.getElementById('g-socio-wrap');
+  if(ws)ws.style.display=fp==='socio'?'block':'none';
 }
 /* ── 📦 Entrada de inventario desde el gasto (compra) ──
    Cualquier usuario que registre la compra puede decir qué llegó: queda en el gasto (g.entradas),
@@ -578,8 +601,16 @@ function toggleGastoEmpleado(){toggleGastoExtras();}
 function borrarGasto(id){
   var gx=gastos.find(function(g){return g.id===id;});
   var conInv=!!(gx&&gx.entradas&&gx.entradas.length);
-  if(!confirm(conInv?'¿Eliminar este gasto?\n\nTambién se descuenta del inventario lo que ingresó con esta compra.':'¿Eliminar este gasto?'))return;
+  var mv=movDeGasto(gx);
+  var cx=gx&&gx.cxpId?cxp.find(function(c){return c.id===gx.cxpId;}):null;
+  var extra=[];
+  if(conInv)extra.push('Se descuenta del inventario lo que ingresó con esta compra.');
+  if(mv)extra.push('Se elimina también el '+(mv.tipo==='salario'?'pago de nómina':mv.tipo==='prestamo'?'préstamo':'movimiento')+' del empleado, para que no le quede descontado.');
+  if(cx)extra.push('La cuenta por pagar vuelve a quedar pendiente por ese valor.');
+  if(!confirm('¿Eliminar este gasto?'+(extra.length?'\n\n• '+extra.join('\n• '):'')))return;
   if(conInv)gInvAplicar(gx.entradas,gx.concepto||'',-1);
+  if(mv){movEmpleados=movEmpleados.filter(function(m){return m.id!==mv.id;});guardarMovs();}
+  if(cx){cx.abonado=Math.max(0,(cx.abonado||0)-(gx.valor||0));if(cx.abonado<(cx.valor||0)){cx.pagado=false;delete cx.pagadoTs;delete cx.pagadoPor;}var ko=Object.assign({},cx);delete ko._fbkey;if(cx._fbkey)fbSet('cuentasPorPagar/'+cx._fbkey,ko);}
   gastos=gastos.filter(function(g){return g.id!==id;});
   var go={};gastos.forEach(function(g){go[g.id]=g;});fbSet('gastos',go);render();
 }
