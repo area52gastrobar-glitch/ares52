@@ -452,9 +452,22 @@ var A52APP=(function(){
   instalar();
   if(!listo){document.addEventListener('DOMContentLoaded',instalar);window.addEventListener('load',instalar);}
   // El aviso fijo de Android: mientras esté, el teléfono no duerme el POS. Se renueva cada minuto con el número de mesas.
+  // Texto del aviso fijo: mesas abiertas para todos; para administración y caja también lo vendido del turno
   function texto(){
-    try{var n=_mesasOcupadasIds().length;return n===0?'Sin mesas ocupadas':n===1?'1 mesa ocupada':n+' mesas ocupadas';}catch(e){return '';}
+    try{
+      var ids=_mesasOcupadasIds(),n=ids.length;
+      var mesasTxt=n===0?'Sin mesas abiertas':n===1?'1 mesa abierta':n+' mesas abiertas';
+      var rol=usuarioActivo&&usuarioActivo.rol;
+      if(rol!=='admin'&&rol!=='subadmin'&&rol!=='cajero')return mesasTxt;
+      var cobrado=ventasTurno().reduce(function(a,v){return a+(v.total||0);},0);
+      var porCobrar=0;ids.forEach(function(id){porCobrar+=totalPedido(id);});
+      var m=function(v){return '$'+Math.round(v||0).toLocaleString('es-CO');};
+      return '💰 Cobrado '+m(cobrado)+(porCobrar?' · ⏳ '+m(porCobrar)+' en mesas':'')+' · 🪑 '+mesasTxt;
+    }catch(e){return '';}
   }
+  // Cuando cambian las ventas o las mesas, el aviso se refresca (con pausa para no pedirlo a cada rato)
+  var _refT=null;
+  function refrescar(){if(!nat||!fondoOn)return;clearTimeout(_refT);_refT=setTimeout(function(){if(texto()!==ultimoTxt)fondo();},1500);}
   function fondo(){
     var RF=P('RadioFondo');if(!RF)return;
     var quiere=nat&&_notifOn&&!!usuarioActivo;   // cualquier usuario que haya encendido los avisos en su celular
@@ -468,7 +481,15 @@ var A52APP=(function(){
       if(e&&!e.sinRestriccion&&confirm('Para que los avisos lleguen con el teléfono bloqueado, Android debe dejar esta app sin ahorro de batería.\n\nToque Aceptar y en la ventana que sale escoja «Permitir».'))RF.bateria().catch(function(){});
     }).catch(function(){});
   }
-  var api={oculta:function(){return (typeof document!=='undefined'&&document.hidden)||(nat&&!activa);},fondo:fondo,revisarBateria:revisarBateria,texto:texto};
+  // 💓 Latido: lo llama el servicio de Android cada minuto (aunque el teléfono frene los relojes de la página):
+  // renueva el aviso fijo y, si la conexión con la base se durmió, la vuelve a abrir
+  var _ultLatido=0;
+  function latido(){
+    _ultLatido=Date.now();
+    try{fondo();}catch(e){}
+    try{if(window.firebase&&firebase.database&&getDb())firebase.database().goOnline();}catch(e){}
+  }
+  var api={oculta:function(){return (typeof document!=='undefined'&&document.hidden)||(nat&&!activa);},fondo:fondo,revisarBateria:revisarBateria,texto:texto,refrescar:refrescar,latido:latido,ultimoLatido:function(){return _ultLatido;}};
   Object.defineProperty(api,'es',{get:function(){return ver();}});
   return api;
 })();

@@ -395,8 +395,9 @@ function iniciarSync(){
     _sndChequearPedidos();
     _notifChequearPedidos();
     renderSoloPedido();updateHeader();actualizarColorMesas();
+    try{A52APP.refrescar();}catch(e){}
   });
-  fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();if(tabActual==='ventas'||tabActual==='caja')render();});
+  fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();try{A52APP.refrescar();}catch(e){}if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){_cpMenuListo=!!v;setTimeout(a52PublicarCarta,0);if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('ingredientes',function(v){
