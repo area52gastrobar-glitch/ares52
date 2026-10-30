@@ -640,46 +640,51 @@ function confirmarDevolverVenta(fbkey){
 function abrirEditarFP(fbkey){
   var v=ventas.find(function(x){return x._fbkey===fbkey;});
   if(!v){alert('Venta no encontrada.');return;}
-  var esMixto=v.pagos&&v.pagos.length>1;
-  var fpOpts=FPV().map(function(f){return'<option value="'+f.id+'"'+(f.id===v.fp?' selected':'')+'>'+f.emoji+' '+f.label+'</option>';}).join('');
-  var actual;
-  if(esMixto){
-    actual=v.pagos.map(function(p){var ff=FPAGO.find(function(x){return x.id===p.fp;});return (ff?ff.emoji+' '+ff.label:p.fp)+': '+fmt(p.monto);}).join('<br>');
-  } else {
-    var f=FPAGO.find(function(x){return x.id===v.fp;});
-    actual=(f?f.emoji+' '+f.label:v.fp);
-  }
+  // Cada línea de pago se corrige por separado: en un cobro mixto (Nequi + efectivo) solo cambia la que se elija
+  var pagos=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+  var opts=function(sel){return FPV().concat(FPAGO.filter(function(f){return f.off&&f.id===sel;})).map(function(f){return'<option value="'+f.id+'"'+(f.id===sel?' selected':'')+'>'+f.emoji+' '+f.label+'</option>';}).join('');};
+  var filas=pagos.map(function(p,i){
+    var ff=FPAGO.find(function(x){return x.id===p.fp;});
+    return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+      +'<div style="flex:0 0 96px;text-align:right;font-weight:800;color:var(--gold)">'+fmt(p.monto||0)+'</div>'
+      +'<select class="inp" id="editfp-sel-'+i+'" style="flex:1">'+opts(p.fp)+'</select>'
+    +'</div><div style="color:var(--muted);font-size:10.5px;margin:-4px 0 8px 104px">Era: '+(ff?ff.emoji+' '+ff.label:esc(p.fp||'?'))+'</div>';
+  }).join('');
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">✏️ Corregir forma de pago</div>'
-    +'<div style="color:var(--muted);font-size:13px;margin-bottom:12px">'+esc(v.mesa||'')+' · '+fmt(v.total)+'</div>'
-    +'<div style="background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:12px">'
-      +'<div style="color:var(--muted);font-size:11px">Forma de pago actual:</div>'
-      +'<div style="font-size:13px;font-weight:700;color:var(--accent);margin-top:2px">'+actual+'</div>'
-    +'</div>'
-    +(esMixto?'<div style="background:#f5a62318;border:1px solid #f5a62333;border-radius:8px;padding:8px 12px;margin-bottom:12px;color:#f5a623;font-size:12px">⚠️ Este cobro fue mixto. Al corregir, se convertirá en un solo método por el total.</div>':'')
-    +'<div style="margin-bottom:14px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nueva forma de pago</div>'
-    +'<select class="inp" id="editfp-sel">'+fpOpts+'</select></div>'
-    +'<button class="btn btn-green btn-full" onclick="guardarEditarFP(\''+fbkey+'\')">Guardar cambio</button>');
+    +'<div style="color:var(--muted);font-size:13px;margin-bottom:12px">'+esc(v.mesa||'')+' · '+fmt(v.total)+(pagos.length>1?' · cobro mixto ('+pagos.length+' pagos)':'')+'</div>'
+    +(pagos.length>1?'<div style="background:#38bdf818;border:1px solid #38bdf833;border-radius:8px;padding:8px 12px;margin-bottom:12px;color:#38bdf8;font-size:12px">Cambie solo la línea equivocada; los valores se conservan.</div>':'')
+    +filas
+    +'<button class="btn btn-green btn-full" onclick="guardarEditarFP(\''+fbkey+'\')" style="margin-top:6px">Guardar cambio</button>');
 }
 
 function guardarEditarFP(fbkey){
   var v=ventas.find(function(x){return x._fbkey===fbkey;});
   if(!v)return;
-  var nuevoFp=(document.getElementById('editfp-sel')||{}).value;
-  if(!nuevoFp)return;
-  var f=FPAGO.find(function(x){return x.id===nuevoFp;});
-  // Actualizar la venta: forma de pago única por el total
-  v.fp=nuevoFp;
-  v.fpLabel=f?f.emoji+' '+f.label:nuevoFp;
-  v.pagos=[{fp:nuevoFp,label:(f?f.label:nuevoFp),monto:v.total}];
+  var pagos=(v.pagos&&v.pagos.length)?v.pagos:[{fp:v.fp,monto:v.total}];
+  var cambios=[],nuevos=pagos.map(function(p,i){
+    var sel=document.getElementById('editfp-sel-'+i),fp=(sel&&sel.value)||p.fp;
+    var f=FPAGO.find(function(x){return x.id===fp;});
+    if(fp!==p.fp)cambios.push(fmt(p.monto||0).replace(/ /g,' ')+': '+(p.fp||'?')+' → '+(f?f.label:fp));
+    return {fp:fp,label:(f?f.label:fp),monto:p.monto||0};
+  });
+  if(!cambios.length){closeModal1();return;}
+  // Si dos líneas quedaron con el mismo medio, se juntan
+  var porFp={},orden=[];nuevos.forEach(function(p){if(!porFp[p.fp]){porFp[p.fp]={fp:p.fp,label:p.label,monto:0};orden.push(p.fp);}porFp[p.fp].monto+=p.monto;});
+  nuevos=orden.map(function(k){return porFp[k];});
+  v.pagos=nuevos;
+  v.fp=nuevos.length===1?nuevos[0].fp:'mixto';
+  var f1=FPAGO.find(function(x){return x.id===v.fp;});
+  v.fpLabel=nuevos.length===1?(f1?f1.emoji+' '+f1.label:v.fp):nuevos.map(function(p){var ff=FPAGO.find(function(x){return x.id===p.fp;});return (ff?ff.emoji+' ':'')+p.label;}).join(' + ');
   v.editadoFP=true;
   v.editadoPor=usuarioActivo.nombre;
   v.editadoTs=a52Ahora();
+  v.editadoDetalle=cambios.join(' · ');
   // Guardar en Firebase (sin el _fbkey interno)
   var copia={};Object.keys(v).forEach(function(k){if(k!=='_fbkey')copia[k]=v[k];});
   var r=ref('ventas/'+fbkey);
   if(r)r.set(copia);
   closeModal1();
-  showToast('✅ Forma de pago corregida<br><span style="font-size:12px;opacity:.85">'+esc(v.mesa||'')+' → '+(f?f.label:nuevoFp)+'</span>','#22c55e');
+  showToast('✅ Forma de pago corregida<br><span style="font-size:12px;opacity:.85">'+esc(v.mesa||'')+' · '+esc(cambios.join(' · '))+'</span>','#22c55e');
   render();
 }
 
