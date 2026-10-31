@@ -457,7 +457,8 @@ function renderVentas(){
     }
     var botonesAdmin='';
     if(abierto&&usuarioActivo&&usuarioActivo.rol==='admin'&&v._fbkey){
-      botonesAdmin='<div style="display:flex;gap:6px;margin-top:7px">'
+      botonesAdmin='<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">'
+        +'<button data-act="venta-editfp" data-key="'+v._fbkey+'" style="flex:1;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333;border-radius:7px;padding:6px;font-size:10.5px;font-weight:700;cursor:pointer">✏️ Forma de pago</button>'
         +(!v.esPagoCredito?'<button data-act="venta-devolver" data-key="'+v._fbkey+'" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833;border-radius:7px;padding:6px;font-size:10.5px;font-weight:700;cursor:pointer">↩️ Devolver a mesa</button>':'')
         +'<button onclick="eliminarVentaDuplicada(\''+v._fbkey+'\')" style="flex:1;background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:6px;font-size:10.5px;font-weight:700;cursor:pointer">🗑️ Eliminar (duplicado/error)</button>'
       +'</div>';
