@@ -66,6 +66,7 @@ function a52NegocioHtml(){
     +fila('Zonas',A52_ZONAS_CONF.map(function(z){return esc(z.emoji+' '+z.label);}).join(' · '),'a52EditarZonas()')
     +fila('Socios',SOCIOS.length?SOCIOS.map(function(x){return esc(socNom(x.id));}).join(' · '):'Sin socios: el módulo de socios queda oculto.','a52EditarSocios()')
     +fila('Medios de pago',FPAGO.map(function(f){return'<span style="'+(f.off?'opacity:.45;text-decoration:line-through':'')+'">'+esc(f.emoji+' '+f.label)+'</span>';}).join(' · '),'a52EditarFpago()')
+    +fila('QR de pago',a52QrLista().length?a52QrLista().map(function(q){return '📱 '+esc(q.nombre);}).join(' · '):'Sin QR: suba el de Bre-B, Nequi o Daviplata para que el mesero lo muestre al cliente.','a52EditarQr()')
     +'</div>';
 }
 // ── Editores (una fila por elemento)
@@ -138,7 +139,7 @@ function a52PrimerAdmin(){
 }
 // Si una tarjeta nueva falla, Admin sigue abriendo con las demás
 function a52Seguro(f){try{return f();}catch(e){console.warn(e);return'<div class="card" style="color:var(--muted);font-size:12px">Esta sección no cargó. Recargue la página (Ctrl + F5).</div>';}}
-function completarLogin(){setTimeout(a52CampanaPintar,100);setTimeout(function(){try{a52Conexion();a52MigrarPins();}catch(e){}},1500);
+function completarLogin(){setTimeout(a52CampanaPintar,100);setTimeout(a52QrBoton,120);setTimeout(function(){try{a52Conexion();a52MigrarPins();}catch(e){}},1500);
   registrarSesion('login',usuarioSelLogin);
     usuarioActivo=usuarioSelLogin;
   window._usuarioActivoGlobal=usuarioActivo;
@@ -180,7 +181,7 @@ function iniciarVigilanciaRed(){
 function cerrarSesion(){if(A52APP.es)setTimeout(A52APP.fondo,500);
   if(usuarioActivo)registrarSesion('logout',usuarioActivo);
   window._usuarioActivoGlobal=null;
-  if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos','equipos','solicitudes','cartaPublica','llamados','ajustes','config/fotos'].forEach(fbOff);
+  if(getDb())['pedidos','ventas','gastos','menu','mesas','paredes','cierres','cajaHoy','combos','equipos','solicitudes','cartaPublica','llamados','ajustes','config/fotos','config/qrPago'].forEach(fbOff);
   ['a52-solic','a52-llamados','a52-herr'].forEach(function(i){var e=document.getElementById(i);if(e)e.remove();});
   usuarioActivo=null;mesaActiva=null;tabActual='mesas';
   document.getElementById('header').style.display='none';

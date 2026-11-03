@@ -424,7 +424,7 @@ function abrirKardex(){
     renderKardexModal();
   });
 }
-function renderKardexModal(){
+function _kardexRowsHTML(){
   var f=(_kardexFiltro||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   var prodSel=window._kardexProd||'';
   // Opciones del selector: productos/ingredientes que aparecen en el kardex
@@ -488,12 +488,48 @@ function renderKardexModal(){
       +'</div>'
     +'</div>';
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin movimientos'+(f||prodSel?' que coincidan con el filtro':'')+'.</div>';
+  return {rows:rows,headerStock:headerStock};
+}
+function renderKardexModal(){
+  var f=(_kardexFiltro||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  var prodSel=window._kardexProd||'';
+  // Opciones del selector: productos/ingredientes que aparecen en el kardex
+  var vistos={};var opciones=[];
+  _kardexCache.forEach(function(e){
+    var k=e.t+'|'+e.id;
+    if(vistos[k])return;vistos[k]=true;
+    opciones.push({k:k,t:e.t,id:e.id,nombre:e.nombre||('#'+e.id)});
+  });
+  opciones.sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
+  var opts='<option value=""'+(prodSel===''?' selected':'')+'>📦 Todos los productos</option>'
+    +opciones.map(function(o){return'<option value="'+esc(o.k)+'"'+(prodSel===o.k?' selected':'')+'>'+(o.t==='i'?'🧂 ':'')+esc(o.nombre)+'</option>';}).join('');
+  // Calcular SIEMPRE el "quedan" de cada registro: por cada producto, se camina
+  // desde el stock ACTUAL hacia atrás sobre todo el historial cargado.
+  var porProducto={};
+  _kardexCache.forEach(function(e){
+    var k=e.t+'|'+e.id;
+    if(!porProducto[k])porProducto[k]=[];
+    porProducto[k].push(e);  // el cache ya viene ordenado del más nuevo al más viejo
+  });
+  Object.keys(porProducto).forEach(function(k){
+    var partes=k.split('|');var pT=partes[0];var pId=partes.slice(1).join('|');
+    var col=(pT==='p')?menu:ingredientes;
+    var itAct=col.find(function(x){return String(x.id)===String(pId);});
+    if(itAct){
+      var running=parseInt(itAct.stock)||0;
+      porProducto[k].forEach(function(e){e._queda=running;running-=(e.delta||0);});
+    } else {
+      // Producto que ya no existe: usar el saldo guardado en el registro si lo tiene
+      porProducto[k].forEach(function(e){if(typeof e.saldo==='number')e._queda=e.saldo;});
+    }
+  });
+  var _k=_kardexRowsHTML(),rows=_k.rows,headerStock=_k.headerStock;
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:8px">📒 Kardex de inventario</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+_kardexCache.length+' movimientos · a la derecha: el cambio y <b style="color:var(--gold)">cuántas quedaron</b> después de cada movimiento</div>'
     +'<select class="inp" id="kardex-prod" onchange="window._kardexProd=this.value;renderKardexModal();" style="margin-bottom:8px">'+opts+'</select>'
-    +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;_debounceBusq(function(){renderKardexModal();_refocusBusq(\'kardex-busq\');})" style="margin-bottom:10px"/>'
+    +'<input class="inp" id="kardex-busq" placeholder="🔍 Filtrar por producto o motivo..." value="'+esc(_kardexFiltro)+'" oninput="_kardexFiltro=this.value;var r=_kardexRowsHTML();var l=document.getElementById(\'kardex-lista\');if(l)l.innerHTML=r.rows;" autocomplete="off" style="margin-bottom:10px"/>'
     +headerStock
-    +'<div style="max-height:52vh;overflow-y:auto">'+rows+'</div>');
+    +'<div id="kardex-lista" style="max-height:52vh;overflow-y:auto">'+rows+'</div>');
 }
 
 function ajustarStockItem(item,delta,motivo){

@@ -49,6 +49,11 @@ function editarPromo(id){
     dias:pr?(pr.dias||[]).slice():[],horaIni:pr?(pr.horaIni||''):'',horaFin:pr?(pr.horaFin||''):'',busq:''};
   renderPromoForm();
 }
+function _prMatchesHTML(){
+  var e=window._prEdit||{};var q=_normTxt((e.busq||'').trim());
+  var matches=q?menu.filter(function(m){return _normTxt(m.nombre).indexOf(q)>=0;}).slice(0,6):[];
+  return matches.map(function(m){return'<button onclick="window._prEdit.prodId='+m.id+';window._prEdit.busq=\'\';renderPromoForm();" style="display:flex;justify-content:space-between;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:4px;cursor:pointer;color:var(--text)"><span style="font-size:12px;font-weight:700">'+m.emoji+' '+esc(m.nombre)+'</span><span style="color:var(--muted);font-size:11px">'+fmt(m.precio)+(m.cubeta?' · 🪣'+fmt(m.cubeta):'')+'</span></button>';}).join('');
+}
 function renderPromoForm(){
   var e=window._prEdit;
   var es2x1=e.tipo==='2x1';
@@ -88,8 +93,8 @@ function renderPromoForm(){
     ?'<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--accent)66;border-radius:9px;padding:9px 12px;margin-bottom:10px">'
       +'<span style="font-weight:800;font-size:13px">'+p.emoji+' '+esc(p.nombre)+'</span>'
       +'<button onclick="window._prEdit.prodId=null;window._prEdit.tipo=\'unidad\';renderPromoForm();" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">cambiar</button></div>'
-    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;_debounceBusq(function(){renderPromoForm();_refocusBusq(\'pr-busq\');})" style="margin-bottom:6px"/>'
-      +matches.map(function(m){return'<button onclick="window._prEdit.prodId='+m.id+';window._prEdit.busq=\'\';renderPromoForm();" style="display:flex;justify-content:space-between;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:4px;cursor:pointer;color:var(--text)"><span style="font-size:12px;font-weight:700">'+m.emoji+' '+esc(m.nombre)+'</span><span style="color:var(--muted);font-size:11px">'+fmt(m.precio)+(m.cubeta?' · 🪣'+fmt(m.cubeta):'')+'</span></button>';}).join('');
+    :'<input class="inp" id="pr-busq" placeholder="🔍 Buscar producto (ej: miller...)" value="'+esc(e.busq||'')+'" oninput="window._prEdit.busq=this.value;var l=document.getElementById(\'pr-matches\');if(l)l.innerHTML=_prMatchesHTML();" autocomplete="off" style="margin-bottom:6px"/>'
+      +'<div id="pr-matches">'+_prMatchesHTML()+'</div>';
   var tieneCubeta=p&&p.esCerveza&&p.cubeta;
   var tipoHtml=p?'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué precio aplica?</div><div style="display:flex;gap:8px;margin-bottom:10px">'
     +'<button onclick="window._prEdit.tipo=\'unidad\';renderPromoForm();" style="flex:1;background:'+(e.tipo==='unidad'?'var(--accent)':'var(--bg)')+';color:'+(e.tipo==='unidad'?'#fff':'var(--muted)')+';border:1px solid '+(e.tipo==='unidad'?'var(--accent)':'var(--border)')+';border-radius:9px;padding:9px 0;font-weight:800;font-size:12px;cursor:pointer">Unidad ('+fmt(p.precio)+')</button>'

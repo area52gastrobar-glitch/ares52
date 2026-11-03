@@ -345,7 +345,9 @@ function _cfDif(){
   });
   return{faltItems:faltItems,sobrItems:sobrItems,totalFaltInv:totalFalt,dinDet:dinDet,dinFalt:dinFalt};
 }
-function renderCuadreInv(){
+/* Filas de productos del cuadre: se arman aparte para que el buscador solo repinte la lista (y no el cuadro completo,
+   que hacía perder el foco y tocaba volver a tocar la barra en cada letra) */
+function _cfFilasHTML(){
   var q=_normTxt((window._cfBusq||'').trim());
   var lista=menu.filter(function(p){return !p.sinStock;})
     .filter(function(p){return !q||_normTxt(p.nombre).indexOf(q)>=0;})
@@ -361,6 +363,10 @@ function renderCuadreInv(){
         +(dif===null?'—':dif<0?dif+' · '+fmt((-dif)*(p.precio||0)):dif>0?'+'+dif:'✓')+'</span>'
     +'</div>';
   }).join('');
+  return filas||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:12px">Sin productos con ese nombre</div>';
+}
+function renderCuadreInv(){
+  var filas=_cfFilasHTML();
   var _arq=_ultimoArqueoReciente();
   var din=FPAGO.map(function(f){
     var sis=saldoActualFP(f.id);
@@ -379,8 +385,8 @@ function renderCuadreInv(){
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📋 Cuadre físico de inventario y dinero</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Escribe solo lo que contaste (lo vacío no se toca). Los faltantes se valorizan a precio de venta.</div>'
     +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">📦 Productos</div>'
-    +'<input class="inp" placeholder="🔍 Filtrar producto..." value="'+esc(window._cfBusq||'')+'" oninput="window._cfBusq=this.value;renderCuadreInv()" style="margin-bottom:6px"/>'
-    +'<div style="max-height:260px;overflow-y:auto;background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+(filas||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:11px">Sin resultados</div>')+'</div>'
+    +'<input class="inp" id="cf-busq" placeholder="🔍 Filtrar producto..." value="'+esc(window._cfBusq||'')+'" oninput="window._cfBusq=this.value;var l=document.getElementById(\'cf-lista\');if(l)l.innerHTML=_cfFilasHTML();" autocomplete="off" style="margin-bottom:6px"/>'
+    +'<div id="cf-lista" style="max-height:260px;overflow-y:auto;background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+(filas||'<div style="color:var(--dim);text-align:center;padding:10px;font-size:11px">Sin resultados</div>')+'</div>'
     +'<div style="font-weight:800;font-size:13px;color:#a855f7;margin-bottom:4px">💵 Dinero por medio de pago</div>'
     +'<div style="background:var(--card2);border-radius:9px;padding:4px 10px;margin-bottom:12px">'+din+'</div>'
     +'<div id="cf-resumen" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:12px">'+_cfResumenHTML()+'</div>'

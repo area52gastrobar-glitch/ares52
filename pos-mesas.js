@@ -343,6 +343,7 @@ function renderPanelPedido(){
       +'<div class="flex-between mb8"><span style="color:var(--muted);font-weight:800;font-size:12px">TOTAL</span>'
       +'<span style="color:var(--gold);font-size:20px;font-weight:900">'+fmt(total)+'</span></div>'
       +'<div style="background:#22c55e18;border:1px solid #22c55e33;border-radius:8px;padding:8px;text-align:center;color:#22c55e;font-size:12px;font-weight:700">✓ Pedido registrado</div>'
+      +(a52QrLista().length?'<button class="btn btn-sm btn-full" onclick="a52QrMostrar()" style="margin-top:7px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">📱 Mostrar QR de pago</button>':'')
       +(mesaActiva.rapida&&ped.length&&vrPuedeCancelar(mesaActiva.id)?'<button class="btn btn-sm btn-full" onclick="cancelarVentaRapida(\''+mesaActiva.id+'\')" style="margin-top:7px;background:#ef444418;color:#ef4444;border:1px solid #ef444433">🗑️ Cancelar esta venta rápida</button>':'')+'</div>'
     :'<div style="background:var(--card2);border-radius:10px;border:1px solid var(--border);padding:10px 12px">'
       +'<div class="flex-between mb8"><span style="color:var(--muted);font-weight:800;font-size:12px">TOTAL</span>'
@@ -381,6 +382,7 @@ function renderPanelPedido(){
       })()
       +'<button class="btn btn-sm btn-full" onclick="abrirNovedadMesa()" style="margin-top:7px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62333">📝 Anotar novedad (descuento, se voló, cortesía...)</button>'
       +((usuarioActivo.rol!=='mesero'&&a52Mod('socios'))?'<button class="btn btn-sm btn-full" onclick="abrirSocioAsumeMesa()" style="margin-top:7px;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf833">🤝 Un socio asume parte de la cuenta</button>':'')
+      +(a52QrLista().length?'<button class="btn btn-sm btn-full" onclick="a52QrMostrar()" style="margin-top:7px;background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">📱 Mostrar QR de pago</button>':'')
       +'<button class="btn btn-sm btn-green btn-full" onclick="abrirCobro()" '+(ped.length?'':'disabled')+' style="margin-top:7px">💳 Cobrar todo</button>'
       +(mesaActiva.rapida&&ped.length&&vrPuedeCancelar(mesaActiva.id)?'<button class="btn btn-sm btn-full" onclick="cancelarVentaRapida(\''+mesaActiva.id+'\')" style="margin-top:7px;background:#ef444418;color:#ef4444;border:1px solid #ef444433">🗑️ Cancelar esta venta rápida</button>':'')
       +'</div>';

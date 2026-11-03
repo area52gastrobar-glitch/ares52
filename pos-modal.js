@@ -3,10 +3,15 @@ function modal1(content){var m=document.getElementById('modal1');m.innerHTML='<d
 function modal2(content){var m=document.getElementById('modal2');m.innerHTML='<div class="modal-box">'+content+'</div>';m.style.display='flex';}
 function closeModal1(){document.getElementById('modal1').style.display='none';}
 function closeModal2(){document.getElementById('modal2').style.display='none';}
+// La ventana se cierra solo si el clic EMPEZÓ y TERMINÓ en el fondo oscuro. Antes, seleccionar texto con el mouse
+// y soltar por fuera del cuadro contaba como clic en el fondo y cerraba la ventana con todo lo escrito.
+var _mdFondo=null;
+document.addEventListener('mousedown',function(e){_mdFondo=e.target;},true);
+document.addEventListener('touchstart',function(e){_mdFondo=e.target;},{capture:true,passive:true});
 document.addEventListener('click',function(e){
   var m1=document.getElementById('modal1'),m2=document.getElementById('modal2');
-  if(e.target===m1)closeModal1();
-  if(e.target===m2)closeModal2();
+  if(e.target===m1&&_mdFondo===m1)closeModal1();
+  if(e.target===m2&&_mdFondo===m2)closeModal2();
   // Inventario tab switch
   var it=e.target.closest('[data-act="inv-tab"]');
   if(it){_invTab=it.getAttribute('data-tab');render();return;}

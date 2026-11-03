@@ -118,7 +118,7 @@ function abrirSesiones(){
     renderSesionesModal();
   });
 }
-function renderSesionesModal(){
+function _sesRowsHTML(){
   var f=(window._sesFiltro||'').toLowerCase();
   var TIPOS={login:{e:'✅',l:'Entró',c:'#22c55e'},logout:{e:'🚪',l:'Salió',c:'var(--muted)'},pin_fallido:{e:'⚠️',l:'PIN incorrecto',c:'#f5a623'},red_bloqueada:{e:'🚫',l:'Bloqueado por red',c:'#ef4444'}};
   var lista=(window._sesCache||[]).filter(function(e){
@@ -133,9 +133,13 @@ function renderSesionesModal(){
       +'<span style="color:'+t.c+';font-weight:800;font-size:11px;white-space:nowrap">'+t.l+'</span>'
     +'</div>';
   }).join(''):'<div style="color:var(--muted);text-align:center;padding:18px;font-size:13px">Sin registros'+(f?' que coincidan':'')+'.</div>';
+  return rows;
+}
+function renderSesionesModal(){
+  var rows=_sesRowsHTML();
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:2px">👥 Inicios de sesión</div>'
     +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Últimos '+(window._sesCache||[]).length+' eventos: entradas, salidas, PIN fallidos y bloqueos por red</div>'
-    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;_debounceBusq(function(){renderSesionesModal();_refocusBusq(\'ses-busq\');})" style="margin-bottom:10px"/>'
-    +'<div style="max-height:56vh;overflow-y:auto">'+rows+'</div>');
+    +'<input class="inp" id="ses-busq" placeholder="🔍 Filtrar por nombre o rol..." value="'+esc(window._sesFiltro||'')+'" oninput="window._sesFiltro=this.value;var l=document.getElementById(\'ses-lista\');if(l)l.innerHTML=_sesRowsHTML();" autocomplete="off" style="margin-bottom:10px"/>'
+    +'<div id="ses-lista" style="max-height:56vh;overflow-y:auto">'+rows+'</div>');
 }
 

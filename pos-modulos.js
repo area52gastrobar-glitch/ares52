@@ -591,3 +591,86 @@ function a52Conexion(){
     cola.push(m);pintar();
   };
 })();
+
+/* ═══ 📱 QR DE PAGO ═══ el administrador sube la imagen del QR (Bre-B, Nequi, Daviplata, cuenta…) en Admin → Negocio;
+   el mesero la abre con un toque (📱 QR en el encabezado o en la mesa) y se la muestra al cliente en grande. */
+var a52Qrs={};
+function a52QrLista(){return Object.keys(a52Qrs).map(function(k){var q=a52Qrs[k]||{};return {id:k,nombre:q.nombre||'QR',img:q.img||''};}).filter(function(q){return q.img.indexOf('data:image/')===0;}).sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');});}
+function a52QrBoton(){
+  var b=document.getElementById('a52QrBtn');if(!b)return;
+  b.style.display=a52QrLista().length?'':'none';
+}
+function a52QrMostrar(id){
+  var lista=a52QrLista();if(!lista.length){alert('Todavía no hay un QR de pago cargado. El administrador lo sube en Admin → Negocio → QR de pago.');return;}
+  var q=lista.find(function(x){return x.id===id;})||lista[0];
+  var tabs=lista.length>1?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+lista.map(function(x){var sel=x.id===q.id;
+    return'<button onclick="a52QrMostrar(\''+esc(x.id)+'\')" style="flex:1;background:'+(sel?'var(--accent)':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:9px;padding:9px 6px;font-size:12px;font-weight:800;cursor:pointer">'+esc(x.nombre)+'</button>';}).join('')+'</div>':'';
+  modal2('<div style="text-align:center;font-weight:900;font-size:17px;margin-bottom:8px">📱 '+esc(q.nombre)+'</div>'
+    +tabs
+    +'<div style="background:#fff;border-radius:14px;padding:12px;display:flex;justify-content:center"><img src="'+q.img+'" alt="" style="width:100%;max-width:420px;max-height:62vh;object-fit:contain;display:block"></div>'
+    +'<div style="color:var(--muted);font-size:11px;text-align:center;margin-top:8px">Muéstrele la pantalla al cliente para que escanee. Suba el brillo si no lo lee.</div>'
+    +'<button class="btn btn-full" onclick="closeModal2()" style="margin-top:10px;background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+/* ── Administración ── */
+function a52EditarQr(){
+  var lista=a52QrLista();
+  var filas=lista.map(function(q){
+    return'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)">'
+      +'<img src="'+q.img+'" alt="" style="width:54px;height:54px;border-radius:9px;object-fit:contain;background:#fff">'
+      +'<div style="flex:1;font-weight:700;font-size:13px">'+esc(q.nombre)+'</div>'
+      +'<button onclick="a52QrMostrar(\''+esc(q.id)+'\')" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 10px;font-size:11px;cursor:pointer">Ver</button>'
+      +'<button onclick="a52QrBorrar(\''+esc(q.id)+'\')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:7px;padding:6px 10px;font-size:11px;cursor:pointer">✕</button>'
+    +'</div>';
+  }).join('')||'<div style="color:var(--dim);font-size:12px;text-align:center;padding:10px">Sin QR cargados</div>';
+  modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">📱 QR de pago</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:10px">Suba la imagen del QR de cada medio (Bre-B, Nequi, Daviplata…). El mesero lo abre con el botón 📱 QR y se lo muestra al cliente.</div>'
+    +filas
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:12px">'
+      +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre (como lo verá el mesero)</div>'
+      +'<input class="inp" id="qr-nombre" placeholder="Ej: Bre-B · Nequi 300 123 4567" style="margin-bottom:8px"/>'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+        +'<div id="qr-prev" style="width:64px;height:64px;border-radius:10px;border:1px dashed var(--border);background:#fff center/contain no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted)">📷</div>'
+        +'<label class="btn btn-sm" style="background:var(--card2);border:1px solid var(--border);color:var(--text);cursor:pointer">Elegir imagen<input type="file" accept="image/*" style="display:none" onchange="a52QrElegir(this)"></label>'
+      +'</div>'
+      +'<button class="btn btn-green btn-full" onclick="a52QrGuardar()" style="margin-top:10px">💾 Guardar QR</button>'
+    +'</div>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="margin-top:8px;background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+}
+function a52QrElegir(inp){
+  var file=inp.files&&inp.files[0];if(!file)return;
+  if(!/^image\//.test(file.type)){alert('Elija una imagen (foto o captura del QR).');return;}
+  var rd=new FileReader();
+  rd.onload=function(){
+    var im=new Image();
+    im.onload=function(){
+      // El QR debe seguir siendo legible: se guarda hasta 800 px y en PNG si cabe, para no emborronar los cuadritos
+      var M=800,k=Math.min(1,M/Math.max(im.width,im.height)),c=document.createElement('canvas');
+      c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));
+      var cx=c.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,c.width,c.height);cx.drawImage(im,0,0,c.width,c.height);
+      var url=c.toDataURL('image/png');if(url.length>400000)url=c.toDataURL('image/jpeg',0.9);
+      window._qrTemp=url;var d=document.getElementById('qr-prev');if(d){d.style.backgroundImage='url('+url+')';d.textContent='';d.style.borderStyle='solid';}
+    };
+    im.onerror=function(){alert('No se pudo leer esa imagen. Pruebe con otra.');};
+    im.src=rd.result;
+  };
+  rd.readAsDataURL(file);
+}
+function a52QrGuardar(){
+  var nombre=((document.getElementById('qr-nombre')||{}).value||'').trim();
+  if(!nombre){alert('Escriba el nombre del QR (por ejemplo, Bre-B).');return;}
+  if(!window._qrTemp){alert('Elija la imagen del QR.');return;}
+  var id='qr'+Date.now();
+  a52Qrs[id]={nombre:nombre,img:window._qrTemp};
+  var r=ref('config/qrPago/'+id);
+  if(r)r.set(a52Qrs[id]).catch(function(){alert('El QR no se pudo guardar en la base.');});
+  window._qrTemp=null;
+  showToast('📱 QR «'+esc(nombre)+'» guardado · los meseros ya lo pueden mostrar','#22c55e');
+  a52QrBoton();a52EditarQr();
+}
+function a52QrBorrar(id){
+  var q=a52Qrs[id];if(!q)return;
+  if(!confirm('¿Quitar el QR «'+(q.nombre||'')+'»?'))return;
+  delete a52Qrs[id];
+  var r=ref('config/qrPago/'+id);if(r)r.remove().catch(function(){});
+  a52QrBoton();a52EditarQr();
+}

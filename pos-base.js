@@ -435,6 +435,7 @@ function iniciarSync(){
     if(tabActual==='mesas')render();
   });
   fbOn('ajustes',function(v){a52AjCache(v||{});a52AplicarAjustes(v||{});});
+  fbOn('config/qrPago',function(v){a52Qrs=v||{};a52QrBoton();if(mesaActiva)renderSoloPedido();});
   fbOn('config/fotos',function(v){a52Fotos=v||{};if(mesaActiva)renderSoloPedido();else if(tabActual==='carta'&&editandoProd===null)render();});
   fbOn('equipos',function(v){a52Equipos=v||{};a52Refrescar();});
   fbOn('solicitudes',function(v){a52Solic=v||{};a52Refrescar();});
