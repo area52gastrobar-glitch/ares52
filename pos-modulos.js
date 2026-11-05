@@ -603,13 +603,51 @@ function a52QrBoton(){
 function a52QrMostrar(id){
   var lista=a52QrLista();if(!lista.length){alert('Todavía no hay un QR de pago cargado. El administrador lo sube en Admin → Negocio → QR de pago.');return;}
   var q=lista.find(function(x){return x.id===id;})||lista[0];
-  var tabs=lista.length>1?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+lista.map(function(x){var sel=x.id===q.id;
-    return'<button onclick="a52QrMostrar(\''+esc(x.id)+'\')" style="flex:1;background:'+(sel?'var(--accent)':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'var(--accent)':'var(--border)')+';border-radius:9px;padding:9px 6px;font-size:12px;font-weight:800;cursor:pointer">'+esc(x.nombre)+'</button>';}).join('')+'</div>':'';
-  modal2('<div style="text-align:center;font-weight:900;font-size:17px;margin-bottom:8px">📱 '+esc(q.nombre)+'</div>'
-    +tabs
-    +'<div style="background:#fff;border-radius:14px;padding:12px;display:flex;justify-content:center"><img src="'+q.img+'" alt="" style="width:100%;max-width:420px;max-height:62vh;object-fit:contain;display:block"></div>'
-    +'<div style="color:var(--muted);font-size:11px;text-align:center;margin-top:8px">Muéstrele la pantalla al cliente para que escanee. Suba el brillo si no lo lee.</div>'
-    +'<button class="btn btn-full" onclick="closeModal2()" style="margin-top:10px;background:var(--card2);border:1px solid var(--border);color:var(--text)">Cerrar</button>');
+  var old=document.getElementById('a52-qr-full');if(old)old.remove();
+  // Pantalla completa, fondo blanco, el QR al ancho de la pantalla; con + / − o pellizco se acerca más
+  var f=document.createElement('div');f.id='a52-qr-full';
+  f.style.cssText='position:fixed;inset:0;z-index:2147483500;background:#fff;color:#111;display:flex;flex-direction:column;touch-action:none;user-select:none;-webkit-user-select:none';
+  var tabs=lista.length>1?'<div style="display:flex;gap:6px;padding:0 12px 8px;flex-wrap:wrap">'+lista.map(function(x){var sel=x.id===q.id;
+    return'<button data-qr="'+esc(x.id)+'" style="flex:1;background:'+(sel?'#111':'#f1f1f1')+';color:'+(sel?'#fff':'#333')+';border:1px solid '+(sel?'#111':'#ddd')+';border-radius:9px;padding:9px 6px;font-size:13px;font-weight:800;cursor:pointer">'+esc(x.nombre)+'</button>';}).join('')+'</div>':'';
+  f.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 12px 8px">'
+      +'<div style="font-weight:900;font-size:18px">📱 '+esc(q.nombre)+'</div>'
+      +'<button id="a52-qr-cerrar" style="background:#111;color:#fff;border:0;border-radius:9px;padding:9px 16px;font-size:14px;font-weight:800;cursor:pointer">✕ Cerrar</button>'
+    +'</div>'+tabs
+    +'<div id="a52-qr-area" style="flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff">'
+      +'<img id="a52-qr-img" src="'+q.img+'" alt="" draggable="false" style="width:min(96vw,80vh);height:min(96vw,80vh);object-fit:contain;transform-origin:center center;transition:transform .08s">'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 12px calc(12px + env(safe-area-inset-bottom))">'
+      +'<button id="a52-qr-menos" style="width:52px;height:44px;border:1px solid #ccc;background:#f6f6f6;border-radius:10px;font-size:22px;font-weight:900;cursor:pointer">−</button>'
+      +'<span id="a52-qr-z" style="min-width:56px;text-align:center;font-weight:800;color:#555">100%</span>'
+      +'<button id="a52-qr-mas" style="width:52px;height:44px;border:1px solid #ccc;background:#f6f6f6;border-radius:10px;font-size:22px;font-weight:900;cursor:pointer">+</button>'
+      +'<span style="color:#888;font-size:11px;margin-left:8px">Pellizque o use + para acercar · suba el brillo</span>'
+    +'</div>';
+  document.body.appendChild(f);
+  var img=document.getElementById('a52-qr-img'),zEl=document.getElementById('a52-qr-z'),area=document.getElementById('a52-qr-area');
+  var z=1,px=0,py=0;
+  function pintar(){img.style.transform='translate('+px+'px,'+py+'px) scale('+z+')';zEl.textContent=Math.round(z*100)+'%';}
+  function zoom(nz,cx,cy){nz=Math.max(1,Math.min(4,nz));if(nz===1){px=0;py=0;}z=nz;pintar();}
+  document.getElementById('a52-qr-cerrar').onclick=function(){f.remove();};
+  document.getElementById('a52-qr-mas').onclick=function(){zoom(z+0.5);};
+  document.getElementById('a52-qr-menos').onclick=function(){zoom(z-0.5);};
+  f.querySelectorAll('[data-qr]').forEach(function(b){b.onclick=function(){a52QrMostrar(b.getAttribute('data-qr'));};});
+  // Doble toque: alterna entre 1× y 2×
+  var ultTap=0;area.addEventListener('click',function(){var t=Date.now();if(t-ultTap<350)zoom(z>1?1:2);ultTap=t;});
+  // Pellizco para acercar y arrastre para mover cuando está acercado
+  var d0=0,z0=1,arr=null;
+  function dist(t){return Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);}
+  area.addEventListener('touchstart',function(e){
+    if(e.touches.length===2){d0=dist(e.touches);z0=z;}
+    else if(e.touches.length===1&&z>1){arr={x:e.touches[0].clientX-px,y:e.touches[0].clientY-py};}
+  },{passive:true});
+  area.addEventListener('touchmove',function(e){
+    if(e.touches.length===2&&d0){e.preventDefault();zoom(z0*dist(e.touches)/d0);}
+    else if(e.touches.length===1&&arr&&z>1){e.preventDefault();px=e.touches[0].clientX-arr.x;py=e.touches[0].clientY-arr.y;pintar();}
+  },{passive:false});
+  area.addEventListener('touchend',function(e){if(e.touches.length<2)d0=0;if(!e.touches.length)arr=null;},{passive:true});
+  // Rueda del mouse en computador
+  area.addEventListener('wheel',function(e){e.preventDefault();zoom(z+(e.deltaY<0?0.25:-0.25));},{passive:false});
+  pintar();
 }
 /* ── Administración ── */
 function a52EditarQr(){
