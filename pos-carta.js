@@ -1294,7 +1294,7 @@ function renderCombos(){
           +'<span style="color:var(--muted);font-size:11px">Lista menos</span>'
           +'<input class="inp inp-sm" id="cb-pct" type="number" min="0" max="90" step="1" value="'+(parseFloat(_comboTemp.descuentoPct)||0)+'" oninput="cbCambiarPct(this.value)" style="width:70px;text-align:center"/>'
           +'<span style="color:var(--muted);font-size:11px">% · redondear a</span>'
-          +'<select class="inp inp-sm" id="cb-red" onchange="cbCambiarRedondeo(this.value)" style="width:90px">'+[100,500,1000].map(function(r){return'<option value="'+r+'"'+((parseInt(_comboTemp.redondeo)||500)===r?' selected':'')+'>$'+r.toLocaleString('es-CO')+'</option>';}).join('')+'</select>'
+          +'<select class="inp inp-sm" id="cb-red" onchange="cbCambiarRedondeo(this.value)" style="width:90px">'+[100,500,1000].map(function(r){return'<option value="'+r+'"'+((parseInt(_comboTemp.redondeo)||1000)===r?' selected':'')+'>$'+r.toLocaleString('es-CO')+'</option>';}).join('')+'</select>'
           +'<div style="width:100%;color:var(--muted);font-size:10.5px;margin-top:4px">Cada vez que cambie el precio de un producto, este combo se recalcula solo con el mismo descuento. Las categorías «a elección» toman el precio promedio de la categoría.</div>'
         +'</div>':'')
       +'</div>'
@@ -1453,11 +1453,11 @@ function _precioIngCombo(ing){
    modo 'auto': el precio del combo = suma de los precios de lista de lo que trae, menos un descuento %, redondeado.
    Cuando cambia el precio de un producto, los combos automáticos se recalculan solos (en proporción). */
 function comboLista(cb){return (cb&&cb.ingredientes||[]).reduce(function(a,ing){return a+_precioIngCombo(ing);},0);}
-function comboRedondear(v,r){r=parseInt(r)||500;return Math.round(v/r)*r;}
+function comboRedondear(v,r){r=parseInt(r)||1000;return Math.round(v/r)*r;}
 function comboPrecioAuto(cb){
   var lista=comboLista(cb);if(!lista)return 0;
   var pct=Math.max(0,Math.min(90,parseFloat(cb.descuentoPct)||0));
-  return comboRedondear(lista*(1-pct/100),cb.redondeo||500);
+  return comboRedondear(lista*(1-pct/100),cb.redondeo||1000);
 }
 function recalcularCombos(motivo,silencioso){
   var cambios=[];
@@ -1483,11 +1483,11 @@ function cbCambiarModo(m){
     var lista=comboLista({ingredientes:_comboTemp.ingredientes}),pr=moneyVal('cb-precio')||0;
     _comboTemp.descuentoPct=(lista>0&&pr>0&&pr<lista)?Math.round((1-pr/lista)*100):0;
   }
-  if(!_comboTemp.redondeo)_comboTemp.redondeo=500;
+  if(!_comboTemp.redondeo)_comboTemp.redondeo=1000;
   render();
 }
 function cbCambiarPct(v){_capturarCombo();_comboTemp.descuentoPct=Math.max(0,Math.min(90,parseFloat(v)||0));actualizarInfoCombo();}
-function cbCambiarRedondeo(v){_capturarCombo();_comboTemp.redondeo=parseInt(v)||500;actualizarInfoCombo();}
+function cbCambiarRedondeo(v){_capturarCombo();_comboTemp.redondeo=parseInt(v)||1000;actualizarInfoCombo();}
 function abrirVarianteIngCombo(prodId,cant){
   var p=menu.find(function(m){return m.id===prodId;});if(!p)return;
   var btns=(p.variantes||[]).map(function(v,vi){
@@ -1613,7 +1613,7 @@ function guardarCombo(){
     nombre:nombre,precio:precio,emoji:emoji,
     modo:_cbModoTemp()==='auto'?'auto':'fijo',
     descuentoPct:_cbModoTemp()==='auto'?(parseFloat(_comboTemp.descuentoPct)||0):null,
-    redondeo:_cbModoTemp()==='auto'?(parseInt(_comboTemp.redondeo)||500):null,
+    redondeo:_cbModoTemp()==='auto'?(parseInt(_comboTemp.redondeo)||1000):null,
     ingredientes:JSON.parse(JSON.stringify(_comboTemp.ingredientes))
   };
   if(obj.modo==='auto'){obj.precio=comboPrecioAuto(obj);if(!obj.precio){alert('El precio automático da 0: revise que los productos del combo tengan precio.');return;}}
