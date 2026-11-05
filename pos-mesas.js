@@ -348,16 +348,16 @@ function renderPanelPedido(){
     :'<div style="background:var(--card2);border-radius:10px;border:1px solid var(--border);padding:10px 12px">'
       +'<div class="flex-between mb8"><span style="color:var(--muted);font-weight:800;font-size:12px">TOTAL</span>'
       +'<span style="color:var(--gold);font-size:22px;font-weight:900">'+fmt(total)+'</span></div>'
-      +(desc?'<div class="flex-between mb8" style="background:#22c55e18;border-radius:8px;padding:4px 8px"><span style="color:#22c55e;font-size:12px;font-weight:700">🏷️ 10% · '+esc(desc.auth)+'</span><span style="color:#22c55e;font-weight:800">-'+fmt(Math.round(total*0.1))+'</span></div><div class="flex-between mb8"><span style="color:var(--gold);font-weight:800">CON DESCUENTO</span><span style="color:var(--gold);font-size:18px;font-weight:900">'+fmt(Math.round(total*0.9))+'</span></div>':'')
+      +(desc?'<div class="flex-between mb8" style="background:#22c55e18;border-radius:8px;padding:4px 8px"><span style="color:#22c55e;font-size:12px;font-weight:700">🏷️ '+(desc.pct||10)+'% · '+esc(desc.auth)+'</span><span style="color:#22c55e;font-weight:800">-'+fmt(total-totalConDescuento(total,desc.pct||10))+'</span></div><div class="flex-between mb8"><span style="color:var(--gold);font-weight:800">CON DESCUENTO</span><span style="color:var(--gold);font-size:18px;font-weight:900">'+fmt(totalConDescuento(total,desc.pct||10))+'</span></div>':'')
       +'<div style="display:flex;gap:7px">'
       +'<button class="btn btn-sm btn-blue btn-full" onclick="imprimirPrecuenta()" '+(ped.length?'':'disabled')+'>🖨️ Preorden</button>'
-      +((ped.length&&(descuentoHabilitado||desc))?'<button data-act="toggle-desc" style="flex:1;background:'+(desc?'#ef444418':'#22c55e18')+';color:'+(desc?'#ef4444':'#22c55e')+';border:1px solid '+(desc?'#ef444433':'#22c55e33')+';border-radius:8px;padding:5px 4px;font-size:10px;font-weight:700;cursor:pointer">'+(desc?'❌ Quitar desc':'🏷️ 10% Desc')+'</button>':'')
+      +((ped.length&&(descuentoHabilitado||desc))?'<button data-act="toggle-desc" style="flex:1;background:'+(desc?'#ef444418':'#22c55e18')+';color:'+(desc?'#ef4444':'#22c55e')+';border:1px solid '+(desc?'#ef444433':'#22c55e33')+';border-radius:8px;padding:5px 4px;font-size:10px;font-weight:700;cursor:pointer">'+(desc?'❌ Quitar desc':'🏷️ Desc. '+descuentoPctsLista().join('/')+'%')+'</button>':'')
       +'<button class="btn btn-sm btn-outline btn-full" onclick="abrirTrasladoMesa()" '+(ped.length?'':'disabled')+' style="font-size:11px">🔀 Trasladar</button>'
       +'</div>'
       +(function(){
         var abs=(abonosMesa[mesaActiva.id]||[]);
         var totalAbonado=abs.reduce(function(a,x){return a+(x.monto||0);},0);
-        var totalReal=desc?Math.round(total*0.9):total;
+        var totalReal=desc?totalConDescuento(total,desc.pct||10):total;
         var falta=Math.max(0,totalReal-totalAbonado);
         var abonosHtml='';
         if(abs.length){

@@ -3,7 +3,7 @@ function abrirAbonoMesa(){
   if(!mesaActiva)return;
   var total=totalPedido(mesaActiva.id);
   var desc=descuentos[mesaActiva.id];
-  var totalReal=desc&&desc.pct?Math.round(total*(1-desc.pct/100)):total;
+  var totalReal=desc&&desc.pct?totalConDescuento(total,desc.pct):total;
   var abs=(abonosMesa[mesaActiva.id]||[]);
   var abonado=abs.reduce(function(a,x){return a+(x.monto||0);},0);
   var falta=Math.max(0,totalReal-abonado);
@@ -700,7 +700,7 @@ function confirmarCobro(){
   var total=totalPedido(mesaActiva.id);
   // Apply discount if exists
   var descMesa=descuentos[mesaActiva.id];
-  if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
+  if(descMesa&&descMesa.pct) total=totalConDescuento(total,descMesa.pct);
   if(Math.round(pagado)<Math.round(total)){alert('El total pagado ($'+total.toLocaleString('es-CO')+') no cubre el valor. Verifica los montos.');return;}
 
   // ── VERIFICACIÓN: confirmar la forma de pago antes de seguir ──
@@ -773,6 +773,7 @@ function confirmarCobro(){
     sinStock:sinStock,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
+  if(descMesa&&descMesa.pct)venta.descuento={pct:descMesa.pct,auth:descMesa.auth||'',valor:totalPedido(mesaActiva.id)-total};
   // Amarrar el comprobante fotográfico si se capturó (o marcar venta sin foto con motivo)
   if(window._compTemp){
     if(window._compTemp.sinFoto){

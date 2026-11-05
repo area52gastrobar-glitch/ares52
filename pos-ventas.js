@@ -1022,7 +1022,7 @@ function cobrarACredito(){
   if(!ped.length){alert('No hay productos en esta mesa.');return;}
   var total=totalPedido(mesa.id);
   var descMesa=descuentos[mesa.id];
-  if(descMesa&&descMesa.pct) total=Math.round(total*(1-descMesa.pct/100));
+  if(descMesa&&descMesa.pct) total=totalConDescuento(total,descMesa.pct);
   // Abonos ya recibidos en la mesa: se respetan — solo se fía el SALDO
   var absMesa=(abonosMesa[mesa.id]||[]);
   var abonado=absMesa.reduce(function(a,x){return a+(x.monto||0);},0);

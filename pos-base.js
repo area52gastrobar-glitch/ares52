@@ -185,6 +185,17 @@ var ventaSinStock=false;  // admin toggle: allow selling without stock (se guard
 var otroHabilitado=true;  // admin toggle: botón «✏️ Otro» (producto personalizado) para meseros y cajeros
 var descuentoHabilitado=true;  // admin toggle: permitir el 10% de descuento
 var descuentos={};        // {mesaId: {pct:10, auth:'Nombre'}}
+var descuentoPcts=[10];   // porcentajes de descuento permitidos en mesa (los escoge el administrador: 8, 10, 15…)
+var descuentoRedondeo=1000; // el total con descuento se redondea a cifras cerradas (1.000 → 120.000, 119.000…)
+/* Total de la mesa con el descuento aplicado y redondeado a cifra cerrada: así el cliente no ve 107.350 sino 107.000 */
+function totalConDescuento(total,pct){
+  total=Math.round(total||0);pct=parseFloat(pct)||0;
+  if(!pct)return total;
+  var r=parseInt(descuentoRedondeo)||1000,t=Math.round(total*(1-pct/100)/r)*r;
+  if(t>total)t=total;if(t<0)t=0;
+  return t;
+}
+function descuentoPctsLista(){var l=(Array.isArray(descuentoPcts)?descuentoPcts:Object.values(descuentoPcts||{})).map(function(x){return parseFloat(x);}).filter(function(x){return x>0&&x<=100;});return l.length?l:[10];}
 var _invTab='carta';      // 'carta' or 'ingredientes'
 var mesaSize=80;  // px size of each mesa circle
 var vistaMesas='mapa';  // 'mapa' o 'lista'
@@ -412,7 +423,7 @@ function iniciarSync(){
   });
   fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();try{A52APP.refrescar();}catch(e){}if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
-  fbOn('menu',function(v){_cpMenuListo=!!v;setTimeout(a52PublicarCarta,0);if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(tabActual==='carta'||tabActual==='inventario')render();});
+  fbOn('menu',function(v){_cpMenuListo=!!v;setTimeout(a52PublicarCarta,0);if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(usuarioActivo&&usuarioActivo.rol==='admin'&&typeof recalcularCombos==='function'){clearTimeout(window._rcT);window._rcT=setTimeout(function(){try{recalcularCombos('precios de la carta',true);}catch(e){}},2500);}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('ingredientes',function(v){
     ingredientes=v?Object.keys(v).map(function(k){
       var o=v[k];
@@ -426,6 +437,8 @@ function iniciarSync(){
   fbOn('mesas',function(v){if(v){mesas=Object.values(v);_mesasDeFabrica=false;a52ZonasArmar();}if(tabActual==='mesas')render();});
   fbOn('configBar',function(v){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
+    if(v&&v.descuentoPcts)descuentoPcts=Array.isArray(v.descuentoPcts)?v.descuentoPcts:Object.values(v.descuentoPcts);
+    if(v&&v.descuentoRedondeo)descuentoRedondeo=parseInt(v.descuentoRedondeo)||1000;
     if(v&&typeof v.ventaSinStock!=='undefined')ventaSinStock=!!v.ventaSinStock;
     if(v&&typeof v.otroHabilitado!=='undefined')otroHabilitado=!!v.otroHabilitado;
     if(usuarioActivo&&(tabActual==='mesas'||tabActual==='admin'||tabActual==='carta'))render();

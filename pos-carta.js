@@ -240,7 +240,7 @@ function borrarProd(id){
   if(!confirm('¿Eliminar este producto?'))return;
   menu=menu.filter(function(m){return m.id!==id;});
   delete a52Fotos['p'+id];var _rf=ref('config/fotos/p'+id);if(_rf)_rf.remove().catch(function(){});
-  editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();
+  editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);try{recalcularCombos('cambio de precio en la carta');}catch(e){}render();
 }
 function selEmoji(e){
   emojiSel=e;
@@ -352,27 +352,35 @@ function confirmarItemPersonalizado(){
   renderSoloPedido();updateHeader();actualizarColorMesas();
 }
 
-function abrirDescuento(){
+function abrirDescuento(pctSel){
   if(!mesaActiva)return;
+  var pcts=descuentoPctsLista();
+  if(pctSel==null)pctSel=window._descPctSel&&pcts.indexOf(window._descPctSel)>=0?window._descPctSel:pcts[0];
+  window._descPctSel=pctSel;
+  var total=totalPedido(mesaActiva.id);
+  var authPrev=((document.getElementById('desc-auth')||{}).value||'');
   modal2('<div style="text-align:center;margin-bottom:16px">'
     +'<div style="font-size:28px">🏷️</div>'
-    +'<div style="font-weight:800;font-size:16px">Descuento 10%</div>'
-    +'<div style="color:var(--muted);font-size:12px;margin-top:4px">Mesa: '+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+'</div></div>'
+    +'<div style="font-weight:800;font-size:16px">Descuento '+pctSel+'%</div>'
+    +'<div style="color:var(--muted);font-size:12px;margin-top:4px">Mesa: '+(mesaActiva.nombre||'Mesa '+mesaActiva.num)+' · '+fmt(total)+' → <b style="color:#22c55e">'+fmt(totalConDescuento(total,pctSel))+'</b></div></div>'
+    +(pcts.length>1?'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">¿Qué porcentaje?</div><div style="display:flex;gap:8px;margin-bottom:14px">'+pcts.map(function(x){var sel=x===pctSel;
+      return'<button type="button" onclick="abrirDescuento('+x+')" style="flex:1;background:'+(sel?'#22c55e':'var(--bg)')+';color:'+(sel?'#fff':'var(--muted)')+';border:1px solid '+(sel?'#22c55e':'var(--border)')+';border-radius:10px;padding:11px 0;font-size:15px;font-weight:900;cursor:pointer">'+x+'%</button>';}).join('')+'</div>':'')
     +'<div style="margin-bottom:16px">'
       +'<div style="color:var(--muted);font-size:12px;margin-bottom:6px">¿Quién autoriza el descuento?</div>'
-      +'<input class="inp" id="desc-auth" placeholder="Nombre de quien autoriza..." autofocus/>'
+      +'<input class="inp" id="desc-auth" value="'+esc(authPrev)+'" placeholder="Nombre de quien autoriza..." autofocus/>'
     +'</div>'
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-outline btn-full" onclick="closeModal2()">Cancelar</button>'
-      +'<button class="btn btn-green btn-full" onclick="confirmarDescuento()">✅ Aplicar 10%</button>'
+      +'<button class="btn btn-green btn-full" onclick="confirmarDescuento()">✅ Aplicar '+pctSel+'%</button>'
     +'</div>');
-  setTimeout(function(){var el=document.getElementById('desc-auth');if(el)el.focus();},100);
+  setTimeout(function(){var el=document.getElementById('desc-auth');if(el&&!authPrev)el.focus();},100);
 }
 
 function confirmarDescuento(){
   var auth=((document.getElementById('desc-auth')||{}).value||'').trim();
   if(!auth){alert('Escribe quién autoriza el descuento.');return;}
-  descuentos[mesaActiva.id]={pct:10,auth:auth};
+  var pct=window._descPctSel||descuentoPctsLista()[0];
+  descuentos[mesaActiva.id]={pct:pct,auth:auth};
   closeModal2();
   renderSoloPedido();updateHeader();
 }
@@ -898,12 +906,24 @@ function guardarPreciosCubetazo(){
   showToast('💾 Precios actualizados<br><span style="font-size:12px;opacity:.85">Mixto '+fmt(mix)+' · Nacional '+fmt(nac)+' · Promo '+fmt(promo)+'</span>','#22c55e');
   render();
 }
+function guardarDescuentoPcts(){
+  var txt=((document.getElementById('cfg-desc-pcts')||{}).value||'');
+  var l=txt.split(/[,;\s]+/).map(function(x){return parseFloat(String(x).replace('%',''));}).filter(function(x){return x>0&&x<=100;});
+  l=l.filter(function(x,i){return l.indexOf(x)===i;}).sort(function(a,b){return a-b;});
+  if(!l.length){alert('Escriba al menos un porcentaje, por ejemplo: 8, 10, 15');return;}
+  descuentoPcts=l;
+  var red=parseInt((document.getElementById('cfg-desc-red')||{}).value)||1000;descuentoRedondeo=red;
+  var r=ref('configBar/descuentoPcts');if(r)r.set(l);else fbSet('configBar',{descuentoPcts:l});
+  var r2=ref('configBar/descuentoRedondeo');if(r2)r2.set(red);
+  showToast('🏷️ Descuentos permitidos: '+l.join('% · ')+'% · total redondeado a $'+red.toLocaleString('es-CO'),'#22c55e');
+  render();
+}
 function toggleDescuento10(){
   descuentoHabilitado=!descuentoHabilitado;
   var r=ref('configBar/descuentoHabilitado');
   if(r)r.set(descuentoHabilitado);
   else fbSet('configBar',{descuentoHabilitado:descuentoHabilitado});
-  showToast(descuentoHabilitado?'🏷️ Descuento del 10% habilitado':'🚫 Descuento del 10% deshabilitado',descuentoHabilitado?'#22c55e':'#ef4444');
+  showToast(descuentoHabilitado?'🏷️ Descuento en mesa habilitado':'🚫 Descuento en mesa deshabilitado',descuentoHabilitado?'#22c55e':'#ef4444');
   render();
 }
 
@@ -1182,7 +1202,7 @@ function guardarProd(){
     for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,precioRappi:precioRappi,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
   }
   a52FotoGuardar(editandoProd==='nuevo'?menu[menu.length-1].id:editandoProd);
-  editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();
+  editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);try{recalcularCombos('cambio de precio en la carta');}catch(e){}render();
 }
 
 /* ═══════════════ COMBOS ═══════════════ */
@@ -1262,7 +1282,21 @@ function renderCombos(){
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Nombre del combo *</div>'
           +'<input class="inp" id="cb-nombre" value="'+esc(_comboTemp.nombre!=null?_comboTemp.nombre:(c.nombre||''))+'" placeholder="Ej: Combo Rumba, Happy Hour..."/></div>'
         +'<div><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Precio de venta (COP) *</div>'
-          +'<input class="inp money" id="cb-precio" type="text" value="'+moneyFmt(_comboTemp.precio!=null&&_comboTemp.precio!==''?_comboTemp.precio:(c.precio||''))+'" placeholder="0" inputmode="numeric" oninput="actualizarInfoCombo()"/></div>'
+          +'<input class="inp money" id="cb-precio" type="text" value="'+moneyFmt(_cbModoTemp()==='auto'?comboPrecioAuto({ingredientes:_comboTemp.ingredientes,descuentoPct:_comboTemp.descuentoPct,redondeo:_comboTemp.redondeo}):(_comboTemp.precio!=null&&_comboTemp.precio!==''?_comboTemp.precio:(c.precio||'')))+'" placeholder="0" inputmode="numeric" oninput="actualizarInfoCombo()"'+(_cbModoTemp()==='auto'?' readonly style="opacity:.7"':'')+'/></div>'
+      +'</div>'
+      // 🔗 Modo de precio: fijo o automático (lista menos %)
+      +'<div style="background:var(--bg);border:1px solid '+(_cbModoTemp()==='auto'?'#a855f766':'var(--border)')+';border-radius:10px;padding:10px;margin-bottom:12px">'
+        +'<div style="display:flex;gap:8px;margin-bottom:'+(_cbModoTemp()==='auto'?'8px':'0')+'">'
+          +'<button type="button" onclick="cbCambiarModo(\'fijo\')" style="flex:1;background:'+(_cbModoTemp()!=='auto'?'var(--accent)':'var(--card)')+';color:'+(_cbModoTemp()!=='auto'?'#fff':'var(--muted)')+';border:1px solid '+(_cbModoTemp()!=='auto'?'var(--accent)':'var(--border)')+';border-radius:8px;padding:8px;font-size:12px;font-weight:800;cursor:pointer">💲 Precio fijo</button>'
+          +'<button type="button" onclick="cbCambiarModo(\'auto\')" style="flex:1;background:'+(_cbModoTemp()==='auto'?'#a855f7':'var(--card)')+';color:'+(_cbModoTemp()==='auto'?'#fff':'var(--muted)')+';border:1px solid '+(_cbModoTemp()==='auto'?'#a855f7':'var(--border)')+';border-radius:8px;padding:8px;font-size:12px;font-weight:800;cursor:pointer">🔗 Automático (sube con los precios)</button>'
+        +'</div>'
+        +(_cbModoTemp()==='auto'?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+          +'<span style="color:var(--muted);font-size:11px">Lista menos</span>'
+          +'<input class="inp inp-sm" id="cb-pct" type="number" min="0" max="90" step="1" value="'+(parseFloat(_comboTemp.descuentoPct)||0)+'" oninput="cbCambiarPct(this.value)" style="width:70px;text-align:center"/>'
+          +'<span style="color:var(--muted);font-size:11px">% · redondear a</span>'
+          +'<select class="inp inp-sm" id="cb-red" onchange="cbCambiarRedondeo(this.value)" style="width:90px">'+[100,500,1000].map(function(r){return'<option value="'+r+'"'+((parseInt(_comboTemp.redondeo)||500)===r?' selected':'')+'>$'+r.toLocaleString('es-CO')+'</option>';}).join('')+'</select>'
+          +'<div style="width:100%;color:var(--muted);font-size:10.5px;margin-top:4px">Cada vez que cambie el precio de un producto, este combo se recalcula solo con el mismo descuento. Las categorías «a elección» toman el precio promedio de la categoría.</div>'
+        +'</div>':'')
       +'</div>'
       // Info de ahorro
       +(costoAprox>0?'<div style="display:flex;gap:10px;margin-bottom:12px">'
@@ -1327,7 +1361,7 @@ function renderCombos(){
         +'<span style="font-size:28px">'+cb.emoji+'</span>'
         +'<div style="flex:1">'
           +'<div style="font-weight:800;font-size:13px">'+esc(cb.nombre)+'</div>'
-          +'<div style="color:var(--gold);font-size:15px;font-weight:900;margin:2px 0">'+fmt(cb.precio)+'</div>'
+          +'<div style="color:var(--gold);font-size:15px;font-weight:900;margin:2px 0">'+fmt(cb.precio)+(cb.modo==='auto'?' <span style="background:#a855f722;color:#a855f7;border:1px solid #a855f744;border-radius:99px;padding:1px 7px;font-size:9.5px;font-weight:700;vertical-align:middle">🔗 lista −'+(parseFloat(cb.descuentoPct)||0)+'%</span>':'')+'</div>'
           +ingList
           +(disponible
             ?'<div style="color:#22c55e;font-size:10px;margin-top:3px;font-weight:700">✓ Disponible</div>'
@@ -1357,7 +1391,7 @@ function cancelarCombo(){editandoCombo=null;render();}
 function editarCombo(id){
   editandoCombo=id;
   var c=combos.find(function(x){return x.id===id;});
-  _comboTemp={ingredientes:c?JSON.parse(JSON.stringify(c.ingredientes)):[],nombre:c?c.nombre:'',precio:c?c.precio:'',emoji:c?c.emoji:'🎁'};
+  _comboTemp={ingredientes:c?JSON.parse(JSON.stringify(c.ingredientes)):[],nombre:c?c.nombre:'',precio:c?c.precio:'',emoji:c?c.emoji:'🎁',modo:c&&c.modo==='auto'?'auto':'fijo',descuentoPct:c?c.descuentoPct:null,redondeo:c?c.redondeo:null};
   render();setTimeout(bindComboEmojiPicker,50);
 }
 function borrarCombo(id){
@@ -1415,6 +1449,45 @@ function _precioIngCombo(ing){
   }
   return (p.precio||0)*ing.cantidad;
 }
+/* ═══ 🔗 PRECIO AUTOMÁTICO DE COMBOS ═══
+   modo 'auto': el precio del combo = suma de los precios de lista de lo que trae, menos un descuento %, redondeado.
+   Cuando cambia el precio de un producto, los combos automáticos se recalculan solos (en proporción). */
+function comboLista(cb){return (cb&&cb.ingredientes||[]).reduce(function(a,ing){return a+_precioIngCombo(ing);},0);}
+function comboRedondear(v,r){r=parseInt(r)||500;return Math.round(v/r)*r;}
+function comboPrecioAuto(cb){
+  var lista=comboLista(cb);if(!lista)return 0;
+  var pct=Math.max(0,Math.min(90,parseFloat(cb.descuentoPct)||0));
+  return comboRedondear(lista*(1-pct/100),cb.redondeo||500);
+}
+function recalcularCombos(motivo,silencioso){
+  var cambios=[];
+  combos.forEach(function(cb){
+    if(cb.modo!=='auto')return;
+    var nuevo=comboPrecioAuto(cb);
+    if(!nuevo||nuevo===(cb.precio||0))return;
+    cambios.push({cb:cb,antes:cb.precio||0,despues:nuevo});
+    cb.precio=nuevo;cb.precioAutoTs=a52Ahora();
+    var r=ref('combos/'+cb.id+'/precio');if(r)r.set(nuevo).catch(function(){});
+    var r2=ref('combos/'+cb.id+'/precioAutoTs');if(r2)r2.set(cb.precioAutoTs).catch(function(){});
+    fbPush('combosPrecioLog',{ts:a52Ahora(),comboId:cb.id,combo:cb.nombre,antes:cambios[cambios.length-1].antes,despues:nuevo,motivo:motivo||'',uidNombre:usuarioActivo?usuarioActivo.nombre:''});
+  });
+  if(cambios.length&&!silencioso)showToast('🔗 '+cambios.length+' combo'+(cambios.length>1?'s':'')+' actualizado'+(cambios.length>1?'s':'')+' en proporción<br><span style="font-size:12px;opacity:.85">'+cambios.map(function(c){return esc(c.cb.nombre)+': '+fmt(c.antes)+' → '+fmt(c.despues);}).join(' · ')+'</span>','#a855f7',6000);
+  return cambios;
+}
+function _cbModoTemp(){return _comboTemp.modo||'fijo';}
+function cbCambiarModo(m){
+  _capturarCombo();
+  _comboTemp.modo=m;
+  if(m==='auto'&&(_comboTemp.descuentoPct==null||_comboTemp.descuentoPct==='')){
+    // primera vez: el descuento sale del precio que tiene hoy frente a la lista
+    var lista=comboLista({ingredientes:_comboTemp.ingredientes}),pr=moneyVal('cb-precio')||0;
+    _comboTemp.descuentoPct=(lista>0&&pr>0&&pr<lista)?Math.round((1-pr/lista)*100):0;
+  }
+  if(!_comboTemp.redondeo)_comboTemp.redondeo=500;
+  render();
+}
+function cbCambiarPct(v){_capturarCombo();_comboTemp.descuentoPct=Math.max(0,Math.min(90,parseFloat(v)||0));actualizarInfoCombo();}
+function cbCambiarRedondeo(v){_capturarCombo();_comboTemp.redondeo=parseInt(v)||500;actualizarInfoCombo();}
 function abrirVarianteIngCombo(prodId,cant){
   var p=menu.find(function(m){return m.id===prodId;});if(!p)return;
   var btns=(p.variantes||[]).map(function(v,vi){
@@ -1514,6 +1587,10 @@ function cambiarCantIngCombo(idx,val){
 }
 
 function actualizarInfoCombo(){
+  if(_cbModoTemp()==='auto'){
+    var pe=document.getElementById('cb-precio');
+    if(pe)pe.value=moneyFmt(comboPrecioAuto({ingredientes:_comboTemp.ingredientes,descuentoPct:_comboTemp.descuentoPct,redondeo:_comboTemp.redondeo}));
+  }
   var precio=moneyVal('cb-precio')||0;
   var costoEl=document.getElementById('cb-costo');
   var ahorroEl=document.getElementById('cb-ahorro');
@@ -1534,8 +1611,12 @@ function guardarCombo(){
   var obj={
     id:editandoCombo==='nuevo'?'cb'+a52Ahora():editandoCombo,
     nombre:nombre,precio:precio,emoji:emoji,
+    modo:_cbModoTemp()==='auto'?'auto':'fijo',
+    descuentoPct:_cbModoTemp()==='auto'?(parseFloat(_comboTemp.descuentoPct)||0):null,
+    redondeo:_cbModoTemp()==='auto'?(parseInt(_comboTemp.redondeo)||500):null,
     ingredientes:JSON.parse(JSON.stringify(_comboTemp.ingredientes))
   };
+  if(obj.modo==='auto'){obj.precio=comboPrecioAuto(obj);if(!obj.precio){alert('El precio automático da 0: revise que los productos del combo tengan precio.');return;}}
   if(editandoCombo==='nuevo'){combos.push(obj);}
   else{var idx=combos.findIndex(function(c){return c.id===editandoCombo;});if(idx>=0)combos[idx]=obj;}
   var co={};combos.forEach(function(c){co[c.id]=c;});fbSet('combos',co);
