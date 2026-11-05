@@ -319,7 +319,7 @@ function renderPanelPedido(){
   var pedItems=ped.map(function(it,idx_){
     var p=(it.isCombo||it.isCustom)?null:menu.find(function(m){return m.id===it.pid;});
     var pr=precioItem(it);  // maneja variantes, combos, cubetazos correctamente
-    var ingDesc=it.isCombo&&it.comboIngredientes?it.comboIngredientes.map(function(ing){var pm=menu.find(function(m){return m.id===ing.prodId;});return(pm?pm.emoji:'')+'×'+ing.cantidad;}).join(' '):'';
+    var ingDesc=it.isCombo&&it.comboIngredientes?(Array.isArray(it.comboIngredientes)?it.comboIngredientes:Object.values(it.comboIngredientes)).map(function(ing){return esc(comboIngTexto(ing,true));}).join(' '):'';
     return'<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--border)">'
       +'<div style="flex:1">'
       +'<div style="color:var(--text);font-size:12px;font-weight:600">'
@@ -390,11 +390,7 @@ function renderPanelPedido(){
   // Build combo items for pedido panel
   var combosItems=combos.map(function(cb){
     var disponible=comboDisponible(cb);
-    var ingDesc=cb.ingredientes.map(function(ing){
-      if(ing.tipo==='categoria') return'🗂️'+ing.cat+'×'+ing.cantidad;
-      var p=menu.find(function(m){return m.id===ing.prodId;});
-      return(p?p.emoji:'')+'×'+ing.cantidad;
-    }).join(' + ');
+    var ingDesc=cb.ingredientes.map(function(ing){return esc(comboIngTexto(ing,true));}).join(' + ');
     return'<div class="carta-item" style="opacity:'+(disponible?1:0.4)+'">'
       +'<div class="flex-between">'
         +'<span style="font-size:20px">'+cb.emoji+'</span>'

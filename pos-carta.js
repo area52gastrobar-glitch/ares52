@@ -1210,14 +1210,14 @@ function renderCombos(){
       var esCat=ing.tipo==='categoria';
       var p=esCat?null:menu.find(function(m){return m.id===ing.prodId;});
       var emoji=esCat?'🗂️':(p?p.emoji:'?');
-      var label=esCat?('Cualquier '+ing.cat+' (a elección)'):(p?esc(p.nombre):'Producto eliminado');
+      var label=esCat?('Cualquier '+ing.cat+' (a elección)'):(p?esc(p.nombre)+(ing.varianteNombre?' <b style="color:#f5a623">'+esc(ing.varianteNombre)+'</b>':''):'Producto eliminado');
       var und=esCat?'und':(p?p.und:'und');
       var tagColor=esCat?'#38bdf8':'#a855f7';
       return'<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
         +'<span style="font-size:18px">'+emoji+'</span>'
         +'<div style="flex:1">'
           +'<div style="font-size:13px;font-weight:600">'+label+'</div>'
-          +'<span style="background:'+tagColor+'20;color:'+tagColor+';border:1px solid '+tagColor+'33;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">'+(esCat?'A elección':(typeof ing!=='undefined'&&ing&&ing.varElegir?'🎚 Tamaño a elección':'Específico'))+'</span>'
+          +'<span style="background:'+tagColor+'20;color:'+tagColor+';border:1px solid '+tagColor+'33;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">'+(esCat?'A elección':(typeof ing!=='undefined'&&ing&&ing.varElegir?'🎚 Tamaño a elección':(ing.varianteNombre?'📐 Tamaño fijo: '+esc(ing.varianteNombre):'Específico')))+'</span>'
         +'</div>'
         +'<div style="display:flex;align-items:center;gap:5px">'
         +'<span style="color:var(--muted);font-size:11px">×</span>'
@@ -1321,11 +1321,7 @@ function renderCombos(){
       // Check stock availability
       var disponible=comboDisponible(cb);
       var ingList=cb.ingredientes.map(function(ing){
-        if(ing.tipo==='categoria'){
-          return'<div style="font-size:11px;color:#38bdf8">🗂️ '+esc(ing.cat)+' ×'+ing.cantidad+' (a elección)</div>';
-        }
-        var p=menu.find(function(m){return m.id===ing.prodId;});
-        return'<div style="font-size:11px;color:var(--muted)">'+(p?p.emoji+' ':'')+esc((p&&p.nombre)||'?')+' ×'+ing.cantidad+'</div>';
+        return'<div style="font-size:11px;color:'+(ing.tipo==='categoria'?'#38bdf8':'var(--muted)')+'">'+esc(comboIngTexto(ing))+'</div>';
       }).join('');
       return'<div class="prod-card" style="border-color:'+(editandoCombo===cb.id?'var(--accent)':'var(--border)')+(disponible?'':';opacity:.5')+'">'
         +'<span style="font-size:28px">'+cb.emoji+'</span>'

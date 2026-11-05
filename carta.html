@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Carta · {nombre}</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet"/>
-<script src="negocio.js?v=2026-11-03b"></script>
-<script src="comun.js?v=2026-11-03b"></script>
+<script src="negocio.js?v=2026-11-05"></script>
+<script src="comun.js?v=2026-11-05"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -618,7 +618,8 @@ function regenerar(){
       var ings=(c.ingredientes||[]).map(function(ing){
         if(ing.tipo==='categoria')return'🗂️ '+esc(ing.cat)+' ×'+ing.cantidad;
         var pm=menuData.find(function(m){return m.id===ing.prodId||m.id===ing.pid;});
-        return (pm?(pm.emoji||'')+' '+esc(pm.nombre):'Producto')+(ing.cantidad>1?' ×'+ing.cantidad:'');
+        var tam=ing.varianteNombre?' '+esc(ing.varianteNombre):(ing.varElegir?' (tamaño a elegir)':'');
+        return (pm?(pm.emoji||'')+' '+esc(pm.nombre):'Producto')+tam+(ing.cantidad>1?' ×'+ing.cantidad:'');
       }).join(' · ');
       return'<div style="background:linear-gradient(135deg,rgba(var(--t-s-rgb),.10),rgba(var(--t-p-rgb),.10));border:1px solid rgba(var(--t-s-rgb),.35);border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:0 0 24px rgba(var(--t-s-rgb),.10)">'
         +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'

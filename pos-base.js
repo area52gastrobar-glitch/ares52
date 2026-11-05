@@ -275,6 +275,19 @@ function filtrarBusqPed(v){
   _refocusBusq('busq-ped');
 }
 function limpiarBusqPed(){_busqPed='';renderSoloPedido();}
+/* 🎁 Texto de una línea de combo, con el tamaño cuando aplica (Alitas x16, Alitas x24, «tamaño a elegir»).
+   Antes se mostraba solo el emoji y la cantidad, y no se sabía de cuántas alitas era «el parche». */
+function comboIngTexto(ing,corto){
+  if(!ing)return '';
+  var n=parseInt(ing.cantidad)||1;
+  if(ing.tipo==='categoria')return (corto?'🗂️':'🗂️ ')+(ing.cat||'')+' ×'+n+(corto?'':' (a elección)');
+  if(ing.ingId!=null){var ii=(typeof ingredientes!=='undefined'?ingredientes:[]).find(function(x){return String(x.id)===String(ing.ingId);});return '🧂 '+(ii?ii.nombre:'insumo')+' ×'+n;}
+  var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
+  var nom=p?p.nombre:(ing.nombre||'?');
+  var tam=ing.varianteNombre?' '+ing.varianteNombre:(ing.varElegir?' (tamaño a elegir)':'');
+  if(corto)return (p?p.emoji:'')+(ing.varianteNombre?' '+ing.varianteNombre:'')+'×'+n;
+  return (p?p.emoji+' ':'')+nom+tam+' ×'+n;
+}
 function _normTxt(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
 var editandoProd=null;
 var editandoCombo=null;
