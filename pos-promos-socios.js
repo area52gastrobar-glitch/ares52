@@ -386,7 +386,7 @@ function abrirDevolucionPrestamo(pid){
   var fpOpts=FPV().map(function(f){return'<option value="'+f.id+'">'+f.emoji+' '+f.label+' (disp: '+fmt(saldoActualFP(f.id))+')</option>';}).join('');
   var dev=(p.devoluciones||[]).map(function(d,di){
     var f=FPAGO.find(function(x){return x.id===d.fp;});
-    return'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:2px 0;gap:6px"><span style="flex:1">'+(f?f.emoji+' '+f.label:d.fp)+' · '+fmtFechaCorta(d.ts)+'</span><span style="font-weight:700">'+fmt(d.monto)+'</span>'
+    return'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:2px 0;gap:6px"><span style="flex:1">'+(f?f.emoji+' '+f.label:d.fp)+' · '+fmtFechaCorta(d.ts)+(d.nota?' · '+esc(d.nota):'')+'</span><span style="font-weight:800;color:#22c55e">'+fmt(d.monto)+'</span>'
       +'<button onclick="eliminarDevolucionPrestamo(\''+p.id+'\','+di+')" style="background:#ef444418;color:#ef4444;border:1px solid #ef444433;border-radius:5px;padding:1px 7px;font-size:10px;cursor:pointer">✕</button></div>';
   }).join('');
   modal1('<div style="font-weight:800;font-size:16px;margin-bottom:4px">💸 Devolver préstamo</div>'
@@ -470,6 +470,56 @@ function confirmarDevolucionTotal(socio){
   closeModal1();
   showToast('💸 '+fmt(monto)+' devueltos a '+esc(socio)+'<br><span style="font-size:12px;opacity:.85">'+(monto>=totalPend?'✓ Todo saldado ('+pend.length+' préstamo'+(pend.length!==1?'s':'')+')':cubiertos+' saldado'+(cubiertos!==1?'s':'')+' · queda pendiente '+fmt(totalPend-monto))+' · desde '+(f?f.emoji+' '+f.label:fp)+'</span>','#22c55e');
   render();
+}
+
+/* ═══ 📄 Estado de cuenta de un socio: qué prestó, qué se le ha devuelto (fecha, medio y a qué préstamo se aplicó) y qué se le debe ═══ */
+function estadoCuentaSocioDatos(socio){
+  var lista=prestamosSocios.filter(function(p){return p.socio===socio;}).sort(function(a,b){return a.ts-b.ts;});
+  var pagos=[];
+  lista.forEach(function(p){(p.devoluciones||[]).forEach(function(d){pagos.push({ts:d.ts,monto:d.monto||0,fp:d.fp,nota:d.nota||'',uidNombre:d.uidNombre||'',prestamo:p});});});
+  pagos.sort(function(a,b){return a.ts-b.ts;});
+  var prestado=lista.reduce(function(a,p){return a+(p.monto||0);},0),devuelto=lista.reduce(function(a,p){return a+(p.devuelto||0);},0);
+  return {lista:lista,pagos:pagos,prestado:prestado,devuelto:devuelto,pendiente:prestado-devuelto};
+}
+function estadoCuentaSocioHTML(socio,imprimir){
+  var D=estadoCuentaSocioDatos(socio);
+  var fpN=function(id){var f=FPAGO.find(function(x){return x.id===id;});return f?f.emoji+' '+f.label:(id||'');};
+  var c=imprimir?{m:'#555',t:'#000',ok:'#1a7f37',pen:'#b45309',b:'#ddd',bg:'#f7f7f7'}:{m:'var(--muted)',t:'var(--text)',ok:'#22c55e',pen:'#f5a623',b:'var(--border)',bg:'var(--bg)'};
+  var prestamos=D.lista.map(function(p){
+    var pend=(p.monto||0)-(p.devuelto||0);
+    var devs=(p.devoluciones||[]).slice().sort(function(a,b){return a.ts-b.ts;}).map(function(d){
+      return'<div style="display:flex;justify-content:space-between;font-size:11px;color:'+c.m+';padding:2px 0 2px 16px"><span>↳ '+fmtFechaCorta(d.ts)+' · '+fpN(d.fp)+(d.nota?' · '+esc(d.nota):'')+(d.uidNombre?' · '+esc(d.uidNombre):'')+'</span><span style="color:'+c.ok+';font-weight:700">'+fmt(d.monto||0)+'</span></div>';
+    }).join('');
+    return'<div style="padding:7px 0;border-bottom:1px solid '+c.b+'">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:800;font-size:12.5px;color:'+c.t+'">'+(p.tipo==='compra'?'🛒':'💵')+' '+fmtFechaCorta(p.ts)+' · '+esc(p.concepto||'')+'</span><span style="font-weight:900;color:'+c.t+'">'+fmt(p.monto||0)+'</span></div>'
+      +devs
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0 0 16px"><span style="color:'+c.m+'">'+(pend>0?'Pendiente de este préstamo':'✓ Saldado')+'</span>'+(pend>0?'<span style="color:'+c.pen+';font-weight:800">'+fmt(pend)+'</span>':'')+'</div>'
+    +'</div>';
+  }).join('')||'<div style="color:'+c.m+';font-size:12px;padding:8px 0">Este socio no ha prestado nada.</div>';
+  var pagos=D.pagos.map(function(d){
+    return'<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:4px 0;border-bottom:1px solid '+c.b+';gap:8px"><span style="color:'+c.t+'">'+fmtFechaCorta(d.ts)+' · '+fpN(d.fp)+' <span style="color:'+c.m+'">· a «'+esc(d.prestamo.concepto||'')+'»'+(d.nota?' · '+esc(d.nota):'')+'</span></span><span style="color:'+c.ok+';font-weight:800;white-space:nowrap">'+fmt(d.monto)+'</span></div>';
+  }).join('')||'<div style="color:'+c.m+';font-size:12px;padding:8px 0">Todavía no se le ha devuelto nada.</div>';
+  var cuadro=function(l,v,col){return'<div style="flex:1;background:'+c.bg+';border:1px solid '+c.b+';border-radius:9px;padding:8px 10px;text-align:center"><div style="font-size:10px;color:'+c.m+'">'+l+'</div><div style="font-size:15px;font-weight:900;color:'+(col||c.t)+'">'+fmt(v)+'</div></div>';};
+  return'<div style="display:flex;gap:8px;margin-bottom:12px">'+cuadro('PRESTÓ',D.prestado)+cuadro('SE LE DEVOLVIÓ',D.devuelto,c.ok)+cuadro('SE LE DEBE',D.pendiente,D.pendiente>0?c.pen:c.ok)+'</div>'
+    +'<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:'+c.m+';margin-bottom:4px">PRÉSTAMOS Y SUS ABONOS</div>'+prestamos
+    +'<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:'+c.m+';margin:14px 0 4px">PAGOS AL SOCIO, EN ORDEN</div>'+pagos;
+}
+function abrirEstadoCuentaSocio(socio){
+  modal1('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:800;font-size:16px">📄 Estado de cuenta · '+esc(socio)+'</div>'
+    +'<button onclick="imprimirEstadoCuentaSocio(\''+esc(socio)+'\')" style="background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">🖨️ Imprimir</button></div>'
+    +'<div style="max-height:60vh;overflow-y:auto">'+estadoCuentaSocioHTML(socio,false)+'</div>'
+    +'<button class="btn btn-full" onclick="closeModal1()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);margin-top:10px">Cerrar</button>');
+}
+function imprimirEstadoCuentaSocio(socio){
+  var w=window.open('','_blank');if(!w){alert('El navegador bloqueó la ventana de impresión.');return;}
+  var hoy=new Date();
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Estado de cuenta '+esc(socio)+'</title><style>body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;max-width:720px;margin:0 auto}h1{font-size:18px;margin:0 0 2px}p{margin:0 0 14px;color:#555;font-size:12px}@media print{button{display:none}}</style></head><body>'
+    +'<h1>'+esc((window.NEGOCIO&&(NEGOCIO.nombre||NEGOCIO.nombreSimple))||'')+' · Estado de cuenta del socio '+esc(socio)+'</h1><p>Generado el '+hoy.toLocaleDateString('es-CO')+' '+hoy.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'</p>'
+    +estadoCuentaSocioHTML(socio,true)
+    +'<p style="margin-top:24px;color:#777">Los abonos marcados «Pago global» salieron de un pago único repartido del préstamo más antiguo al más reciente.</p>'
+    +'</body></html>');
+  w.document.close();
+  try{w.addEventListener('load',function(){setTimeout(function(){w.print();},200);});}catch(e){}
 }
 
 /* ═══ Corregir / eliminar préstamos de socios ═══ */
@@ -854,10 +904,18 @@ function confirmarCierreRappiSel(){
   window._rapCierreIds=ids;
   modal2('<div style="font-weight:800;font-size:15px;margin-bottom:4px">💸 ¿Cuánto consignó '+aC.n+'?</div>'
     +'<div style="color:var(--muted);font-size:11.5px;margin-bottom:12px">Saldo por transferencia: <b style="color:'+aC.c+'">'+fmt(total)+'</b> en '+sel.length+' venta'+(sel.length!==1?'s':'')+' (el efectivo ya entró a la caja al registrarlas). Escribe lo que de verdad llegó — la diferencia queda como descuento de '+aC.n+' y el neto <b style="color:#06B6D4">entra a Bre-B 💠</b>.</div>'
-    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor consignado</div>'
-    +'<input class="inp money" id="rap-consignado" type="text" value="'+moneyFmt(total)+'" inputmode="numeric" style="margin-bottom:12px;font-size:18px;font-weight:800"/>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">Valor consignado (lo que de verdad llegó)</div>'
+    +'<input class="inp money" id="rap-consignado" type="text" value="'+moneyFmt(total)+'" inputmode="numeric" oninput="_rapComisionPintar('+total+')" style="margin-bottom:4px;font-size:18px;font-weight:800"/>'
+    +'<div id="rap-comision" style="color:var(--muted);font-size:11.5px;margin-bottom:10px">Comisión de la app: <b style="color:#ef4444">$ 0</b> (0 %)</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:3px">¿A qué medio llegó la plata?</div>'
+    +'<select class="inp" id="rap-fp" style="margin-bottom:12px">'+FPV().filter(function(f){return f.id!=='efectivo';}).concat(FPV().filter(function(f){return f.id==='efectivo';})).map(function(f){return'<option value="'+f.id+'"'+(f.id===(window._rapFpUlt||'breb')?' selected':'')+'>'+f.emoji+' '+f.label+'</option>';}).join('')+'</select>'
     +'<button class="btn btn-full" onclick="finalizarCierreRappi()" style="background:'+aC.c+';color:#fff;font-weight:900">🔒 Registrar depósito</button>');
   setTimeout(function(){var el=document.getElementById('rap-consignado');if(el&&el.select)el.select();},80);
+}
+function _rapComisionPintar(total){
+  var c=moneyVal(document.getElementById('rap-consignado')),d=document.getElementById('rap-comision');if(!d)return;
+  var com=Math.max(0,total-c),pct=total>0?Math.round(com/total*1000)/10:0;
+  d.innerHTML='Comisión de la app: <b style="color:#ef4444">'+fmt(com)+'</b> ('+pct+' %)'+(c>total?' · <span style="color:#f5a623">consignaron más de lo esperado</span>':'');
 }
 function finalizarCierreRappi(){
   var ids=window._rapCierreIds||[];
@@ -883,14 +941,15 @@ function finalizarCierreRappi(){
       porProd[nombre].qty+=it.qty;
     });
   });
-  var cierre={id:'cr'+a52Ahora(),ts:a52Ahora(),plataforma:_appPlatCierre,total:total,brutoVentas:brutoVentas,efectivoPrevio:efPrevio,consignado:consignado,descuentoRappi:Math.max(0,descuento),nVentas:sel.length,
+  var fpDep=((document.getElementById('rap-fp')||{}).value)||'breb';window._rapFpUlt=fpDep;
+  var cierre={id:'cr'+a52Ahora(),ts:a52Ahora(),plataforma:_appPlatCierre,total:total,brutoVentas:brutoVentas,efectivoPrevio:efPrevio,consignado:consignado,descuentoRappi:Math.max(0,descuento),comisionPct:total>0?Math.round(Math.max(0,descuento)/total*1000)/10:0,fp:fpDep,nVentas:sel.length,
     productos:Object.values(porProd),
     desde:Math.min.apply(null,sel.map(function(v){return v.ts;})),
     hasta:Math.max.apply(null,sel.map(function(v){return v.ts;})),
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre};
   var r=ref('cierresRappi');if(r)r.push(cierre);else fbSet('cierresRappi',cierresRappi.concat([cierre]));
-  // 💠 El dinero consignado entra a la caja como Bre-B
-  cajaHoy['ini_breb']=(cajaHoy['ini_breb']||0)+consignado;
+  // 💠 El dinero consignado entra a la caja en el medio donde llegó (Bre-B, cuenta, Nequi…)
+  cajaHoy['ini_'+fpDep]=(cajaHoy['ini_'+fpDep]||0)+consignado;
   fbSet('cajaHoy',cajaHoy);
   // Dejar SOLO las pendientes (regrabar el nodo completo, llaveado por id)
   ventasRappi=quedan;
@@ -915,7 +974,7 @@ function rappiCierresHistorial(){
     return'<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center">'
         +'<div><div style="font-weight:800;font-size:14px;color:#FF6B00">'+fmt(c.consignado!=null?c.consignado:c.total)+(c.consignado!=null&&c.consignado!==c.total?' <span style="font-size:10px;color:var(--muted);font-weight:600">de '+fmt(c.total).replace(/\u00A0/g,' ')+' vendidos</span>':'')+'</div>'
-        +'<div style="color:var(--muted);font-size:11px">'+(function(){var a=APPS_DOMI[c.plataforma||'rappi']||APPS_DOMI.rappi;return'<span style="color:'+a.c+';font-weight:800">'+a.e+' '+a.n+'</span> · ';})()+rango+' · '+c.nVentas+' ventas · '+esc(c.uidNombre||'')+(c.descuentoRappi?' · <span style="color:#ef4444;font-weight:800">−'+fmt(c.descuentoRappi).replace(/\u00A0/g,' ')+' comisión</span>':'')+(c.efectivoPrevio?' · <span style="color:#22c55e;font-weight:700">💵 '+fmt(c.efectivoPrevio).replace(/\u00A0/g,' ')+' fue en efectivo</span>':'')+'</div></div>'
+        +'<div style="color:var(--muted);font-size:11px">'+(function(){var a=APPS_DOMI[c.plataforma||'rappi']||APPS_DOMI.rappi;return'<span style="color:'+a.c+';font-weight:800">'+a.e+' '+a.n+'</span> · ';})()+rango+' · '+c.nVentas+' ventas · '+esc(c.uidNombre||'')+(c.descuentoRappi?' · <span style="color:#ef4444;font-weight:800">−'+fmt(c.descuentoRappi).replace(/\u00A0/g,' ')+' comisión'+(c.comisionPct?' ('+c.comisionPct+' %)':'')+'</span>':'')+(c.fp?' · entró a '+(function(){var f=FPAGO.find(function(x){return x.id===c.fp;});return f?f.emoji+' '+f.label:c.fp;})():'')+(c.efectivoPrevio?' · <span style="color:#22c55e;font-weight:700">💵 '+fmt(c.efectivoPrevio).replace(/\u00A0/g,' ')+' fue en efectivo</span>':'')+'</div></div>'
       +'</div>'
       +(detalle?'<div style="color:var(--muted);font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">'+detalle+'</div>':'')
     +'</div>';

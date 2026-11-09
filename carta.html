@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Carta · {nombre}</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet"/>
-<script src="negocio.js?v=2026-11-05e"></script>
-<script src="comun.js?v=2026-11-05e"></script>
+<script src="negocio.js?v=2026-11-09"></script>
+<script src="comun.js?v=2026-11-09"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -523,7 +523,10 @@ function recargar(){
   document.getElementById("status").textContent="⏳ Cargando carta desde Firebase...";
   var _usa=function(v){
     if(!v){document.getElementById("status").textContent="Sin carta.";return;}
-    menuData=Object.values(v).filter(function(m){return m&&m.nombre;});
+    var _todos=Object.values(v).filter(function(m){return m&&m.nombre;});
+    var _apagado=function(m){return m.agotado===true||(m.sinStock&&m.disponible===false);};
+    window._agotadosIds=_todos.filter(_apagado).map(function(m){return String(m.id);});   // 🚫 apagados en el POS: no salen
+    menuData=_todos.filter(function(m){return !_apagado(m);});
     menuData.sort(function(a,b){return(a.cat||"").localeCompare(b.cat||"")||(a.nombre||"").localeCompare(b.nombre||"");});
     document.getElementById("status").textContent="✓ "+menuData.length+" productos listos";
     regenerar();
@@ -614,7 +617,10 @@ function regenerar(){
   var combosSection='';
   if(combosData.length){
     var comboColor='#7CFFB2';
-    var comboCards=combosData.map(function(c){
+    var _ag=window._agotadosIds||[];
+    var comboCards=combosData.filter(function(c){
+      return !(c.ingredientes||[]).some(function(ing){return ing&&ing.tipo!=='categoria'&&ing.prodId!=null&&_ag.indexOf(String(ing.prodId))>=0;});
+    }).map(function(c){
       var ings=(c.ingredientes||[]).map(function(ing){
         if(ing.tipo==='categoria')return'🗂️ '+esc(ing.cat)+' ×'+ing.cantidad;
         var pm=menuData.find(function(m){return m.id===ing.prodId||m.id===ing.pid;});

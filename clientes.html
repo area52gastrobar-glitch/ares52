@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
 <title>{nombre} {tipo}</title>
-<script src="negocio.js?v=2026-11-05e"></script>
-<script src="comun.js?v=2026-11-05e"></script>
+<script src="negocio.js?v=2026-11-09"></script>
+<script src="comun.js?v=2026-11-09"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@200;300;400;600&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -636,7 +636,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
       z.innerHTML=html;
       z.style.display="block";
     }
-    var _usaCarta=function(v){menuData=v?Object.values(v).filter(function(m){return m&&m.nombre;}):[];pintar();};
+    var _usaCarta=function(v){menuData=v?Object.values(v).filter(function(m){return m&&m.nombre&&m.agotado!==true&&!(m.sinStock&&m.disponible===false);}):[];pintar();};   // sin los 🚫 agotados: no se anuncian sus promos
     // la copia pública de la carta (sin costos); si aún no existe, intenta con el menú como antes
     var _deMenu=function(){db.ref("menu").once("value",function(s2){_usaCarta(s2.val());},function(){_usaCarta(null);});};
     db.ref("cartaPublica").on("value",function(sn){var v=sn.val();if(v)_usaCarta(v);else _deMenu();},_deMenu);

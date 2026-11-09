@@ -1308,6 +1308,11 @@ function renderCaja(){
         return'<button onclick="abrirDevolucionTotal(\''+esc(so)+'\')" style="width:100%;margin-top:6px;background:#22c55e;color:#fff;border:none;border-radius:9px;padding:10px;font-weight:800;font-size:13px;cursor:pointer">💸 Devolver TODO a '+esc(so)+' · '+fmt(porSocio[so])+'</button>';
       }).join('');
     })()
+    +(function(){
+      // 📄 Estado de cuenta por socio (incluye lo ya saldado): qué prestó, qué se le pagó y cuándo
+      var socs=[];prestamosSocios.forEach(function(p){if(p.socio&&socs.indexOf(p.socio)<0)socs.push(p.socio);});
+      return socs.length?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'+socs.map(function(so){return'<button onclick="abrirEstadoCuentaSocio(\''+esc(so)+'\')" style="flex:1;background:#38bdf818;color:#38bdf8;border:1px solid #38bdf844;border-radius:9px;padding:8px;font-weight:800;font-size:12px;cursor:pointer">📄 Cuenta de '+esc(socNom(so))+'</button>';}).join('')+'</div>':'';
+    })()
     +(!a52Mod('socios')?'':'<button onclick="abrirPrestamoSocio()" style="width:100%;margin-top:4px;background:#f5a62318;color:#f5a623;border:1px solid #f5a62344;border-radius:10px;padding:11px;font-weight:700;font-size:13px;cursor:pointer">+ Registrar préstamo de socio</button>')
     +(saldadosPS.length?'<button data-act="toggle-sec" data-sec="prestamosHist" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;text-align:left">'+(_secOpen.prestamosHist?'▼':'▶')+' Saldados ('+saldadosPS.length+')</button>'
       +(_secOpen.prestamosHist?saldadosPS.map(function(p){
