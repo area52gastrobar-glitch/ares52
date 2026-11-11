@@ -61,6 +61,7 @@ function _aplicarNuevaCantidad(idx,nueva){
   var it=pped[idx];if(!it)return;
   if(isNaN(nueva)||nueva<0){alert('Cantidad no válida.');return;}
   var dif=nueva-it.qty;
+  if(dif>0){var _faltaE=faltaStock(it,dif);if(_faltaE){avisarFaltaStock(_faltaE);return;}}
   if(dif!==0){
     var nomLog=it.isCustom?it.customNombre:(it.isCombo?it.comboNombre:(it.cubMixNombre||((menu.find(function(m){return m.id===it.pid;})||{}).nombre)||'Producto'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' 🪣':'');
     ajustarStockItem(it,-dif);  // sube -> descuenta; baja -> devuelve
@@ -156,6 +157,69 @@ function abrirCantidadMesa(pid,cubeta){
    2. Escribe en Firebase con TRANSACCIÓN (menu/{id}/stock) para que dos
       equipos vendiendo a la vez no se pisen el descuento.
    3. Registra el movimiento en el kardex (libro de inventario).           */
+/* ═══ 🚫 NUNCA VENDER LO QUE NO HAY ═══
+   Con «vender sin stock» apagado, antes de agregar cualquier cosa a una mesa se calcula
+   todo lo que esa cantidad descontaría (producto, variante ×und, cubetazo ×5, receta e
+   insumos de grupos) y se compara con lo que hay. Si falta algo, no se agrega.           */
+function _necesidadStock(item,cant){
+  var req=[];
+  function add(t,id,c){c=Math.round(c)||0;if(c<=0||id==null)return;var k=req.find(function(r){return r.t===t&&String(r.id)===String(id);});if(k)k.cant+=c;else req.push({t:t,id:id,cant:c});}
+  function cascadaReceta(p,unds,recGrupos,qtyItem){
+    if(!p||!p.receta||!p.receta.length)return;
+    p.receta.forEach(function(ri){
+      if(ri.grupo){
+        var rg=recGrupos?(Array.isArray(recGrupos)?recGrupos:Object.values(recGrupos)).find(function(x){return x.grupo===ri.grupo;}):null;
+        if(rg&&rg.det){
+          var factor=cant/(qtyItem||cant);
+          (Array.isArray(rg.det)?rg.det:Object.values(rg.det)).forEach(function(d){add('i',d.ingId,d.cant*factor);});
+          return;
+        }
+        var cantG=(ri.cantidad||1)*unds;
+        var delG=ingredientes.filter(function(i){return (i.grupo||'').trim()===ri.grupo;}).sort(function(a,b){return (parseInt(b.stock)||0)-(parseInt(a.stock)||0);})[0];
+        if(delG)add('i',delG.id,cantG);
+        return;
+      }
+      var enMenu=menu.some(function(m){return Number(m.id)===Number(ri.pid);});
+      var cantR=ri.porCada>0?Math.round(ri.cantidad*unds/ri.porCada):ri.cantidad*unds;
+      add(enMenu?'p':'i',ri.pid,cantR);
+    });
+  }
+  if(!item||item.isCustom||!(cant>0))return req;
+  if(item.isCubetazoMix){(item.cubMixDetalle||[]).forEach(function(dd){add('p',dd.prodId,(dd.cantidad||0)*cant);});return req;}
+  if(item.isCombo){
+    var ings=item.comboIngredientes||[];
+    if(!ings.length){var cc=combos.find(function(x){return String(x.id)===String(item.comboId||item.pid);});if(cc)ings=cc.ingredientes||[];}
+    ings.forEach(function(ing){
+      var c=(ing.cantidad||1)*cant*(parseInt(ing.varianteUnd)||1);
+      if(ing.prodId!=null){add('p',ing.prodId,c);cascadaReceta(menu.find(function(m){return Number(m.id)===Number(ing.prodId);}),c,null,null);}
+      if(ing.ingId!=null)add('i',ing.ingId,c);
+    });
+    return req;
+  }
+  var p=menu.find(function(m){return Number(m.id)===Number(item.pid);});
+  if(!p)return req;
+  var unds=cant*(item.cubeta?5:(parseInt(item.varianteUnd)||1));
+  add('p',p.id,unds);
+  cascadaReceta(p,unds,item.recGrupos,item.qty);
+  return req;
+}
+function faltaStock(item,cant){
+  if(ventaSinStock)return null;
+  var faltas=[];
+  _necesidadStock(item,cant).forEach(function(r){
+    var col=r.t==='p'?menu:ingredientes;
+    var it=col.find(function(x){return String(x.id)===String(r.id);});
+    if(!it)return;
+    if(r.t==='p'&&it.sinStock){if(it.disponible===false)faltas.push((it.emoji?it.emoji+' ':'')+it.nombre+': marcado agotado');return;}
+    var st=parseInt(it.stock);if(isNaN(st))st=0;
+    if(st<r.cant)faltas.push((it.emoji?it.emoji+' ':'')+it.nombre+': hay '+st+(it.und?' '+it.und:'')+' y se necesitan '+r.cant);
+  });
+  return faltas.length?faltas:null;
+}
+function avisarFaltaStock(faltas){
+  alert('🚫 No se puede agregar: no hay inventario suficiente.\n\n• '+faltas.join('\n• ')+'\n\nLa venta sin stock está apagada. Si el conteo está mal, el administrador corrige el inventario.');
+}
+
 function cambiarStock(tipo,id,delta,motivo){
   delta=parseInt(delta)||0;
   if(!delta)return;
@@ -171,9 +235,20 @@ function cambiarStock(tipo,id,delta,motivo){
   var a=parseInt(it.stock);if(isNaN(a))a=0;it.stock=a+delta;
   var d=getDb();
   if(d){
+    var _bloquea=!ventaSinStock&&delta<0;
     d.ref((tipo==='p'?'menu/':'ingredientes/')+id+'/stock').transaction(function(cur){
-      var c=parseInt(cur);if(isNaN(c))c=0;return c+delta;
-    });
+      var c=parseInt(cur);if(isNaN(c))c=0;
+      if(_bloquea&&c+delta<0)return;   // 🚫 otro equipo ya vendió esas unidades: no se descuenta
+      return c+delta;
+    }).then(function(res){
+      if(res&&res.committed===false){
+        var real=res.snapshot?parseInt(res.snapshot.val()):NaN;
+        it.stock=isNaN(real)?a:real;
+        logKardex(tipo,id,it.nombre,0,'⚠️ NO DESCONTADO ('+Math.abs(delta)+'): no había existencia — '+(motivo||''),it.stock);
+        alert('⚠️ '+(it.emoji?it.emoji+' ':'')+it.nombre+': otro equipo acaba de vender las últimas unidades (quedan '+it.stock+').\nQuita lo que acabas de agregar de la mesa.');
+        if(typeof render==='function')render();
+      }
+    }).catch(function(){});
   }
   logKardex(tipo,id,it?it.nombre:'',delta,motivo,it?parseInt(it.stock):null);
 }
@@ -759,6 +834,8 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
     var _vv=p.variantes.find(function(v){return v.nombre===varianteNombre;});
     if(_vv&&_vv.und)_vUnd=parseInt(_vv.und)||1;
   }
+  var _faltaQ=faltaStock({pid:pid,cubeta:cubeta,varianteUnd:_vUnd,recGrupos:_rep?_rep.recGrupos:null,qty:cantidad},cantidad);
+  if(_faltaQ){avisarFaltaStock(_faltaQ);return;}
   // 🍹 Promo 2x1 vigente: la mitad va gratis (pide 2, paga 1; con 3 paga 2)
   var _p2=(p&&!cubeta)?promo2x1Vigente(p):null;
   var _gratis2x1=_p2?Math.floor(cantidad/2):0;
@@ -819,6 +896,8 @@ function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
     var _vvL=p.variantes.find(function(v){return v.nombre===varianteNombre;});
     if(_vvL&&_vvL.und)_vUndL=parseInt(_vvL.und)||1;
   }
+  var _faltaU=faltaStock({pid:pid,cubeta:cubeta,varianteUnd:_vUndL,qty:1},1);
+  if(_faltaU){avisarFaltaStock(_faltaU);return;}
   if(idx>=0)pedidos[id][idx].qty++;
   else pedidos[id].push({
     pid:pid,cubeta:cubeta,qty:1,
@@ -932,6 +1011,8 @@ function confirmarCubetazoMixto(cantidades,tam,precioFijo,nombreCub){
     var precioUnidad=Math.round(precioBalde/tam);
     detalle.push({prodId:p.id,nombre:p.nombre,emoji:p.emoji,cantidad:q,precioUnidad:precioUnidad});
   });
+  var _faltaM=faltaStock({isCubetazoMix:true,cubMixDetalle:detalle},1);
+  if(_faltaM){avisarFaltaStock(_faltaM);return;}
   var newItem={
     pid:'cubmix_'+a52Ahora(),
     uidItem:'it'+a52Ahora().toString(36)+Math.floor(Math.random()*1e6).toString(36),

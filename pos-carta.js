@@ -1078,14 +1078,9 @@ function confirmarComboEnPedido(cb, selecciones, varSel){
     }
   });
 
-  // Check stock
-  var ok=finalIngs.every(function(ing){
-    if(ing.prodId==null)return true;
-    var p=menu.find(function(m){return Number(m.id)===Number(ing.prodId);});
-    var necesita=ing.cantidad*(parseInt(ing.varianteUnd)||1);
-    return p&&(p.sinStock||ventaSinStock||(parseInt(p.stock)||0)>=necesita);
-  });
-  if(!ok){alert('Stock insuficiente para alguno de los productos elegidos.');return;}
+  // 🚫 Nunca vender lo que no hay: productos, insumos y recetas del combo
+  var _faltaC=faltaStock({isCombo:true,comboIngredientes:finalIngs,comboNombre:cb.nombre},1);
+  if(_faltaC){avisarFaltaStock(_faltaC);return;}
 
   var id=mesaActiva.id;
   if(!pedidos[id])pedidos[id]=[];
