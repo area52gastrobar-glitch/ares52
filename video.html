@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Video del negocio</title>
+<!-- Video para las pantallas del negocio. Los precios, combos y promociones se leen de la carta del POS:
+     al cambiar un precio en el POS, el video se actualiza solo. APP_BUILD='2026-11-16k' -->
+<link rel="stylesheet" href="fuentes.css?v=2026-11-16k"/>
+<script src="negocio.js?v=2026-11-16k"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:1.3vw}
+@media (max-aspect-ratio:1/1){html{font-size:3.4vw}}
+:root{--noche:#07060d;--lima:#8dff2b;--lima2:#35d07f;--ama:#ffe600;--rojo:#ff3b4e;--nieve:#f7f4ea;--humo:#b9b4c9;--morado:#a855f7;--cian:#4de1ff}
+body{background:var(--noche);color:var(--nieve);font-family:'Figtree',system-ui,sans-serif;overflow:hidden;width:100vw;height:100vh;cursor:pointer;-webkit-user-select:none;user-select:none}
+/* Fondo: muro oscuro con rayos de neón, como el afiche del bar */
+#fondo{position:fixed;left:0;top:0;width:100%;height:100%;
+  background:
+   linear-gradient(118deg,transparent 0 21.6%,rgba(141,255,43,.2) 21.8% 22%,transparent 22.2%),
+   linear-gradient(62deg,transparent 0 13.6%,rgba(168,85,247,.18) 13.8% 14%,transparent 14.2%),
+   linear-gradient(242deg,transparent 0 17.6%,rgba(77,225,255,.18) 17.8% 18%,transparent 18.2%),
+   linear-gradient(298deg,transparent 0 11.6%,rgba(141,255,43,.16) 11.8% 12%,transparent 12.2%),
+   radial-gradient(ellipse at 50% 0%,rgba(53,208,127,.20),transparent 55%),
+   radial-gradient(ellipse at 85% 100%,rgba(255,59,78,.16),transparent 50%),
+   repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3.2rem),
+   repeating-linear-gradient(90deg,rgba(255,255,255,.022) 0 1px,transparent 1px 6.4rem),
+   linear-gradient(180deg,#0d0b18,#07060d 60%,#050409)}
+body:not(.navidad) #fondo{background:
+   linear-gradient(118deg,transparent 0 21.6%,rgba(141,255,43,.2) 21.8% 22%,transparent 22.2%),
+   linear-gradient(62deg,transparent 0 13.6%,rgba(168,85,247,.18) 13.8% 14%,transparent 14.2%),
+   linear-gradient(242deg,transparent 0 17.6%,rgba(77,225,255,.18) 17.8% 18%,transparent 18.2%),
+   radial-gradient(ellipse at 50% 0%,rgba(168,85,247,.22),transparent 55%),
+   repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3.2rem),
+   repeating-linear-gradient(90deg,rgba(255,255,255,.022) 0 1px,transparent 1px 6.4rem),
+   linear-gradient(180deg,#0d0b18,#07060d 60%,#050409)}
+/* Navidad: guirnalda de luces arriba y nieve */
+#luces{position:fixed;left:0;top:0;width:100%;height:4.2rem;z-index:6;pointer-events:none;display:none}
+.navidad #luces{display:block}
+#luces svg{width:100%;height:100%;display:block}
+#luces circle{animation:foco 2.4s ease-in-out infinite}
+#luces circle:nth-of-type(3n){animation-delay:.8s}#luces circle:nth-of-type(3n+1){animation-delay:1.6s}
+@keyframes foco{0%,100%{opacity:1}50%{opacity:.35}}
+#nieve{position:fixed;left:0;top:0;width:100%;height:100%;z-index:5;pointer-events:none;overflow:hidden;display:none}
+.navidad #nieve{display:block}
+#nieve i{position:absolute;top:-6vh;font-style:normal;color:#fff;opacity:.75;animation:cae linear infinite}
+@keyframes cae{to{transform:translate3d(5vw,112vh,0) rotate(200deg)}}
+
+#pantallas{position:fixed;left:0;top:0;width:100%;height:100%;z-index:2}
+.p{position:absolute;left:0;top:0;width:100%;height:100%;padding:5.2rem 4.5rem 4.2rem;display:flex;flex-direction:column;opacity:0;visibility:hidden;transition:opacity .7s ease,transform .7s ease;transform:scale(1.03)}
+.p.on{opacity:1;visibility:visible;transform:none}
+/* Títulos */
+.neon{font-family:'Tilt Neon','Figtree',sans-serif;color:#fff;text-shadow:0 0 .35rem #fff,0 0 1.1rem var(--rojo),0 0 2.4rem var(--rojo)}
+body:not(.navidad) .neon{text-shadow:0 0 .35rem #fff,0 0 1.1rem var(--morado),0 0 2.4rem var(--morado)}
+.gordo{font-family:'Unbounded','Figtree',sans-serif;font-weight:900;line-height:.95;letter-spacing:-.02em}
+.lima{color:var(--lima);text-shadow:0 .28rem 0 #1f5c00,0 0 2rem rgba(141,255,43,.45)}
+.brocha{display:inline-block;background:var(--ama);color:#0b0b10;font-family:'Unbounded','Figtree',sans-serif;font-weight:700;padding:.35rem 1.4rem .4rem;transform:rotate(-2deg) skewX(-6deg);border-radius:.3rem .9rem .35rem 1rem;box-shadow:.25rem .3rem 0 rgba(0,0,0,.55)}
+.cab{display:flex;align-items:center;gap:1.6rem;margin-bottom:1.8rem;flex:none;min-height:8.6rem;padding-right:9rem}
+.cab h2{font-size:3.4rem}
+.cab .sub{font-size:1.4rem;color:var(--humo);font-weight:600;margin-top:.5rem}
+.cab .emo{font-size:5rem;flex:none;line-height:1;filter:drop-shadow(0 0 1.2rem rgba(141,255,43,.5))}
+/* La mascota señala los precios */
+.masc{position:absolute;left:1.2rem;bottom:0;height:74%;width:auto;max-width:16.5rem;object-fit:contain;object-position:bottom;filter:drop-shadow(0 0 1.6rem rgba(141,255,43,.25));animation:saluda 3.2s ease-in-out infinite;transform-origin:50% 100%}
+@keyframes saluda{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.6deg) translateY(-.4rem)}}
+.p.conm{padding-left:18.5rem;padding-right:3rem}
+.conm .lista{column-gap:3rem}.conm .fila .n b{font-size:1.5rem}.conm .fila .v{font-size:1.55rem}.conm .fila .e{font-size:1.6rem;width:2.1rem}.conm .fila{gap:.7rem;padding:.85rem 0}
+.conm .tarjetas{gap:1.4rem}.conm .tar{padding:1.4rem 1.3rem 1.3rem}.conm .tar h3{font-size:1.5rem}.conm .tar li{font-size:1.3rem}.conm .tar .precio{font-size:1.95rem;padding-left:1rem;padding-right:1rem}.conm .tar .gigante{font-size:5rem}.conm .tar .e{font-size:2.6rem;right:1rem;top:1rem}.conm .tar h3{padding-right:3rem}.conm #x{}
+.conm .cab{padding-right:8rem}
+/* Bienvenida */
+.hola{flex-direction:row;align-items:center;gap:4rem;padding-top:4.6rem}
+.hola .afiche{height:100%;flex:none;border-radius:1.2rem;box-shadow:0 0 0 .18rem rgba(141,255,43,.8),0 0 3.5rem rgba(141,255,43,.35);object-fit:contain;max-width:46%}
+.hola .txt{flex:1;min-width:0}
+.hola .neon{font-size:5rem;line-height:1.05}
+.hola .gordo{font-size:8.4rem;margin:.6rem 0 1.4rem}
+.hola .brocha{font-size:2rem}
+.hola .datos{margin-top:2.8rem;font-size:1.7rem;line-height:1.7;color:var(--humo);font-weight:600}
+.hola .datos b{color:var(--nieve)}
+.hola .logo{width:9rem;height:9rem;border-radius:50%;object-fit:cover;box-shadow:0 0 0 .2rem var(--lima),0 0 2.5rem rgba(141,255,43,.5);margin-bottom:1.6rem}
+/* Portada de Navidad */
+.feliz{align-items:center;justify-content:center;text-align:center}
+.feliz .arbol{font-size:11rem;line-height:1;filter:drop-shadow(0 0 2.2rem rgba(53,208,127,.7))}
+.feliz{flex-direction:row;gap:3rem}.feliz .masc2{height:86%;width:auto;flex:none;filter:drop-shadow(0 0 2rem rgba(255,59,78,.35))}
+.feliz .neon{font-size:7rem;margin:1rem 0 .4rem}
+.feliz .gordo{font-size:4.6rem}
+.feliz .brocha{font-size:1.9rem;margin-top:2rem}
+/* Lista de precios */
+.lista{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-auto-flow:column;column-gap:4.5rem;align-content:start}
+.fila{display:flex;align-items:center;gap:1rem;padding:.95rem 0;border-bottom:.1rem dashed rgba(255,255,255,.14);min-width:0}
+.fila .e{font-size:1.9rem;flex:none;width:2.6rem;text-align:center;align-self:center}
+.fila .n{flex:1;min-width:0}
+.fila .n b{display:block;font-size:1.75rem;font-weight:800;line-height:1.15}
+  .fila .n span{display:block;font-size:1.12rem;color:var(--humo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem}
+.fila .v{flex:none;font-family:'Unbounded','Figtree',sans-serif;font-weight:700;font-size:1.8rem;color:var(--ama);text-shadow:0 0 1rem rgba(255,230,0,.35);white-space:nowrap}
+.fila .v small{font-family:'Figtree',sans-serif;font-size:1rem;color:var(--humo);font-weight:600;margin-right:.5rem;text-shadow:none}
+.fila .v s{font-family:'Figtree',sans-serif;font-size:1.05rem;color:var(--humo);font-weight:600;margin-right:.6rem;text-shadow:none}
+/* Plato protagonista: una pantalla para cada comida (alitas, hamburguesas, pizzas…) */
+.plato .antojo{font-size:2.6rem;margin-bottom:.2rem}
+.plato .cab h2{font-size:4.6rem}
+.plato .lista{grid-template-columns:1fr;grid-auto-flow:row;padding-right:19rem}
+.plato .fila{padding:1.05rem 0}
+.plato .fila .n b{font-size:2.1rem!important}.plato .fila .n span{font-size:1.25rem;white-space:normal}
+.plato .fila .v{font-size:2.3rem!important}
+.plato .grande{position:absolute;right:3rem;bottom:3.5rem;width:17rem;height:17rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5rem;line-height:1;background:radial-gradient(circle at 35% 30%,rgba(255,230,0,.22),rgba(255,59,78,.12) 55%,transparent 72%);box-shadow:0 0 0 .2rem rgba(255,230,0,.75),0 0 3.5rem rgba(255,230,0,.3);transform:rotate(-6deg);animation:late 2.6s ease-in-out infinite}
+.plato .grande img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.plato .grande.foto{width:23rem;height:23rem;right:2.4rem;bottom:2.6rem;transform:none;background:#0b0a14;box-shadow:0 0 0 .22rem rgba(255,230,0,.85),0 0 0 .7rem rgba(255,59,78,.25),0 0 4rem rgba(255,230,0,.35);animation:late2 3s ease-in-out infinite}
+@keyframes late2{50%{transform:scale(1.04)}}
+.plato.confoto .lista{padding-right:25rem}
+@keyframes late{50%{transform:rotate(-3deg) scale(1.05)}}
+/* Tarjetas (combos y promociones) */
+.tarjetas{flex:1;min-height:0;display:flex;gap:2.2rem;align-items:stretch}
+.tar{flex:1;min-width:0;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));border:.14rem solid rgba(141,255,43,.55);border-radius:1.4rem;padding:1.8rem 1.8rem 1.6rem;display:flex;flex-direction:column;box-shadow:0 0 2.6rem rgba(141,255,43,.14),inset 0 0 3rem rgba(0,0,0,.35);position:relative;overflow:hidden}
+.navidad .tar:nth-child(2){border-color:rgba(255,59,78,.7);box-shadow:0 0 2.6rem rgba(255,59,78,.18),inset 0 0 3rem rgba(0,0,0,.35)}
+.tar .e{font-size:3.2rem;line-height:1;position:absolute;right:1.3rem;top:1.3rem}
+.tar h3{font-family:'Unbounded','Figtree',sans-serif;font-weight:900;font-size:1.75rem;line-height:1.12;margin:0 0 1rem;padding-right:3.6rem;color:var(--lima);overflow-wrap:break-word}
+.tar ul{list-style:none;flex:1;min-height:0;overflow:hidden}
+.tar li{font-size:1.5rem;font-weight:600;line-height:1.35;padding:.22rem 0 .22rem 1.5rem;position:relative}
+.tar li:before{content:'';position:absolute;left:.2rem;top:.85rem;width:.6rem;height:.6rem;border-radius:50%;background:var(--ama)}
+.tar .cuando{font-size:1.25rem;color:var(--humo);font-weight:600;margin-top:.6rem}
+.tar .precio{align-self:flex-start;margin-top:1.1rem;font-size:2.8rem}
+.tar .antes{font-size:1.3rem;color:var(--humo);margin-top:.9rem;font-weight:600}
+.tar .gigante{font-family:'Unbounded','Figtree',sans-serif;font-weight:900;font-size:6rem;margin-bottom:.5rem;line-height:1;color:var(--ama);text-shadow:0 .3rem 0 #6b5a00,0 0 2rem rgba(255,230,0,.4)}
+/* Cierre */
+.cierre{flex-direction:row;align-items:center;justify-content:center;gap:5rem}
+.cierre .qr{background:#fff;padding:1rem;border-radius:1.2rem;box-shadow:0 0 0 .3rem var(--lima),0 0 3.4rem rgba(141,255,43,.45)}
+.cierre .qr img{display:block;width:24rem;height:24rem}
+.cierre .neon{font-size:4.4rem}
+.cierre .gordo{font-size:5rem;margin:.5rem 0 1.4rem}
+.cierre p{font-size:1.9rem;line-height:1.8;font-weight:600;color:var(--humo)}
+.cierre p b{color:var(--nieve)}
+/* Fijos */
+body.sinqr #qr{display:none}
+#qr{position:fixed;right:3rem;top:4.9rem;z-index:8;text-align:center;background:rgba(7,6,13,.78);border:.1rem solid rgba(141,255,43,.5);border-radius:.8rem;padding:.5rem}
+#qr img{display:block;width:6.2rem;height:6.2rem;border-radius:.4rem;background:#fff}
+#qr div{font-size:.72rem;font-weight:800;letter-spacing:.12em;color:var(--lima);margin-top:.3rem}
+#barra{position:fixed;left:0;bottom:0;height:.35rem;width:0;background:linear-gradient(90deg,var(--lima),var(--ama));z-index:9}
+.navidad #barra{background:linear-gradient(90deg,var(--rojo),var(--ama),var(--lima2))}
+#aviso{position:fixed;left:1.6rem;bottom:1.2rem;z-index:8;font-size:.85rem;color:var(--humo);opacity:.7}
+/* Pantallas verticales (celular, tótem) */
+@media (max-aspect-ratio:1/1){
+  .p{padding:5rem 1.6rem 6rem}
+  .hola{flex-direction:column;gap:1.4rem;justify-content:center;text-align:center}
+  .hola .afiche{max-width:100%;height:auto;max-height:62%;}
+  .hola .gordo{font-size:4.6rem}.hola .neon{font-size:2.8rem}.hola .datos,.hola .logo{display:none}
+  .lista{grid-template-columns:1fr;grid-auto-flow:row;grid-template-rows:none!important}
+  .cab{padding-right:0;min-height:0}.tarjetas{flex:none}.tar{flex:none;padding-bottom:1rem}.tar ul{flex:none;padding-right:9.5rem;min-height:3rem}.tar li{font-size:1.15rem}.tar .precio{font-size:1.5rem;margin:0;position:absolute;right:1rem;bottom:.9rem}.tar .antes{margin-top:.3rem;font-size:1rem}.tar .cuando{font-size:1rem}
+  .cab h2{font-size:2.5rem}.cab .emo{font-size:3rem}
+  .tarjetas{flex-direction:column;gap:1rem}.tar{padding:1rem 1.2rem}.tar .e{font-size:2.4rem;position:absolute;right:1rem;top:.8rem}.tar h3{margin-top:0;font-size:1.6rem;padding-right:3rem}.tar .gigante{font-size:3.6rem}
+  .cierre{flex-direction:column;gap:2rem;text-align:center}.cierre .qr img{width:15rem;height:15rem}
+  .feliz .neon{font-size:4rem}.feliz .gordo{font-size:2.6rem}
+  #qr{display:none}
+  .plato .grande,.plato .grande.foto{width:7.5rem;height:7.5rem;font-size:4.2rem;right:1rem;bottom:auto;top:5rem}.plato .lista,.plato.confoto .lista{padding-right:0}.plato .cab h2{font-size:2.6rem}.plato .cab{padding-right:8rem}.plato .antojo{font-size:1.6rem}
+  .masc{display:none}.p.conm{padding-left:1.6rem}.feliz{flex-direction:column}.feliz .masc2{height:42%}
+}
+@media (prefers-reduced-motion:reduce){.plato .grande{animation:none}.masc{animation:none}#nieve{display:none!important}#luces circle{animation:none}.p{transition:none}}
+</style>
+</head>
+<body>
+<div id="fondo"></div>
+<div id="luces" aria-hidden="true"></div>
+<div id="nieve" aria-hidden="true"></div>
+<div id="pantallas"></div>
+<div id="qr"><img id="qr-img" alt="Código QR de la carta"/><div>VER CARTA</div></div>
+<div id="aviso"></div>
+<div id="barra"></div>
+<script>
+(function(){
+var N=window.NEGOCIO||{},BASE=(N.firebase&&N.firebase.databaseURL)||'';
+var POR_LISTA=10,POR_TARJETA=3,POR_PLATO=4,CADA=45000;   // filas por pantalla · tarjetas por pantalla · cada cuánto se revisan los precios
+var datos={carta:null,combos:null,promos:null,tema:null},huella='',pantallas=[],actual=0,reloj=null,inicio=0,dura=0,pausa=false;
+function esc(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function plata(n){return '$'+Math.round(Number(n)||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+function lista(v){return v?(Array.isArray(v)?v:Object.keys(v).map(function(k){return v[k];})).filter(Boolean):[];}
+function url(p){try{return new URL(p,location.href.split('#')[0].split('?')[0]).href;}catch(e){return p;}}
+function enNavidad(){
+  var q=location.search;if(/navidad=0/.test(q))return false;if(/navidad=1/.test(q))return true;
+  if(datos.tema==='navidad')return true;
+  var d=new Date(),m=d.getMonth()+1,x=d.getDate();return (m===11&&x>=15)||m===12||(m===1&&x<=8);
+}
+/* ── Adornos ── */
+function adornos(){
+  var L=document.getElementById('luces'),c=['#ff3b4e','#ffe600','#35d07f','#4de1ff','#ff8a3d'],h='<svg viewBox="0 0 1000 42" preserveAspectRatio="none"><path d="M0 6 ';
+  for(var i=0;i<10;i++)h+='Q'+(i*100+50)+' 30 '+((i+1)*100)+' 6 ';
+  h+='" fill="none" stroke="#2c3a30" stroke-width="1.6"/>';
+  for(var k=0;k<40;k++){var t=(k%4+.5)/4,y=6+2*t*(1-t)*24*2-(.0);h+='<circle cx="'+(k*25+12.5)+'" cy="'+(y+5).toFixed(1)+'" r="4.2" fill="'+c[k%c.length]+'" style="filter:drop-shadow(0 0 4px '+c[k%c.length]+')"/>';}
+  L.innerHTML=h+'</svg>';
+  var n='';for(var j=0;j<34;j++)n+='<i style="left:'+((j*61+7)%100)+'%;font-size:'+(.7+(j*7%10)/8)+'rem;animation-duration:'+(10+(j*5)%11)+'s;animation-delay:-'+((j*3)%13)+'s">'+(j%3?'❄':'•')+'</i>';
+  document.getElementById('nieve').innerHTML=n;
+  document.getElementById('qr-img').src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=6&data='+encodeURIComponent(url('clientes.html')+'#carta');
+}
+/* ── Lo que se muestra, a partir de la carta del POS ── */
+function productos(){return lista(datos.carta).filter(function(m){return m.nombre&&m.agotado!==true&&!(m.sinStock&&m.disponible===false);});}
+function precioDe(m){
+  var vs=lista(m.variantes).filter(function(v){return Number(v.precio)>0;});
+  if(Number(m.precio)>0)return {v:plata(m.precio),d:vs.length?vs.map(function(v){return v.nombre+' '+plata(v.precio);}).join(' · '):''};
+  if(vs.length)return {v:(vs.length>1?'<small>desde</small>':'')+plata(Math.min.apply(null,vs.map(function(v){return Number(v.precio);}))),d:vs.map(function(v){return v.nombre+' '+plata(v.precio);}).join(' · ')};
+  return null;
+}
+function cab(emo,titulo,sub){return '<div class="cab"><div class="emo">'+emo+'</div><div><h2 class="gordo lima">'+esc(titulo)+'</h2>'+(sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</div></div>';}
+function trozos(a,n){var r=[];for(var i=0;i<a.length;i+=n)r.push(a.slice(i,i+n));return r;}
+var DIAS=['dom','lun','mar','mié','jue','vie','sáb'];
+function cuando(pr){
+  var d=lista(pr.dias).slice().sort(),t=d.length===7||!d.length?'Todos los días':d.map(function(x){return DIAS[x];}).join(' · ');
+  var f=function(hm){if(!hm)return'';var p=String(hm).split(':'),h=parseInt(p[0],10),ap=h>=12?'p. m.':'a. m.';h=h%12||12;return h+':'+(p[1]||'00')+' '+ap;};
+  return t+(pr.horaIni&&pr.horaFin?' · de '+f(pr.horaIni)+' a '+f(pr.horaFin):'');
+}
+/* Comidas que tienen pantalla propia. Se arman con lo que haya en la carta: si un plato no existe, esa pantalla no sale.
+   En negocio.js se pueden cambiar (videoComida) y ponerles foto: {clave:'pizza',titulo:'Pizzas',frase:'…',emoji:'🍕',foto:'marca-pizza.jpg'} */
+var COMIDA=N.videoComida||[
+  {clave:'alita|alas|wings',titulo:'Alitas',frase:'Para chuparse los dedos',emoji:'🍗'},
+  {clave:'hamburgues|burger',titulo:'Hamburguesas',frase:'Para los que llegan con hambre',emoji:'🍔'},
+  {clave:'pizza',titulo:'Pizzas',frase:'Para compartir con el parche',emoji:'🍕'},
+  {clave:'empanad',titulo:'Empanadas',frase:'Para picar mientras llega la pola',emoji:'🥟'},
+  {clave:'arepa',titulo:'Arepas',frase:'El antojo de siempre',emoji:'🫓'},
+  {clave:'chorizo',titulo:'Chorizos',frase:'El mejor amigo de una cerveza',emoji:'🌭'}];
+function sinTilde(t){return String(t||'').toLowerCase().normalize?String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''):String(t||'').toLowerCase();}
+function armar(){
+  var P=[],nav=enNavidad(),prods=productos(),porId={};
+  prods.forEach(function(m){porId[String(m.id)]=m;});
+  document.body.className=(nav?'navidad':'')+(/sinqr/.test(document.body.className)?' sinqr':'');
+  // 1) Bienvenida
+  var datosTxt=(N.direccion?'📍 <b>'+esc(N.direccion)+(N.ciudad?', '+esc(N.ciudad):'')+'</b><br>':'')+(N.telefono?'📞 Reservas <b>'+esc(String(N.telefono).replace(/^(\d{3})(\d{3})(\d{4})$/,'$1 $2 $3'))+'</b><br>':'')+(N.instagram?'📸 <b>@'+esc(N.instagram)+'</b>':'');
+  var afiche=(nav&&N.videoBienvenidaNavidad)||N.videoBienvenida||'',masc=(nav&&N.videoMascotaNavidad)||N.videoMascota||'';
+  var M=masc?'<img class="masc" src="'+esc(masc)+'" alt=""/>':'',CM=masc?'conm':'';
+  P.push({t:8000,c:'hola',h:(afiche?'<img class="afiche" src="'+esc(afiche)+'" alt=""/>':'')
+    +'<div class="txt">'+(!afiche&&N.logo?'<img class="logo" src="'+esc(N.logo)+'" alt=""/>':'')
+    +'<div class="neon">'+(nav?'¡Feliz Navidad!':'¡Bienvenidos a')+'</div><div class="gordo lima">'+esc(N.nombre||'')+'</div>'
+    +(N.videoLema||N.lema?'<div class="brocha">'+esc(N.videoLema||N.lema)+'</div>':'')+'<div class="datos">'+datosTxt+'</div></div>'});
+  if(nav)P.push({t:6000,c:'feliz',h:(masc?'<img class="masc2" src="'+esc(masc)+'" alt=""/><div>':'<div><div class="arbol">🎄</div>')+'<div class="neon">Navidad en '+esc(N.nombreCorto||N.nombre||'')+'</div><div class="gordo lima">Celebra con tu parche</div><div class="brocha">🎅 Novenas · despedidas · amigo secreto</div></div>'});
+  // 2) Combos
+  var combos=lista(datos.combos).filter(function(c){return c.nombre&&Number(c.precio)>0&&c.activo!==false&&c.oculto!==true
+    &&!lista(c.ingredientes).some(function(g){return g.tipo!=='categoria'&&g.prodId!=null&&lista(datos.carta).some(function(m){return String(m.id)===String(g.prodId)&&(m.agotado===true||(m.sinStock&&m.disponible===false));});});});
+  trozos(combos,POR_TARJETA).forEach(function(g,i,a){
+    P.push({t:10000,k:CM,h:M+cab(nav?'🎁':'🎉',nav?'Combos para celebrar':'Combos',a.length>1?'Parte '+(i+1)+' de '+a.length:'Para compartir')
+      +'<div class="tarjetas">'+g.map(function(c){
+        var it=lista(c.ingredientes).map(function(x){
+          if(x.tipo==='categoria')return (x.cantidad>1?x.cantidad+' × ':'')+esc(x.cat)+' a elegir';
+          var m=porId[String(x.prodId!=null?x.prodId:x.pid)];if(!m)return'';
+          return (x.cantidad>1?x.cantidad+' × ':'')+esc(m.nombre)+(x.varianteNombre?' '+esc(x.varianteNombre):'');
+        }).filter(Boolean).slice(0,6);
+        return '<div class="tar"><div class="e">'+esc(c.emoji||'🎁')+'</div><h3>'+esc(c.nombre)+'</h3><ul>'+it.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul><div class="brocha precio">'+plata(c.precio)+'</div></div>';
+      }).join('')+'</div>'});
+  });
+  // 2b) Una pantalla para cada comida
+  var platos=[];
+  COMIDA.forEach(function(c){
+    var re;try{re=new RegExp('(^|[^a-z])('+c.clave+')','i');}catch(e){return;}
+    var ls=prods.filter(function(m){return precioDe(m)&&re.test(sinTilde(m.nombre+' | '+(m.subcat||'')+' | '+(m.cat||'')));}).sort(function(a,b){return a.nombre.localeCompare(b.nombre,'es');});
+    trozos(ls,Math.ceil(ls.length/Math.ceil(ls.length/POR_PLATO))||1).forEach(function(g,i,a){
+      platos.push({t:9000,k:CM+' plato'+(c.foto?' confoto':''),h:M+'<div class="cab"><div><div class="neon antojo">'+esc(c.frase||'')+'</div><h2 class="gordo lima">'+esc(c.titulo)+'</h2>'+(a.length>1?'<div class="sub">'+(i+1)+' de '+a.length+'</div>':'')+'</div></div>'
+        +'<div class="lista">'+g.map(function(m){var p=precioDe(m);return '<div class="fila"><div class="n"><b>'+esc(m.nombre)+'</b>'+((p.d||m.descripcion)?'<span>'+esc(p.d||m.descripcion)+'</span>':'')+'</div><div class="v">'+p.v+'</div></div>';}).join('')+'</div>'
+        +'<div class="grande'+(c.foto?' foto':'')+'">'+(c.foto?'<img src="'+esc(c.foto)+'" alt=""'+(c.foto2?' data-otra="'+esc(c.foto2)+'" onerror="if(this.dataset.otra){this.src=this.dataset.otra;this.dataset.otra=\'\';}"':'')+'/>':esc(c.emoji||'🍽️'))+'</div>'});
+    });
+  });
+  // 3) Promociones vigentes
+  var promos=lista(datos.promos).filter(function(p){return p.on!==false;}).map(function(pr){
+    if(pr.tipo==='2x1')return '<div class="tar"><div class="e">🍹</div><div class="gigante">2×1</div><h3>en '+esc(pr.cat||'')+'</h3><ul><li>Pide 2 y paga 1</li></ul><div class="cuando">'+esc(cuando(pr))+'</div></div>';
+    var m=porId[String(pr.prodId)];if(!m||!(Number(pr.valor)>0))return'';
+    var cub=pr.tipo==='cubeta',normal=cub?(Number(m.cubeta)||Number(m.precio)*5):Number(m.precio),ah=normal-Number(pr.valor);
+    return '<div class="tar"><div class="e">'+esc(m.emoji||'🔥')+'</div><h3>'+(cub?'Cubetazo ':'')+esc(m.nombre)+'</h3><ul>'+(ah>0?'<li>Ahorras '+plata(ah)+'</li>':'')+'</ul><div class="cuando">'+esc(cuando(pr))+'</div>'
+      +(ah>0?'<div class="antes">Precio normal <s>'+plata(normal)+'</s></div>':'')+'<div class="brocha precio">'+plata(pr.valor)+'</div></div>';
+  }).filter(Boolean);
+  trozos(promos,POR_TARJETA).forEach(function(g){P.push({t:9000,k:CM,h:M+cab('🔥',nav?'Promos de temporada':'Promociones','Vigentes hoy en la carta')+'<div class="tarjetas">'+g.join('')+'</div>'});});
+  platos.forEach(function(x){P.push(x);});
+  // 4) Cubetazos
+  var cub=prods.filter(function(m){return Number(m.cubeta)>0;}).sort(function(a,b){return a.cubeta-b.cubeta;});
+  trozos(cub,POR_LISTA).forEach(function(g){
+    P.push({t:9000,k:CM,h:M+cab('🪣','Cubetazos','5 cervezas bien frías')+'<div class="lista" style="grid-template-rows:repeat('+Math.ceil(g.length/2)+',auto)">'+g.map(function(m){
+      return '<div class="fila"><div class="e">'+esc(m.emoji||'🍺')+'</div><div class="n"><b>'+esc(m.nombre)+'</b><span>Unidad '+plata(m.precio)+'</span></div><div class="v">'+plata(m.cubeta)+'</div></div>';}).join('')+'</div>'});
+  });
+  // 5) La carta, por categoría
+  var cats={},orden=[];
+  prods.forEach(function(m){var c=m.cat||'Otros';if(!precioDe(m))return;if(!cats[c]){cats[c]=[];orden.push(c);}cats[c].push(m);});
+  orden.sort(function(a,b){return a.localeCompare(b,'es');});
+  orden.forEach(function(c){
+    var ls=cats[c].sort(function(a,b){return String(a.subcat||'').localeCompare(String(b.subcat||''),'es')||a.nombre.localeCompare(b.nombre,'es');});
+    trozos(ls,POR_LISTA).forEach(function(g,i,a){
+      P.push({t:8500,k:CM,h:M+cab(esc(ls[0].emoji||'🍽️'),c,a.length>1?'Parte '+(i+1)+' de '+a.length:'')+'<div class="lista" style="grid-template-rows:repeat('+Math.ceil(g.length/2)+',auto)">'+g.map(function(m){
+        var p=precioDe(m);return '<div class="fila"><div class="e">'+esc(m.emoji||'')+'</div><div class="n"><b>'+esc(m.nombre)+'</b>'+((p.d||m.descripcion)?'<span>'+esc(p.d||m.descripcion)+'</span>':'')+'</div><div class="v">'+p.v+'</div></div>';}).join('')+'</div>'});
+    });
+  });
+  // 6) Cierre
+  P.push({t:8000,c:'cierre',h:'<div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=4&data='+encodeURIComponent(url('clientes.html')+'#carta')+'" alt="Código QR de la carta"/></div>'
+    +'<div><div class="neon">'+(nav?'¡Felices fiestas!':'¡Síguenos!')+'</div><div class="gordo lima">Escanea y mira la carta</div><p>'
+    +(N.instagram?'Instagram <b>@'+esc(N.instagram)+'</b><br>':'')+(N.tiktok?'TikTok <b>@'+esc(N.tiktok)+'</b><br>':'')+(N.direccion?'<b>'+esc(N.direccion)+(N.ciudad?', '+esc(N.ciudad):'')+'</b>':'')+'</p></div>'});
+  return P;
+}
+/* ── Reproducción ── */
+function pintar(){
+  var P=armar(),h=JSON.stringify(P);
+  if(h===huella)return;
+  huella=h;pantallas=P;
+  document.getElementById('pantallas').innerHTML=P.map(function(p,i){return '<section class="p '+(p.c||'')+' '+(p.k||'')+'" id="p'+i+'">'+p.h+'</section>';}).join('');
+  if(actual>=P.length)actual=0;
+  mostrar(actual);
+}
+function mostrar(i){
+  actual=(i+pantallas.length)%pantallas.length;
+  var s=document.querySelectorAll('.p');for(var k=0;k<s.length;k++)s[k].className=s[k].className.replace(/ ?\bon\b/,'')+(k===actual?' on':'');
+  dura=pantallas[actual].t;inicio=Date.now();
+  document.body.className=document.body.className.replace(/ ?sinqr/,'')+(pantallas[actual].c?' sinqr':'');
+}
+function tic(){
+  if(pausa||!pantallas.length)return;
+  var t=Date.now()-inicio;
+  document.getElementById('barra').style.width=Math.min(100,t/dura*100)+'%';
+  if(t>=dura)mostrar(actual+1);
+}
+document.addEventListener('click',function(e){mostrar(actual+(e.clientX<window.innerWidth*.25?-1:1));});
+document.addEventListener('keydown',function(e){if(e.keyCode===39||e.keyCode===32)mostrar(actual+1);else if(e.keyCode===37)mostrar(actual-1);else if(e.keyCode===80){pausa=!pausa;if(!pausa)inicio=Date.now();}});
+/* ── Datos: se leen de la base del negocio y se vuelven a revisar solos ── */
+function leer(ruta,cb){
+  var x=new XMLHttpRequest();x.open('GET',BASE+'/'+ruta+'.json',true);x.timeout=15000;
+  x.onload=function(){var v;try{v=JSON.parse(x.responseText);}catch(e){v=undefined;}cb(x.status===200?v:undefined);};
+  x.onerror=x.ontimeout=function(){cb(undefined);};x.send();
+}
+function actualizar(){
+  if(!BASE){pintar();return;}
+  var falta=4,ok=true,fin=function(){if(--falta)return;document.getElementById('aviso').textContent=ok?'':'Sin conexión: se muestran los últimos precios cargados';pintar();};
+  leer('cartaPublica',function(v){if(v===undefined)ok=false;else datos.carta=v;fin();});
+  leer('combos',function(v){if(v===undefined)ok=false;else datos.combos=v;fin();});
+  leer('promos',function(v){if(v===undefined)ok=false;else datos.promos=v;fin();});
+  leer('config/tema',function(v){if(v!==undefined)datos.tema=v;fin();});
+}
+document.title='Video · '+(N.nombre||'');
+adornos();pintar();actualizar();
+setInterval(actualizar,CADA);setInterval(tic,120);
+window._video={datos:datos,pintar:pintar,mostrar:mostrar,pantallas:function(){return pantallas;}};
+})();
+</script>
+</body>
+</html>

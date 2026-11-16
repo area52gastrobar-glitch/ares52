@@ -88,7 +88,10 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     cantina:{nombre:'Cantina',desc:'Rojo vino y naranja sobre negro cálido',muestra:['#e8502a','#b4232e','#ffe3c8','#120807'],decoracion:false,brillo:false,emoji:'🌶️',emoji2:'🎸',
       fuente:{familia:"'Unbounded'"},
       pos:{bg:'#120807',panel:'#1a0c0a',card:'#22100d',card2:'#2d1612',border:'#4a2620',accent:'#e8502a',text:'#ffe3c8',muted:'#a8827a',dim:'#3a1e19'},
-      v:{p:'232,80,42',p2:'180,35,46',p3:'232,80,42',s:'255,190,60',s2:'255,190,60',c:'255,150,100',c2:'255,150,100',c3:'255,150,100',k:'180,35,46',k2:'180,35,46',o:'255,170,60',o2:'255,200,90',b0:'18,8,7',b1:'26,12,10',b2:'45,22,18',tx:'255,227,200',mu:'168,130,122',l:'255,190,160'}}
+      v:{p:'232,80,42',p2:'180,35,46',p3:'232,80,42',s:'255,190,60',s2:'255,190,60',c:'255,150,100',c2:'255,150,100',c3:'255,150,100',k:'180,35,46',k2:'180,35,46',o:'255,170,60',o2:'255,200,90',b0:'18,8,7',b1:'26,12,10',b2:'45,22,18',tx:'255,227,200',mu:'168,130,122',l:'255,190,160'}},
+    navidad:{nombre:'Navidad',desc:'Rojo, verde pino y dorado, con luces y nieve',muestra:['#ff3b4e','#35d07f','#ffd166','#07120d'],decoracion:false,nieve:true,emoji:'🎄',emoji2:'🎅',
+      pos:{bg:'#07120d',panel:'#0b1a13',card:'#10231a',card2:'#173024',border:'#27503b',accent:'#ff3b4e',text:'#f6f1e4',muted:'#8fae9c',dim:'#1f3b2d'},
+      v:{p:'255,59,78',p2:'200,30,52',p3:'255,59,78',s:'53,208,127',s2:'90,230,150',c:'255,209,102',c2:'255,209,102',c3:'255,225,150',k:'255,59,78',k2:'255,120,130',o:'255,209,102',o2:'255,225,150',b0:'7,18,13',b1:'11,26,19',b2:'23,48,36',tx:'246,241,228',mu:'143,174,156',l:'255,190,195'}}
   };
   // Juego de iconos de la interfaz (pestañas del POS, navegación y tarjetas de los clientes): cada tema trae el suyo
   var ICONOS_BASE={mesas:'🛸',inventario:'📦',carta:'📋',combos:'🎁',caja:'💰',gastos:'📋',ventas:'📊',rappi:'🛵',socios:'🤝',empleados:'👷',creditos:'📒',saneamiento:'🧼',cocina:'👨‍🍳',admin:'⚙️',
@@ -102,7 +105,8 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     claro:{mesas:'☕',carta:'📋',rocola:'🎶',llamar:'🔔',inicio:'🏠',caja:'💵',gastos:'🧾',ventas:'📈',admin:'⚙️',mesera:'🥐',nuestracarta:'🥗',encuentranos:'📍',video:'🎬'},
     negro:{mesas:'■',carta:'≡',rocola:'♫',llamar:'◆',inicio:'⌂',caja:'●',gastos:'▬',ventas:'▲',admin:'⚙',mesera:'◉',nuestracarta:'≡',encuentranos:'➤',video:'▶'},
     cerveceria:{mesas:'🍻',carta:'🥨',rocola:'🪕',llamar:'🛎️',inicio:'🏠',caja:'🪙',gastos:'🧾',ventas:'📈',admin:'🔧',mesera:'🧑‍🍳',nuestracarta:'🍺',encuentranos:'🗺️',video:'🎬'},
-    cantina:{mesas:'🌶️',carta:'🌮',rocola:'🎸',llamar:'🔔',inicio:'🏠',caja:'💰',gastos:'🧾',ventas:'📈',admin:'⚙️',mesera:'🎺',nuestracarta:'🌮',encuentranos:'📍',video:'🎬'}
+    cantina:{mesas:'🌶️',carta:'🌮',rocola:'🎸',llamar:'🔔',inicio:'🏠',caja:'💰',gastos:'🧾',ventas:'📈',admin:'⚙️',mesera:'🎺',nuestracarta:'🌮',encuentranos:'📍',video:'🎬'},
+    navidad:{mesas:'🎄',inventario:'🎁',carta:'📜',combos:'🧦',caja:'🔔',gastos:'🧾',ventas:'⭐',rappi:'🛷',socios:'🤶',empleados:'🧑‍🎄',creditos:'✉️',saneamiento:'❄️',cocina:'🍪',admin:'🕯️',inicio:'🏠',rocola:'🎶',llamar:'🔔',mesera:'🎅',nuestracarta:'🍗',encuentranos:'🦌',video:'🎬'}
   };
   window.MarcaIcono=function(k){var j=ICONOS_TEMA[temaActual]||{};return j[k]||ICONOS_BASE[k]||'';};
   // Iconos: los del tema, salvo que el negocio fije los suyos (emojiFijo en negocio.js)
@@ -131,6 +135,28 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
       css+='.name,.cover-title,.wrap>h1,.top>h1{font-family:'+T.fuente.familia+',Georgia,serif!important;letter-spacing:.02em!important}';
       if(!document.getElementById('tema-fuentes')&&!document.querySelector('link[href*="fuentes.css"]')){var l=document.createElement('link');l.id='tema-fuentes';l.rel='stylesheet';l.href='fuentes.css';(document.head||r).appendChild(l);}
     }else r.style.removeProperty('--t-fd');
+    // 🎄 Temas con luces y nieve (Navidad): adorno liviano que no estorba para trabajar (no recibe toques)
+    if(T.nieve){
+      css+='#tema-luces{position:fixed;left:0;right:0;top:0;height:7px;z-index:2147483000;pointer-events:none;background:radial-gradient(circle at 10px 5px,#ff3b4e 4px,transparent 5px),radial-gradient(circle at 34px 7px,#ffd166 4px,transparent 5px),radial-gradient(circle at 58px 5px,#35d07f 4px,transparent 5px),radial-gradient(circle at 82px 7px,#4de1ff 4px,transparent 5px);background-size:96px 12px;height:12px;filter:drop-shadow(0 2px 5px rgba(255,209,102,.55));animation:temaLuces 1.8s steps(2) infinite}'
+        +'@keyframes temaLuces{50%{filter:drop-shadow(0 2px 9px rgba(255,59,78,.8)) brightness(1.35)}}'
+        +'#tema-nieve{position:fixed;left:0;top:0;width:100%;height:100%;z-index:2147482999;pointer-events:none;overflow:hidden}'
+        +'#tema-nieve i{position:absolute;top:-5vh;color:#fff;font-style:normal;opacity:.5;animation:temaNieve linear infinite}'
+        +'@keyframes temaNieve{to{transform:translate3d(4vw,110vh,0) rotate(180deg)}}'
+        +'@media (prefers-reduced-motion:reduce){#tema-nieve{display:none}#tema-luces{animation:none}}';
+    }
+    (function(){
+      var poner=function(){
+        var l=document.getElementById('tema-luces'),n=document.getElementById('tema-nieve');
+        if(!T.nieve||temaActual!==id){if(l)l.remove();if(n)n.remove();return;}
+        if(!document.body)return;
+        if(!l){l=document.createElement('div');l.id='tema-luces';l.setAttribute('aria-hidden','true');document.body.appendChild(l);}
+        if(!n){n=document.createElement('div');n.id='tema-nieve';n.setAttribute('aria-hidden','true');
+          var cuantos=r.getAttribute('data-app')==='pos'?10:22,h='';
+          for(var k=0;k<cuantos;k++)h+='<i style="left:'+((k*97+13)%100)+'%;font-size:'+(9+(k*7)%10)+'px;animation-duration:'+(9+(k*5)%9)+'s;animation-delay:-'+((k*3)%11)+'s">❄</i>';
+          n.innerHTML=h;document.body.appendChild(n);}
+      };
+      if(document.body)poner();else document.addEventListener('DOMContentLoaded',poner);
+    })();
     estiloTema.textContent=css;
     if(document.body){try{window.MarcaAplicar(document);}catch(e){}}   // los iconos del tema, en lo que ya está pintado
     try{window.dispatchEvent(new CustomEvent('marca-tema',{detail:{tema:id}}));}catch(e){}

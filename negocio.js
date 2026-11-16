@@ -36,6 +36,18 @@ window.NEGOCIO={
     }
   ],
   "videoPromo": "Area52-Video.html",
+  "videoBienvenida": "marca-bienvenida.jpg",
+  "videoBienvenidaNavidad": "marca-bienvenida-navidad.jpg",
+  "videoMascotaNavidad": "marca-mascota-navidad.png",
+  "videoComida": [
+    {"clave": "alita|alas|wings", "titulo": "Alitas", "frase": "Para chuparse los dedos", "emoji": "🍗", "foto": "https://images.pexels.com/photos/13785146/pexels-photo-13785146.jpeg?auto=compress&cs=tinysrgb&w=900", "foto2": "marca-comida-alitas.jpg"},
+    {"clave": "hamburgues|burger", "titulo": "Hamburguesas", "frase": "Para los que llegan con hambre", "emoji": "🍔", "foto": "https://images.pexels.com/photos/12034622/pexels-photo-12034622.jpeg?auto=compress&cs=tinysrgb&w=900", "foto2": "marca-comida-hamburguesa.jpg"},
+    {"clave": "pizza", "titulo": "Pizzas", "frase": "Para compartir con el parche", "emoji": "🍕", "foto": "https://images.pexels.com/photos/4109073/pexels-photo-4109073.jpeg?auto=compress&cs=tinysrgb&w=900", "foto2": "marca-comida-pizza.jpg"},
+    {"clave": "empanad", "titulo": "Empanadas", "frase": "Para picar mientras llega la pola", "emoji": "🥟", "foto": "https://images.pexels.com/photos/28902906/pexels-photo-28902906.jpeg?auto=compress&cs=tinysrgb&w=900", "foto2": "marca-comida-empanadas.jpg"},
+    {"clave": "arepa", "titulo": "Arepas", "frase": "El antojo de siempre", "emoji": "🫓", "foto": "https://images.pexels.com/photos/37025260/pexels-photo-37025260.jpeg?auto=compress&cs=tinysrgb&w=900", "foto2": "marca-comida-arepa.jpg"},
+    {"clave": "chorizo", "titulo": "Chorizos", "frase": "El mejor amigo de una cerveza", "emoji": "🌭", "foto": "https://images.pexels.com/photos/28736361/pexels-photo-28736361.jpeg?auto=compress&cs=tinysrgb&w=900", "foto2": "marca-comida-chorizo.jpg"}
+  ],
+  "videoLema": "El gastro bar de otra galaxia",
   "rocolaPinStaff": "5252",
   "llamadoMotivos": [
     "Que venga a la mesa",
