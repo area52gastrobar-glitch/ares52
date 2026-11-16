@@ -460,6 +460,12 @@ function guardarGasto(){
   if(!valor||valor<=0){alert('Escribe el valor.');return;}
   if(!categoria){alert('👆 Elige a qué categoría corresponde el gasto.');return;}
   if(!fp){alert('👆 Elige de dónde salió la plata (forma de pago).');return;}
+  // 📦 Una compra de mercancía siempre dice qué entró: si no, la plata sale y el inventario no sube
+  if(categoria==='Mercancía'&&!_gInv.some(function(l){return (parseInt(l.cant)||0)>0;})){
+    alert('📦 Este gasto es de Mercancía: agrega abajo los productos que llegaron y su cantidad.\n\nSi lo que compraste no es para vender (aseo, papelería, hielo), cambia la categoría a Insumos u Otro.');
+    var _bq=document.getElementById('g-inv-busq');if(_bq)_bq.focus();
+    return;
+  }
   var empId=(document.getElementById('g-emp')||{}).value||'';
   var provId=(document.getElementById('g-prov')||{}).value||'';
   if(fp==='socio'){
@@ -591,7 +597,8 @@ function gInvAplicar(entradas,concepto,signo){
       var stAnt=Math.max(0,parseInt(p.stock)||0),costoAnt=p.costo||0;
       p.costo=(costoAnt>0&&stAnt>0)?Math.round((stAnt*costoAnt+cant*l.costo)/(stAnt+cant)):l.costo;
       motivo+=' (a '+fmt(l.costo).replace(/\u00A0/g,' ')+' c/u'+(p.costo!==l.costo?' · costo promedio: '+fmt(p.costo).replace(/\u00A0/g,' '):'')+')';
-      tocoMenu=true;
+      // el costo se guarda solo, en su casilla: así no depende de reescribir el menú ni se pierde cuando el inventario se refresca
+      var rc=ref('menu/'+p.id+'/costo');if(rc)rc.set(p.costo);else tocoMenu=true;
     }
     cambiarStock('p',p.id,cant,motivo);
   });

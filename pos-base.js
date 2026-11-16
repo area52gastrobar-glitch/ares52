@@ -2,7 +2,34 @@
 // db is set by the dynamic loader in <head> once Firebase scripts load
 function getDb(){return window._db||null;}
 function ref(path){var d=getDb();return d?d.ref(path):null;}
-function fbSet(path,val){var r=ref(path);if(r)r.set(val).catch(function(e){a52Falla(path,e);});}
+function fbSet(path,val){
+  if(val&&typeof val==='object'&&!Array.isArray(val)){
+    if(path==='menu'&&window._menuSrv)return guardarSinPisarStock('menu',val,window._menuSrv,'_menuBorrar');
+    if(path==='ingredientes'&&window._ingSrv)return guardarSinPisarStock('ingredientes',val,window._ingSrv,'_ingBorrar');
+  }
+  var r=ref(path);if(r)r.set(val).catch(function(e){a52Falla(path,e);});
+}
+/* 🛡 Guardar el menú o los insumos sin pisar el inventario: antes, cambiar un precio, una categoría, una receta o el
+   nombre de un insumo reescribía la lista COMPLETA con las existencias que tuviera ese equipo en memoria. Si otro
+   celular acababa de vender, esas ventas se «devolvían» al inventario. Ahora solo viaja lo que cambió, y la existencia
+   de algo que ya existe no se toca nunca por aquí: solo la mueven las ventas, las compras, los ajustes y el cuadre,
+   que quedan en el kardex. */
+function guardarSinPisarStock(path,mo,srv,flagBorrar){
+  var upd={},n=0;
+  Object.keys(mo).forEach(function(id){
+    var p=mo[id],s=srv[id];if(!p)return;
+    if(!s||typeof s!=='object'){upd[id]=JSON.parse(JSON.stringify(p));n++;return;}   // nuevo: entra completo
+    Object.keys(p).forEach(function(k){
+      if(k==='stock'||k.charAt(0)==='_')return;
+      var a=p[k]===undefined?null:p[k];
+      if(JSON.stringify(a)!==JSON.stringify(s[k]===undefined?null:s[k])){upd[id+'/'+k]=a;n++;}
+    });
+    Object.keys(s).forEach(function(k){if(k!=='stock'&&!(k in p)){upd[id+'/'+k]=null;n++;}});
+  });
+  if(window[flagBorrar]!=null){var b=String(window[flagBorrar]);window[flagBorrar]=null;if(srv[b]&&!mo[b]){upd[b]=null;n++;}}
+  if(!n)return;
+  var r=ref(path);if(r)r.update(upd).catch(function(e){a52Falla(path,e);});
+}
 function fbPush(path,val){var r=ref(path);if(r)r.push(val).catch(function(e){a52Falla(path,e);});}
 function fbOn(path,cb){var r=ref(path);if(r)r.on('value',function(s){cb(s.val());});return r;}
 function fbOff(path){var r=ref(path);if(r)r.off();}
@@ -439,8 +466,9 @@ function iniciarSync(){
   });
   fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();try{A52APP.refrescar();}catch(e){}if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
-  fbOn('menu',function(v){_cpMenuListo=!!v;setTimeout(a52PublicarCarta,0);if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(usuarioActivo&&usuarioActivo.rol==='admin'&&typeof recalcularCombos==='function'){clearTimeout(window._rcT);window._rcT=setTimeout(function(){try{recalcularCombos('precios de la carta',true);}catch(e){}},2500);}if(tabActual==='carta'||tabActual==='inventario')render();});
+  fbOn('menu',function(v){window._menuSrv=v?JSON.parse(JSON.stringify(v)):null;_cpMenuListo=!!v;setTimeout(a52PublicarCarta,0);if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(usuarioActivo&&usuarioActivo.rol==='admin'&&typeof recalcularCombos==='function'){clearTimeout(window._rcT);window._rcT=setTimeout(function(){try{recalcularCombos('precios de la carta',true);}catch(e){}},2500);}if(tabActual==='carta'||tabActual==='inventario')render();});
   fbOn('ingredientes',function(v){
+    window._ingSrv=v?JSON.parse(JSON.stringify(v)):null;
     ingredientes=v?Object.keys(v).map(function(k){
       var o=v[k];
       if(typeof o!=='object'||o===null)o={stock:parseInt(o)||0};   // nodo aún más dañado (solo un número)

@@ -238,7 +238,7 @@ function toggleCatNueva(){var s=document.getElementById('f-cat-sel');var i=docum
 function editarProd(id){editandoProd=id;var p=menu.find(function(m){return m.id===id;});emojiSel=p?p.emoji:'🍺';render();}
 function borrarProd(id){
   if(!confirm('¿Eliminar este producto?'))return;
-  menu=menu.filter(function(m){return m.id!==id;});
+  menu=menu.filter(function(m){return m.id!==id;});window._menuBorrar=id;
   delete a52Fotos['p'+id];var _rf=ref('config/fotos/p'+id);if(_rf)_rf.remove().catch(function(){});
   editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);try{recalcularCombos('cambio de precio en la carta');}catch(e){}render();
 }
@@ -586,7 +586,7 @@ function eliminarIngrediente(iid){
   var usanReceta=menu.filter(function(m){return m.receta&&m.receta.some(function(r){return String(r.pid)===String(iid);});});
   var aviso=usanReceta.length?'\n\n⚠️ OJO: lo usan las recetas de: '+usanReceta.map(function(m){return m.nombre;}).join(', ')+'. Esas recetas quedarán con un ingrediente roto.':'';
   if(!confirm('¿Eliminar el ingrediente "'+(ing.nombre||'(sin nombre · dañado)')+'"?'+aviso))return;
-  ingredientes=ingredientes.filter(function(x){return String(x.id)!==String(iid);});
+  ingredientes=ingredientes.filter(function(x){return String(x.id)!==String(iid);});window._ingBorrar=iid;
   var obj={};ingredientes.forEach(function(i){obj[i.id]=i;});
   fbSet('ingredientes',ingredientes.length?obj:null);
   closeModal2();
@@ -602,8 +602,11 @@ function guardarEditIngrediente(){
   var ing=ingredientes.find(function(x){return x.id===iid;});
   if(!ing)return;
   var grupo=((document.getElementById('ing-grupo')||{}).value||'').trim();
-  Object.assign(ing,{nombre:nombre,stock:stock,und:und,grupo:grupo});
+  var _antes=parseInt(ing.stock)||0;
+  Object.assign(ing,{nombre:nombre,und:und,grupo:grupo});
   guardarIngredientes();
+  // La existencia cambiada a mano pasa por el kardex, como cualquier ajuste
+  if(stock!==_antes)cambiarStock('i',ing.id,stock-_antes,'✏️ Ajuste manual de stock (ficha del insumo, fijado en '+stock+')');
   closeModal2();render();
 }
 
@@ -1194,10 +1197,14 @@ function guardarProd(){
     menu.push({id:maxId+1,nombre:nombre,precio:precio,precioRappi:precioRappi,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,receta:_recetaTemp||[],sinStock:_sinStockF,disponible:true});
     _recetaTemp=[];
   } else {
-    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,precioRappi:precioRappi,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
+    for(var i=0;i<menu.length;i++){if(menu[i].id===editandoProd){window._stockEdit={id:menu[i].id,antes:parseInt(menu[i].stock)||0,ahora:stock,sin:_sinStockF};stock=menu[i].stock;menu[i]=Object.assign({},menu[i],{nombre:nombre,precio:precio,precioRappi:precioRappi,costo:costo,cubeta:cubeta,esCerveza:cerv,esComida:esComida,descripcion:descripcion,variantes:variantes,cat:cat,subcat:subcat,emoji:emoji,stock:stock,und:und,sinStock:_sinStockF,disponible:menu[i].disponible!==false});break;}}
   }
   a52FotoGuardar(editandoProd==='nuevo'?menu[menu.length-1].id:editandoProd);
-  editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);try{recalcularCombos('cambio de precio en la carta');}catch(e){}render();
+  editandoProd=null;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
+  // La existencia cambiada en la ficha pasa por el kardex, como cualquier ajuste
+  var _se=window._stockEdit;window._stockEdit=null;
+  if(_se&&!_se.sin&&_se.ahora!==_se.antes)cambiarStock('p',_se.id,_se.ahora-_se.antes,'✏️ Ajuste manual de stock (ficha del producto, fijado en '+_se.ahora+')');
+  try{recalcularCombos('cambio de precio en la carta');}catch(e){}render();
 }
 
 /* ═══════════════ COMBOS ═══════════════ */

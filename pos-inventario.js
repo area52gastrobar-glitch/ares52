@@ -299,10 +299,14 @@ function abrirSetupCocina(){
   var esBurger=function(m){return /hamburgues|burger/i.test(m.nombre||'');};
   var burgers=menu.filter(esBurger);
   var papas=menu.find(function(m){return /papa/i.test(m.nombre||'')&&!esBurger(m);});
+  var papasIns=ingredientes.find(function(i){return /papa/i.test(i.nombre||'');});   // si las papas ya están como INSUMO, ese es el que manda
   var carne=ingredientes.find(function(i){return /carne/i.test(i.nombre||'');});
   var pasos=[];
   pasos.push(carne?'✅ Insumo ya existe: 🥩 '+esc(carne.nombre):'🆕 Crear insumo: 🥩 Carne de hamburguesa (stock 0 — tú pones las unidades)');
-  pasos.push(papas?'✅ Papas detectadas: '+papas.emoji+' '+esc(papas.nombre)+' (stock actual: '+papas.stock+')':'🆕 Crear producto: 🍟 Papas a la francesa (precio y stock los pones tú)');
+  if(papasIns){
+    pasos.push('✅ Papas como insumo: 🧂 '+esc(papasIns.nombre)+' (hay '+(parseInt(papasIns.stock)||0)+')');
+    if(papas)pasos.push('🔁 El producto '+(papas.emoji||'🍟')+' '+esc(papas.nombre)+' (stock '+papas.stock+') deja de llevar inventario propio: las recetas pasan a descontar el insumo, y si se vende solo, también descuenta del insumo');
+  }else pasos.push(papas?'✅ Papas detectadas: '+papas.emoji+' '+esc(papas.nombre)+' (stock actual: '+papas.stock+')':'🆕 Crear producto: 🍟 Papas a la francesa (precio y stock los pones tú)');
   if(burgers.length){
     pasos.push('🍔 Configurar '+burgers.length+' hamburguesa'+(burgers.length>1?'s':'')+': '+burgers.map(function(b){return esc(b.nombre);}).join(', '));
     pasos.push('→ a cada una: SIN stock propio + receta de 1 carne + 1 porción de papas (el combo)');
@@ -325,12 +329,25 @@ function confirmarSetupCocina(){
     ingredientes.push(carne);
     guardarIngredientes();
   }
-  // 2) Producto papas (si falta)
+  // 2) Papas: si ya existen como INSUMO, ese es el que descuentan las recetas. Solo si no hay insumo se usa (o se crea) el producto.
+  var papasIns=ingredientes.find(function(i){return /papa/i.test(i.nombre||'');});
   var papas=menu.find(function(m){return /papa/i.test(m.nombre||'')&&!esBurger(m);});
-  if(!papas){
+  if(!papasIns&&!papas){
     var maxId=menu.reduce(function(a,m){return Math.max(a,Number(m.id)||0);},0);
     papas={id:maxId+1,nombre:'Papas a la francesa',emoji:'🍟',precio:0,costo:0,cat:'Cocina',subcat:'',stock:0,und:'porciones',esComida:true,receta:[],variantes:[],disponible:true};
     menu.push(papas);
+  }
+  var papasRef=papasIns||papas;   // lo que va en las recetas
+  if(papasIns&&papas){
+    // 🔁 Había un PRODUCTO «papas» metido en las recetas (quedaba en −1 y no se podía sacar): todas las recetas pasan al insumo
+    menu.forEach(function(m){
+      if(!Array.isArray(m.receta)||m===papas)return;
+      var ya=m.receta.some(function(r){return String(r.pid)===String(papasIns.id);});
+      m.receta=m.receta.map(function(r){if(Number(r.pid)!==Number(papas.id))return r;if(ya)return null;ya=true;return Object.assign({},r,{pid:papasIns.id});}).filter(Boolean);
+    });
+    // el producto deja de llevar inventario propio: si se vende solo, descuenta una porción del insumo
+    papas.sinStock=true;if(papas.disponible===undefined)papas.disponible=true;
+    papas.receta=[{pid:papasIns.id,cantidad:1}];
   }
   // 3) Cada hamburguesa: sin stock propio + receta 1 carne + 1 papas (sin duplicar)
   var configuradas=0;
@@ -339,12 +356,12 @@ function confirmarSetupCocina(){
     if(b.disponible===undefined)b.disponible=true;
     b.receta=Array.isArray(b.receta)?b.receta:[];
     if(!b.receta.some(function(r){return String(r.pid)===String(carne.id);}))b.receta.push({pid:carne.id,cantidad:1});
-    if(!b.receta.some(function(r){return Number(r.pid)===Number(papas.id);}))b.receta.push({pid:papas.id,cantidad:1});
+    if(!b.receta.some(function(r){return String(r.pid)===String(papasRef.id);}))b.receta.push({pid:papasRef.id,cantidad:1});
     configuradas++;
   });
   var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);
   closeModal2();
-  showToast('✨ Cocina configurada: '+configuradas+' hamburguesa'+(configuradas>1?'s':'')+' por insumos<br><span style="font-size:12px;opacity:.85">Ahora pon las unidades: stock de 🥩 '+esc(carne.nombre)+' y de '+papas.emoji+' '+esc(papas.nombre)+(papas.precio?'':' (y su precio de venta)')+'</span>','#22c55e');
+  showToast('✨ Cocina configurada: '+configuradas+' hamburguesa'+(configuradas>1?'s':'')+' por insumos<br><span style="font-size:12px;opacity:.85">Ahora pon las unidades: stock de 🥩 '+esc(carne.nombre)+' y de '+(papasRef.emoji||'🧂')+' '+esc(papasRef.nombre)+((papasIns||papas.precio)?'':' (y su precio de venta)')+'</span>','#22c55e');
   render();
 }
 function _maxPorReceta(p){
@@ -385,8 +402,8 @@ function renderInventario(){
   var invTab=_invTab||'carta';
 
   // ── Alerts ────────────────────────────────────────────────────────────────
-  var bajos=menu.filter(function(m){return !m.sinStock&&m.stock<=5;});
-  var bajosIng=ingredientes.filter(function(i){return i.stock<=5;});
+  var bajos=menu.filter(function(m){return !m.sinStock&&m.activo!==false&&invBajo(m);});
+  var bajosIng=ingredientes.filter(function(i){return invBajo(i);});
   var totalBajos=bajos.length+bajosIng.length;
   var alertHtml=totalBajos?'<div class="alert-box alert-red mb12" style="padding:0;overflow:hidden">'
     +'<button data-act="toggle-sec" data-sec="stockBajo" style="width:100%;text-align:left;background:none;border:none;color:inherit;padding:10px 12px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center">'
@@ -411,7 +428,9 @@ function renderInventario(){
 
   // ── Tab pills ──────────────────────────────────────────────────────────────
   var tabPills='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
-    +(puedeAjustarInv()?'<button onclick="abrirIngresoInventario()" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer">➕ Ingresar inventario</button>':'')
+    +(rmPuede()?'<button onclick="abrirRecibirMercancia()" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:800;font-size:13px;cursor:pointer">📦 Recibir mercancía</button>':'')
+    +'<button onclick="abrirQuePedir()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🛒 Qué pedir</button>'
+    +(puedeAjustarInv()?'<button onclick="abrirBajaInventario()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🗑 Dar de baja</button>':'')
     +(esAdmin?'<button onclick="abrirProveedores()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">🏭 Proveedores</button>':'')
     +(esAdmin?'<button onclick="verIngresosInv()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📋 Ingresos</button>':'')
     +(esAdmin?'<button onclick="abrirKardex()" style="background:var(--card);color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer">📒 Kardex</button>':'')
@@ -599,24 +618,51 @@ function toggleCorr(id){
   p.style.display=vis?'none':'block';
   if(b){b.style.borderColor=vis?'var(--border)':'#ef4444';b.style.color=vis?'var(--muted)':'#ef4444';}
 }
-function sumarStock(id){
-  var el=document.getElementById('ent-'+id);if(!el)return;
-  var cant=parseInt(el.value);
-  if(isNaN(cant)||cant<=0){alert('Ingresa una cantidad mayor a cero.');return;}
-  var p=menu.find(function(m){return m.id===id;});
-  if(p){p.stock+=cant;el.value='';var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();}
-}
-function sumarStockRapido(id,cant){
-  var p=menu.find(function(m){return m.id===id;});
-  if(p){p.stock+=cant;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();}
-}
-function guardarStock(id){
-  var el=document.getElementById('inv-'+id);if(!el)return;
-  var v=parseInt(el.value);
-  if(isNaN(v)||v<0){alert('Número inválido.');return;}
-  if(!confirm('¿Fijar el stock en '+v+' unidades? Úsalo solo para corregir errores.'))return;
-  var p=menu.find(function(m){return m.id===id;});
-  if(p){p.stock=v;var mo={};menu.forEach(function(m){mo[m.id]=m;});fbSet('menu',mo);render();}
-}
 
 
+
+/* ═══ 🔧 Arreglo automático: el mismo artículo como PRODUCTO y como INSUMO ═══
+   Caso real: «Papa a la francesa» (producto, en −1) y «Papas a la francesa» (insumo, con 15). Las recetas de las
+   hamburguesas apuntaban al producto: el sistema decía «no hay papas» aunque el insumo tuviera existencias.
+   Si un producto sin existencias tiene un insumo gemelo (mismo nombre), las recetas pasan al insumo y el producto
+   deja de llevar inventario propio (al venderse solo descuenta una porción del insumo). Lo hace solo, una vez. */
+function _claveGemelo(n){return _normTxt(String(n||'')).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean).map(function(w){return w.length>3?w.replace(/(es|s)$/,''):w;}).join(' ');}
+function repararGemelosReceta(){
+  var hechos=[];
+  ingredientes.forEach(function(ins){
+    var k=_claveGemelo(ins.nombre);if(!k)return;
+    menu.forEach(function(p){
+      if(_claveGemelo(p.nombre)!==k)return;
+      if(!p.sinStock&&(parseInt(p.stock)||0)>0)return;   // el producto tiene existencias propias de verdad: no se toca
+      var cambios=0;
+      menu.forEach(function(m){
+        if(m===p||!Array.isArray(m.receta)||!m.receta.some(function(r){return !r.grupo&&Number(r.pid)===Number(p.id);}))return;
+        var ya=m.receta.some(function(r){return String(r.pid)===String(ins.id);});
+        m.receta=m.receta.map(function(r){if(r.grupo||Number(r.pid)!==Number(p.id))return r;if(ya)return null;ya=true;return Object.assign({},r,{pid:ins.id});}).filter(Boolean);
+        var rr=ref('menu/'+m.id+'/receta');if(rr)rr.set(m.receta);
+        cambios++;
+      });
+      var propia=Array.isArray(p.receta)&&p.receta.length;
+      if(!p.sinStock||!propia){
+        p.sinStock=true;if(p.disponible===undefined)p.disponible=true;
+        if(!propia)p.receta=[{pid:ins.id,cantidad:1}];
+        var b=ref('menu/'+p.id);if(b)b.update({sinStock:true,disponible:p.disponible,receta:p.receta});
+        cambios++;
+      }
+      if(cambios)hechos.push(ins.nombre);
+    });
+  });
+  if(hechos.length){
+    try{fbPush('kardex',{ts:Date.now(),tipo:'i',nombre:hechos.join(', '),delta:0,motivo:'🔧 Recetas corregidas: ahora descuentan del insumo (antes apuntaban a un producto con el mismo nombre)',uidNombre:'Sistema'});}catch(e){}
+    showToast('🔧 Recetas corregidas: ahora descuentan del insumo '+esc(hechos.join(', ')),'#22c55e',6000);
+  }
+  return hechos;
+}
+(function(){
+  var r0=render,hecho=false;
+  render=function(){
+    var x=r0.apply(this,arguments);
+    if(!hecho&&usuarioActivo&&usuarioActivo.rol==='admin'&&menu.length&&ingredientes.length&&window._menuSrv&&window._ingSrv){hecho=true;setTimeout(function(){try{repararGemelosReceta();}catch(e){}},1500);}
+    return x;
+  };
+})();

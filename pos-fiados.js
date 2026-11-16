@@ -707,14 +707,11 @@ function renderSocios(){
       +'</div>'
       +busqBox+mixBtns+'<div id="soc-res">'+(socBusq?_socResHTML():'')+'</div>'+'<div id="soc-acordeon" style="'+(socBusq?'display:none':'')+'">'+acordeon+'</div>'
     +'</div>':'')
-    // History del socio activo
-    +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">📋 CONSUMOS DE '+socioActivo+'</div>'
-    +resumenAgrupado
-    +'<div style="color:var(--muted);font-size:10px;font-weight:700;letter-spacing:1px;margin:10px 0 8px">DETALLE POR PEDIDO</div>'
-    +histRows
+    +(esAdmin&&totalAcum>0?'<button data-act="toggle-sec" data-sec="socLiq" style="width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700;font-size:12.5px;color:var(--muted);cursor:pointer;display:flex;justify-content:space-between"><span>💵 Liquidar o cerrar cuentas</span><span>'+(_secOpen.socLiq?'▲':'▼')+'</span></button>':'')
+    +(_secOpen.socLiq?''
     // ── LIQUIDAR / CERRAR (al final para no confundir con el selector) ──
     +(esAdmin&&SOCIOS.some(function(x){return totSoc[x.id]>0;})
-      ?'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin:18px 0 10px;border-top:2px solid var(--border)">'
+      ?'<div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin:0 0 10px">'
         +'<div style="color:var(--muted);font-size:11px;font-weight:700;margin-bottom:8px">💵 Liquidar cuenta de socio (vuelve a 0)</div>'
         +'<div style="display:flex;gap:8px">'
         +SOCIOS.map(function(x){var col=socColor(x.id);
@@ -728,6 +725,10 @@ function renderSocios(){
         +'<button onclick="cerrarConsumoSocios()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer">Cerrar todo</button>'
       +'</div>'
       :'')
+    :'')
+    // Cuenta del socio activo: por temas y por día (pos-socios2.js)
+    +'<div style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1px;margin:4px 0 8px">📋 CUENTA DE '+esc(socNom(socioActivo)).toUpperCase()+'</div>'
+    +socHistorialHTML(socioActivo,esAdmin)
     +'</div>';
 }
 

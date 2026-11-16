@@ -951,6 +951,7 @@ function renderCocina(){
         +'<div>'
           +'<div style="color:'+(pendQty>0?'#f5a623':'#22c55e')+';font-weight:900;font-size:13px">'+(pendQty>0?'⏳ PENDIENTE':'✅ ENTREGADO')+'</div>'
           +'<div style="font-weight:800;font-size:15px;margin-top:2px">'+(p?p.emoji:'')+' '+esc(p?p.nombre:'?')+'</div>'
+          +(it.nota?'<div style="color:#f5a623;font-weight:800;font-size:13px;margin-top:2px">📝 '+esc(it.nota)+'</div>':'')
         +'</div>'
         +'<div style="text-align:right">'
           +'<div style="color:var(--accent);font-weight:800;font-size:13px">'+r.zonaLabel+'</div>'

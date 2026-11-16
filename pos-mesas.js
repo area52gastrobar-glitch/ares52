@@ -324,6 +324,7 @@ function renderPanelPedido(){
       +'<div style="flex:1">'
       +'<div style="color:var(--text);font-size:12px;font-weight:600">'
         +(it.isCustom?'✏️ '+esc(it.customNombre):it.isCombo?(it.comboEmoji+' '+esc(it.comboNombre)):it.isCubetazoMix?('🪣 '+esc(it.cubMixNombre||'Cubetazo mixto')):(p?p.emoji+' ':'')+esc((p&&p.nombre)||'?'))
+        +(it.nota?' <span style="color:#f5a623;font-size:11px;font-weight:700">📝 '+esc(it.nota)+'</span>':'')
       +'</div>'
       +(it.isCustom?'<div style="color:#f5a623;font-size:10px;font-weight:700">Producto personalizado</div>':'')
       +(it.isCombo?'<div style="color:var(--gold);font-size:10px;font-weight:700">🎁 Combo · '+ingDesc+'</div>':'')

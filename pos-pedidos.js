@@ -848,7 +848,7 @@ function agregarItemQty(pid,cubeta,cantidad,varianteNombre,variantePrecio){
       uidItem:'it'+a52Ahora().toString(36)+Math.floor(Math.random()*1e6).toString(36)});
   }
   var idx=_rep?-1:pedidos[id].findIndex(function(it){
-    return !it.recGrupos&&!it.es2x1Gratis&&it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;
+    return !it.recGrupos&&!it.es2x1Gratis&&!it.nota&&it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'')&&(it.precioPromo||0)===_pPromo;   // una línea con nota no absorbe unidades nuevas
   });
   if(idx>=0)pedidos[id][idx].qty+=cantidad;
   else pedidos[id].push({
@@ -888,7 +888,7 @@ function agregarItem(pid,cubeta,varianteNombre,variantePrecio){
   if(!pedidos[id])pedidos[id]=[];
   // For variante items, match by pid + varianteNombre
   var idx=pedidos[id].findIndex(function(it){
-    return it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'');
+    return !it.nota&&it.pid===pid&&it.cubeta===cubeta&&(it.varianteNombre||'')===(varianteNombre||'');
   });
   var precio=variantePrecio||(p?p.precio:0);
   var _vUndL=1;

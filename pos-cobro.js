@@ -466,7 +466,8 @@ function renderDividirModal(){
     +'<div style="max-height:46vh;overflow-y:auto">'+filas+'</div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--accent)33">'
       +'<span style="font-weight:800;font-size:14px">Subtotal a pagar</span>'
-      +'<span id="div-subtotal" style="color:#38bdf8;font-weight:900;font-size:20px">'+fmt(subtotal)+'</span></div>'
+      +'<span id="div-subtotal" style="color:#38bdf8;font-weight:900;font-size:20px">'+fmt((descuentos[mesaActiva.id]&&descuentos[mesaActiva.id].pct)?totalConDescuento(subtotal,descuentos[mesaActiva.id].pct):subtotal)+'</span></div>'
+      +((descuentos[mesaActiva.id]&&descuentos[mesaActiva.id].pct&&subtotal>0)?'<div style="color:var(--muted);font-size:11px;text-align:right">Incluye el descuento del '+descuentos[mesaActiva.id].pct+'% de la mesa</div>':'')
     +'<div style="margin:12px 0"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">Forma de pago</div>'
       +'<select class="inp" id="div-fp">'+fpOpts+'</select></div>'
     +'<button class="btn btn-green btn-full" '+(subtotal<=0?'disabled':'')+' onclick="confirmarDividir()">💳 Cobrar esta parte</button>');
@@ -488,6 +489,9 @@ function confirmarDividir(){
     total+=precioItem(it)*q;
   });
   if(!itemsPagar.length||total<=0){alert('Selecciona al menos un producto.');return;}
+  // 🏷 Si la mesa tiene descuento, cada parte lo lleva (antes se perdía al dividir la cuenta)
+  var _dDiv=descuentos[mesaActiva.id],_brutoDiv=total;
+  if(_dDiv&&_dDiv.pct)total=totalConDescuento(total,_dDiv.pct);
   var f=FPAGO.find(function(x){return x.id===fp;});
   // ── COMPROBANTE para pago digital en cuenta dividida ──
   if(fp!=='efectivo'&&fotoCompCfg.on&&total>=(fotoCompCfg.min||0)&&!window._compTemp){
@@ -504,6 +508,7 @@ function confirmarDividir(){
     esDividida:true,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
+  if(_dDiv&&_dDiv.pct)venta.descuento={pct:_dDiv.pct,auth:_dDiv.auth||'',valor:_brutoDiv-total};
   venta.mesaId=mesaActiva.id;
   if(Array.isArray(pedidoLog[mesaActiva.id])&&pedidoLog[mesaActiva.id].length)venta.log=pedidoLog[mesaActiva.id].slice(-120);
   if(window._compTemp){
@@ -674,6 +679,7 @@ function abrirVerificacionCobro(pagos,total){
     +'</div>'
     +chips
     +'<div style="text-align:center;color:var(--muted);font-size:11px;margin:8px 0 12px">Total: <b style="color:var(--gold);font-size:14px">'+fmt(total)+'</b></div>'
+    +(function(){var pg=Object.keys(pagos).reduce(function(x,k){return x+(pagos[k]||0);},0),vu=Math.round(pg)-Math.round(total);return vu>0?'<div style="background:#22c55e18;border:2px solid #22c55e66;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;color:#22c55e">💵 Vuelto para el cliente</span><span style="font-size:19px;font-weight:900;color:#22c55e">'+fmt(vu)+'</span></div>':'';})()
     +'<div style="display:flex;gap:8px">'
       +'<button class="btn btn-full" onclick="closeModal2()" style="background:#ef444418;color:#ef4444;border:1px solid #ef444444;font-weight:800">← No, corregir</button>'
       +'<button class="btn btn-green btn-full" onclick="window._cobroVerificado=true;closeModal2();confirmarCobro();" style="font-weight:800">✓ Sí, cobrar</button>'
@@ -704,6 +710,13 @@ function confirmarCobro(){
   var descMesa=descuentos[mesaActiva.id];
   if(descMesa&&descMesa.pct) total=totalConDescuento(total,descMesa.pct);
   if(Math.round(pagado)<Math.round(total)){alert('El total pagado ($'+total.toLocaleString('es-CO')+') no cubre el valor. Verifica los montos.');return;}
+  // 💵 Si el cliente entrega de más, la diferencia es el vuelto y sale del efectivo: a la caja solo entra el valor de la cuenta.
+  //    Antes se guardaba lo recibido completo y la caja quedaba inflada por el vuelto.
+  var vuelto=Math.round(pagado)-Math.round(total);
+  if(vuelto>0&&(pagos.efectivo||0)<vuelto){
+    alert('Los pagos suman '+fmt(vuelto).replace(/\u00A0/g,' ')+' más que la cuenta, y no hay efectivo del que salga ese vuelto.\n\nCorrige los valores: los pagos por transferencia o tarjeta no pueden pasar del valor de la cuenta.');
+    return;
+  }
 
   // ── VERIFICACIÓN: confirmar la forma de pago antes de seguir ──
   if(!window._cobroVerificado){
@@ -753,6 +766,8 @@ function confirmarCobro(){
   setTimeout(function(){window._cobrandoMesa=null;window._cobroDobleOk=false;},8000);
 
   // Build venta with multiple payments
+  var recibidoEf=pagos.efectivo||0;
+  if(vuelto>0){pagos=Object.assign({},pagos);pagos.efectivo=recibidoEf-vuelto;}
   var pagosList=Object.entries(pagos).filter(function(kv){return kv[1]>0;}).map(function(kv){
     var f=FPAGO.find(function(x){return x.id===kv[0];});
     return{fp:kv[0],label:(f?f.label:''),monto:kv[1]};
@@ -775,6 +790,7 @@ function confirmarCobro(){
     sinStock:sinStock,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
+  if(vuelto>0){venta.vuelto=vuelto;venta.recibidoEfectivo=recibidoEf;}
   if(descMesa&&descMesa.pct)venta.descuento={pct:descMesa.pct,auth:descMesa.auth||'',valor:totalPedido(mesaActiva.id)-total};
   // Amarrar el comprobante fotográfico si se capturó (o marcar venta sin foto con motivo)
   if(window._compTemp){
