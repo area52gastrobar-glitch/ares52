@@ -498,12 +498,14 @@ function confirmarDividir(){
   var venta={
     mesa:(mesaActiva.nombre||('Mesa '+mesaActiva.num))+' (dividida)',zona:mesaActiva.zona,
     ts:a52Ahora(),total:total,
-    items:itemsPagar,
+    items:sellarItems(JSON.parse(JSON.stringify(itemsPagar))),
     fp:fp,fpLabel:(f?f.emoji+' '+f.label:fp),
     pagos:[{fp:fp,label:(f?f.label:fp),monto:total}],
     esDividida:true,
     uid:usuarioActivo.id,uidNombre:usuarioActivo.nombre
   };
+  venta.mesaId=mesaActiva.id;
+  if(Array.isArray(pedidoLog[mesaActiva.id])&&pedidoLog[mesaActiva.id].length)venta.log=pedidoLog[mesaActiva.id].slice(-120);
   if(window._compTemp){
     if(window._compTemp.sinFoto){
       venta.sinFoto=true;
@@ -767,7 +769,7 @@ function confirmarCobro(){
   var venta={
     mesa:mesa.nombre||('Mesa '+mesa.num),zona:mesa.zona,
     ts:a52Ahora(),total:total,
-    items:JSON.parse(JSON.stringify(ped)),
+    items:sellarItems(JSON.parse(JSON.stringify(ped))),
     fp:fpPrincipal,fpLabel:fpLabel,
     pagos:pagosList,
     sinStock:sinStock,
@@ -789,6 +791,9 @@ function confirmarCobro(){
     window._compTemp=null;
   }
   // Capturar los abonos de la mesa ANTES de borrarlos (para el recibo y el historial)
+  // 🕒 La venta se lleva la historia de la mesa (qué se pidió y a qué hora) antes de que se borre
+  venta.mesaId=mesa.id;
+  if(Array.isArray(pedidoLog[mesa.id])&&pedidoLog[mesa.id].length)venta.log=pedidoLog[mesa.id].slice(-120);
   var absCobro=(abonosMesa[mesa.id]||[]).map(function(ab){return {nombre:ab.nombre||'Abono',monto:ab.monto||0,fp:ab.fp||'',ts:ab.ts||0};});
   if(absCobro.length)venta.abonos=absCobro;
   fbPush('ventas',venta);

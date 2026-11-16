@@ -124,7 +124,7 @@ var movEmpleados=[];   // [{id, ts, empId, tipo, valor, fp, nota, uid, largoPlaz
 var asistenciaEmp={};  // {empId_YYYY-MM-DD: true} días trabajados
 var _empSemanaOffset=0;  // navegación de semana en nómina
 var clientesCredito=[];// [{id, nombre, telefono, activo}]
-var _secOpen={ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true,stockBajo:false,socProds:false,cobrosTurno:true,concil:false,gastosFP:false,prestamosHist:false};  // secciones plegables
+var _secOpen={buscador:true,ranking:false,historial:false,socios:false,gastosHist:false,invCarta:true,invIng:false,cierresHist:false,rappiHist:false,rappiCierres:false,sanPlan:false,ventasDiarias:true,stockBajo:false,socProds:false,cobrosTurno:true,concil:false,gastosFP:false,prestamosHist:false};  // secciones plegables
 var ventasRappi=[];   // [{id,ts,items,total,uid}]
 var _rappiPedido=[];  // pedido en construcción
 var _rappiCat='';  // categoría abierta en acordeón Rappi
@@ -338,8 +338,24 @@ function fechaNegocio(ts){var d=new Date(ts);d.setHours(d.getHours()-HORA_CIERRE
 function diaNegocioStr(ts){return fechaNegocio(ts).toLocaleDateString('es-CO');}
 function hoyNegocioStr(){return diaNegocioStr(a52Ahora());}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+/* 🧾 Al cobrar, cada línea queda con su nombre y su precio de ese momento: si después se cambia el precio
+   o se borra el producto, la venta guardada sigue diciendo qué se vendió y a cuánto. */
+function sellarItems(items){
+  (items||[]).forEach(function(it){
+    if(!it||typeof it!=='object')return;
+    if(typeof it.precioVenta!=='number')it.precioVenta=precioItem(it);
+    if(!it.nombreVenta){
+      var p=menu.find(function(m){return m.id==it.pid;});
+      it.nombreVenta=it.isCustom?(it.customNombre||'Otro'):it.isCombo?('Combo '+(it.comboNombre||'')):it.isCubetazoMix?(it.cubMixNombre||'Cubetazo mixto')
+        :((p?p.nombre:(it.nombre||'Producto borrado'))+(it.varianteNombre?' ('+it.varianteNombre+')':'')+(it.cubeta?' (cubetazo)':'')+(it.es2x1Gratis?' (2x1 gratis)':''));
+    }
+    if(!it.nombre&&!it.isCustom&&!it.isCombo&&!it.isCubetazoMix)it.nombre=it.nombreVenta;
+  });
+  return items;
+}
 function precioItem(it){
   if(it.es2x1Gratis) return 0;   // 🎁 unidad gratis de una promo 2x1
+  if(typeof it.precioVenta==='number') return it.precioVenta;   // 🧾 venta ya cobrada: precio de ese día
   if(it.isCombo) return it.comboPrecio||0;
   if(it.isCustom) return it.customPrecio||0;
   if(it.isCubetazoMix) return it.cubMixPrecio||0;

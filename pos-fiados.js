@@ -83,7 +83,7 @@ function confirmarPagoCredito(deudaId){
   var venta={
     mesa:'Fiado: '+d.clienteNombre,zona:'credito',
     ts:a52Ahora(),total:valor,
-    items:ventaItems,
+    items:sellarItems(JSON.parse(JSON.stringify(ventaItems))),
     fp:fp,fpLabel:(f?f.label:fp),
     pagos:[{fp:fp,label:(f?f.label:fp),monto:valor}],
     esPagoCredito:true,fiadoSaldado:esFinal,deudaId:d.id,

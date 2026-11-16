@@ -22,13 +22,36 @@ function exportarExcel(){
     var fp=FPAGO.find(function(f){return f.id===v.fp;});
     var z=ZONAS.find(function(x){return x.id===v.zona;});
     var ts=new Date(v.ts);
-    v.items.forEach(function(it){
-      var p=menu.find(function(m){return m.id===it.pid;});
-      var pr=it.cubeta?(p&&p.cubeta||((p&&p.precio||0)*5)):((p&&p.precio)||0);
-      det.push({Fecha:ts.toLocaleDateString('es-CO'),Hora:ts.toLocaleTimeString('es-CO'),Zona:z?z.label:'',Mesa:v.mesa||'',Usuario:v.uidNombre||v.uid||'',Producto:(p&&p.nombre)||'',Tipo:it.cubeta?'Cubetazo x5':'Detal',Cantidad:it.qty,'Precio unit':pr,Subtotal:pr*it.qty,'Forma pago':fp?fp.label:v.fp,'Total mesa':v.total});
+    var itsV=v.items?(Array.isArray(v.items)?v.items:Object.values(v.items)):[];
+    var base={Fecha:ts.toLocaleDateString('es-CO'),Hora:ts.toLocaleTimeString('es-CO'),Zona:z?z.label:'',Mesa:v.mesa||'',Usuario:v.uidNombre||v.uid||''};
+    var sumaV=0;
+    function fila(prod,tipo,cant,pr){det.push(Object.assign({},base,{Producto:prod,Tipo:tipo,Cantidad:cant,'Precio unit':pr,Subtotal:pr*cant,'Forma pago':fp?fp.label:v.fp,'Total mesa':v.total}));sumaV+=pr*cant;}
+    itsV.forEach(function(it){
+      if(!it)return;
+      var p=menu.find(function(m){return m.id==it.pid;});
+      var pr=precioItem(it),q=it.qty||1,nom,tipo='Detal';
+      if(it.isCombo){nom='Combo '+(it.comboNombre||'');tipo='Combo';}
+      else if(it.isCubetazoMix){nom=(it.cubMixNombre||'Cubetazo mixto')+' ('+(it.cubMixDetalle||[]).map(function(d){return d.cantidad+'× '+d.nombre;}).join(', ')+')';tipo='Cubetazo mixto';}
+      else if(it.isCustom){nom=it.customNombre||'Otro';tipo=it.esAsumeSocio?'Asume socio':'Otro (a mano)';}
+      else{
+        nom=it.nombreVenta||((p?p.nombre:(it.nombre||'Producto borrado del menú'))+(it.varianteNombre?' ('+it.varianteNombre+')':''));
+        tipo=it.es2x1Gratis?'2x1 gratis':it.cubeta?'Cubetazo x5':it.precioPromo?'Promoción':it.varianteNombre?'Tamaño / variante':'Detal';
+      }
+      fila(nom,tipo,q,pr);
     });
+    // Que cada cobro cuadre: descuento, abonos previos o un precio que cambió después de la venta
+    var difV=(v.total||0)-sumaV;
+    if(itsV.length&&Math.abs(difV)>=1)fila(v.descuento&&v.descuento.pct?('Descuento '+v.descuento.pct+'%'):(difV<0?'Ajuste: abono previo o descuento':'Ajuste: precio distinto al de hoy'),'Ajuste',1,difV);
   });
   var ws1=X.utils.json_to_sheet(det);ws1['!cols']=[10,8,13,14,14,22,11,9,12,12,15,12].map(function(w){return{wch:w};});X.utils.book_append_sheet(wb,ws1,'Ventas detalle');
+  // Unidades por producto y día de negocio (combos y cubetazos desarmados)
+  if(typeof expUnidades==='function'){
+    var porDiaU={},ordenU=[];
+    ventas.slice().sort(function(a,b){return a.ts-b.ts;}).forEach(function(v){var d=diaNegocioStr(v.ts);if(!porDiaU[d]){porDiaU[d]=[];ordenU.push(d);}porDiaU[d].push(v);});
+    var undDet=[];
+    ordenU.forEach(function(d){expUnidades(porDiaU[d]).forEach(function(f){undDet.push({'Día de negocio':d,Categoria:f.cat||'',Producto:f.nombre,Unidades:f.und,'De ellas en combos':f.enCombos,'Valor':Math.round(f.total)});});});
+    var wsU=X.utils.json_to_sheet(undDet);wsU['!cols']=[13,18,30,10,16,12].map(function(w){return{wch:w};});X.utils.book_append_sheet(wb,wsU,'Unidades por producto');
+  }
   // Gastos
   var gastDet=gastos.map(function(g){return{Fecha:fmtDate(g.ts),Hora:fmtTime(g.ts),Concepto:g.concepto,Categoria:g.categoria,Valor:g.valor,Usuario:g.uidNombre||g.uid||'',Notas:g.notas||''};});
   var ws2=X.utils.json_to_sheet(gastDet);X.utils.book_append_sheet(wb,ws2,'Gastos');

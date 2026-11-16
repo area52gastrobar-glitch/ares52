@@ -26,7 +26,7 @@ function _desgloseProductosVentas(vs){
       }
       var p=menu.find(function(m){return m.id==it.pid;});
       var nom=(p?p.nombre:(it.nombre||'?'))+(it.varianteNombre?' ('+it.varianteNombre+')':'');
-      var und=(it.varianteUnd||1)*q;
+      var und=(it.cubeta?5:(it.varianteUnd||1))*q;
       add('p_'+nom+(it.es2x1Gratis?'':''),nom,p?p.emoji:'📦',und,precioItem(it)*q);
     });
   });
@@ -576,6 +576,9 @@ function renderVentas(){
       }).join('')
     +'</div>'
     +'</div>'
+    // ── BUSCADOR DE VENTAS ──
+    +'<button data-act="toggle-sec" data-sec="buscador" style="width:100%;text-align:left;background:#38bdf818;border:1px solid #38bdf833;border-radius:10px;padding:10px 14px;margin:14px 0 8px;font-size:12px;color:#38bdf8;font-weight:700;cursor:pointer">'+(_secOpen.buscador!==false?'▼':'▶')+' 🔎 Buscador de ventas: por fecha, mesa, producto, quién atendió y medio de pago</button>'
+    +(_secOpen.buscador!==false?'<div class="res-card full-col">'+buscadorVentasHTML()+'</div>':'')
     // ── VENTAS DIARIAS (por día de negocio 11am-5am) ──
     +'<button data-act="toggle-sec" data-sec="ventasDiarias" style="width:100%;text-align:left;background:#f5a62318;border:1px solid #f5a62333;border-radius:10px;padding:10px 14px;margin:14px 0 8px;font-size:12px;color:#f5a623;font-weight:700;cursor:pointer">'+(_secOpen.ventasDiarias?'▼':'▶')+' 📅 Ventas por día (11am–5am)</button>'
     +(_secOpen.ventasDiarias?'<div class="res-card full-col">'+ventasDiariasHTML()+'</div>':'')
