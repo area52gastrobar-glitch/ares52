@@ -135,9 +135,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   </div>
 </div>
 
-<script src="negocio.js?v=2026-11-18d"></script>
-<script src="comun.js?v=2026-11-18d"></script>
-<script src="rocola-reglas.js?v=2026-11-18d"></script>
+<script src="negocio.js?v=2026-11-18e"></script>
+<script src="comun.js?v=2026-11-18e"></script>
+<script src="rocola-reglas.js?v=2026-11-18e"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -1044,15 +1044,47 @@ function quitar(key){db.ref('musica/'+key).remove();}
 function reproducirYa(key){
   var p=pedidos.find(function(x){return x.key===key;});
   if(!p)return;
+  _avanzando=true;   // mientras cambia, el aviso de Firebase no debe arrancar otra canción por su cuenta
+  var ant=actual;
   // La que estaba sonando se marca como sonada (se interrumpió, pero ya sonó): así NO se repite después
-  if(actual&&actual.key&&actual.key!==key){
-    actual.played=true;
-    db.ref('musica/'+actual.key+'/played').set(true);
+  if(ant&&ant.key&&ant.key!==key){ant.played=true;db.ref('musica/'+ant.key+'/played').set(true);}
+  else if(ant&&ant.auto)ant.played=true;
+  clearInterval(_monitorFin);_fundiendo=false;
+  var pin=PInact(),lista=false;
+  try{lista=!!(siguientePreload&&siguientePreload.key===key&&pin&&pin.getPlayerState&&pin.getPlayerState()===YT.PlayerState.CUED);}catch(e){}
+  if(lista){
+    // ya estaba cargada en el otro reproductor: se cambia y arranca al instante
+    var viejo=P();activeIdx=1-activeIdx;actual=p;siguientePreload=null;_contarRotacion(p);
+    document.getElementById('nowTitle').textContent=p.cancion;
+    document.getElementById('nowArtist').textContent=(p.artista||'')+(p.genero?'  ·  '+p.genero:'');
+    mostrarActivo();
+    try{P().setVolume(100);P().playVideo();}catch(e){}
+    try{viejo.stopVideo();viejo.setVolume(100);}catch(e){}
+    render();
+  }else{
+    siguientePreload=null;
+    try{pin.stopVideo();}catch(e){}
+    reproducirPedido(p);
   }
-  clearInterval(_monitorFin);
-  _avanzando=false;
-  siguientePreload=null;
-  reproducirPedido(p);
+  setTimeout(function(){_avanzando=false;},1500);
+}
+// Si suena la música automática y alguien pide una canción, la pedida entra ya (con un fundido corto), sin esperar a que termine la automática
+var _cortandoAuto=null;
+function revisarAutomatica(){
+  if(!playerReady||!actual||!actual.auto||actual.played||_cortandoAuto)return;
+  if(!colaParaReproducir().length)return;
+  precargarSiguiente();
+  var a=actual,intentos=0;
+  // espera a que la pedida esté cargada en el otro reproductor y entra con fundido: nunca queda silencio
+  function probar(){
+    _cortandoAuto=null;
+    if(actual!==a||a.played||!colaParaReproducir().length)return;
+    if(puedeFundir()){clearInterval(_monitorFin);fundirAlSiguiente(2);return;}
+    if(++intentos<8){precargarSiguiente();_cortandoAuto=setTimeout(probar,800);return;}
+    // si después de unos segundos no cargó, se cambia directo (la automática sigue sonando hasta ese momento)
+    clearInterval(_monitorFin);a.played=true;actual=null;_avanzando=false;reproducirCola();
+  }
+  _cortandoAuto=setTimeout(probar,1200);
 }
 
 // ---------- RENDER COLA ----------
@@ -1089,6 +1121,7 @@ function render(){
   pintarVotosAhora();publicarAhora();
   // si la fila cambió (votos, nuevos pedidos), dejar lista la que de verdad sigue: así el fundido funciona
   if(playerReady&&actual&&!actual.played&&typeof YT!=='undefined')precargarSiguiente();
+  if(typeof YT!=='undefined')revisarAutomatica();
 }
 
 function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
