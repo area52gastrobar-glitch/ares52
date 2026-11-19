@@ -23,6 +23,23 @@
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
     },
+    "djAhora": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
+    "djVetadas": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
+    "votos": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true",
+      "$id": {
+        "$mesa": {
+          ".write": "(auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true) || ($id.length <= 40 && $mesa.length <= 6 && (!newData.exists() || newData.val() === 1 || newData.val() === -1))"
+        }
+      }
+    },
     "combos": {
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"

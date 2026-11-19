@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Video del negocio</title>
 <!-- Video para las pantallas del negocio. Los precios, combos y promociones se leen de la carta del POS:
-     al cambiar un precio en el POS, el video se actualiza solo. APP_BUILD='2026-11-18b' -->
-<link rel="stylesheet" href="fuentes.css?v=2026-11-18b"/>
-<script src="negocio.js?v=2026-11-18b"></script>
+     al cambiar un precio en el POS, el video se actualiza solo. APP_BUILD='2026-11-18d' -->
+<link rel="stylesheet" href="fuentes.css?v=2026-11-18d"/>
+<script src="negocio.js?v=2026-11-18d"></script>
+<script src="rocola-reglas.js?v=2026-11-18d"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html{font-size:1.3vw}
@@ -120,6 +121,7 @@ body:not(.navidad) .neon{text-shadow:0 0 .35rem #fff,0 0 1.1rem var(--morado),0 
 .tar .antes{font-size:1.3rem;color:var(--humo);margin-top:.9rem;font-weight:600}
 .tar .gigante{font-family:'Unbounded','Figtree',sans-serif;font-weight:900;font-size:6rem;margin-bottom:.5rem;line-height:1;color:var(--ama);text-shadow:0 .3rem 0 #6b5a00,0 0 2rem rgba(255,230,0,.4)}
 /* Cierre */
+.pie-dj{margin-top:1.4rem;align-self:flex-start;font-size:1.45rem;flex:none}
 .cierre{flex-direction:row;align-items:center;justify-content:center;gap:5rem}
 .cierre .qr{background:#fff;padding:1rem;border-radius:1.2rem;box-shadow:0 0 0 .3rem var(--lima),0 0 3.4rem rgba(141,255,43,.45)}
 .cierre .qr img{display:block;width:24rem;height:24rem}
@@ -166,7 +168,7 @@ body.sinqr #qr{display:none}
 (function(){
 var N=window.NEGOCIO||{},BASE=(N.firebase&&N.firebase.databaseURL)||'';
 var POR_LISTA=10,POR_TARJETA=3,POR_PLATO=4,CADA=45000;   // filas por pantalla · tarjetas por pantalla · cada cuánto se revisan los precios
-var datos={carta:null,combos:null,promos:null,tema:null},huella='',pantallas=[],actual=0,reloj=null,inicio=0,dura=0,pausa=false;
+var datos={carta:null,combos:null,promos:null,tema:null,dj:null},huella='',pantallas=[],actual=0,reloj=null,inicio=0,dura=0,pausa=false;
 function esc(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function plata(n){return '$'+Math.round(Number(n)||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
 function lista(v){return v?(Array.isArray(v)?v:Object.keys(v).map(function(k){return v[k];})).filter(Boolean):[];}
@@ -260,6 +262,21 @@ function armar(){
       +(ah>0?'<div class="antes">Precio normal <s>'+plata(normal)+'</s></div>':'')+'<div class="brocha precio">'+plata(pr.valor)+'</div></div>';
   }).filter(Boolean);
   trozos(promos,POR_TARJETA).forEach(function(g){P.push({t:9000,k:CM,h:M+cab('🔥',nav?'Promos de temporada':'Promociones','Vigentes hoy en la carta')+'<div class="tarjetas">'+g.join('')+'</div>'});});
+  // 3b) La rocola: el cliente es el DJ (cómo pedir, votar y lo demás que puede hacer desde el QR de su mesa)
+  var mods=N.modulos||{};
+  if(mods.rocola!==false){
+    var R2=typeof rrAplicar==='function'?rrAplicar(datos.dj):{maxPorMesa:3,maxMin:8};
+    var mas=[];
+    if(mods.cuentaMesa!==false)mas.push('🧾 Tu cuenta en vivo');
+    if(mods.llamar!==false)mas.push('🔔 Llama a la mesera');
+    mas.push('📋 La carta y las promos');
+    P.push({t:13000,k:CM,h:M+cab('🎧','¡El DJ eres tú!',(nav?'Pon la música de tu Navidad · ':'')+'Escanea el QR que está en tu mesa')
+      +'<div class="tarjetas">'
+      +'<div class="tar"><div class="e">🎵</div><h3>Pide tu canción</h3><ul><li>Búscala y elige el género</li><li>Suenan por turnos entre mesas</li><li>Hasta '+R2.maxPorMesa+' por mesa en la fila</li></ul></div>'
+      +'<div class="tar"><div class="e">🔥</div><h3>Vota</h3><ul><li>🔥 sube la que te gusta</li><li>👎 si la mitad de las mesas vota, se salta</li></ul></div>'
+      +'<div class="tar"><div class="e">📱</div><h3>Desde tu mesa</h3><ul>'+mas.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>'
+      +'</div><div class="brocha pie-dj">📱 QR de tu mesa → Rocola · máx. '+R2.maxMin+' min por canción</div>'});
+  }
   platos.forEach(function(x){P.push(x);});
   // 4) Cubetazos
   var cub=prods.filter(function(m){return Number(m.cubeta)>0;}).sort(function(a,b){return a.cubeta-b.cubeta;});
@@ -315,11 +332,12 @@ function leer(ruta,cb){
 }
 function actualizar(){
   if(!BASE){pintar();return;}
-  var falta=4,ok=true,fin=function(){if(--falta)return;document.getElementById('aviso').textContent=ok?'':'Sin conexión: se muestran los últimos precios cargados';pintar();};
+  var falta=5,ok=true,fin=function(){if(--falta)return;document.getElementById('aviso').textContent=ok?'':'Sin conexión: se muestran los últimos precios cargados';pintar();};
   leer('cartaPublica',function(v){if(v===undefined)ok=false;else datos.carta=v;fin();});
   leer('combos',function(v){if(v===undefined)ok=false;else datos.combos=v;fin();});
   leer('promos',function(v){if(v===undefined)ok=false;else datos.promos=v;fin();});
   leer('config/tema',function(v){if(v!==undefined)datos.tema=v;fin();});
+  leer('config/dj',function(v){if(v!==undefined)datos.dj=v;fin();});
 }
 document.title='Video · '+(N.nombre||'');
 adornos();pintar();actualizar();

@@ -53,6 +53,17 @@ select.inp{color:var(--tinta)}select.inp option{background:var(--t-b1);color:#ff
 .result .rc{font-size:11px;color:var(--t-mu);margin-top:2px}
 .spin{text-align:center;color:var(--t-mu);padding:18px;font-size:13px}
 @media (prefers-reduced-motion:reduce){body::before,.ovni .nave,.ovni::after{animation:none}}
+.result.off{cursor:default;opacity:.55}
+.result .motivo{font-size:11.5px;font-weight:700;color:#ff8a5c;margin-top:3px}
+.voto{flex-shrink:0;background:rgba(255,122,47,.12);color:#ff9a5c;border:1px solid rgba(255,122,47,.35);border-radius:10px;padding:6px 10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+.voto.on{background:#ff7a2f;color:#1a0d00}
+.voto.no{background:rgba(255,59,92,.12);color:#ff6b8b;border-color:rgba(255,59,92,.4)}
+.voto.no.on{background:#ff3b5c;color:#fff}
+.voto[disabled]{opacity:.45;cursor:default}
+.ahora{background:rgba(var(--t-b2-rgb),.85);border:1px solid rgba(var(--t-s2-rgb),.45);border-radius:14px;padding:12px 14px;margin:0 0 12px;display:flex;gap:12px;align-items:center}
+.ahora .l{font-size:10.5px;font-weight:800;letter-spacing:1.5px;color:var(--t-s2)}
+.ahora .nm{font-weight:800;margin-top:2px}
+.ahora .n{font-size:11.5px;color:var(--t-l);margin-top:3px}
 </style>
 </head>
 <body>
@@ -85,6 +96,7 @@ select.inp{color:var(--tinta)}select.inp option{background:var(--t-b1);color:#ff
   </div>
 
   <div class="qtitle"><span>🎧 En la fila</span><span style="display:flex;align-items:center;gap:10px"><button onclick="verHistorial()" style="background:rgba(var(--t-s2-rgb),.14);color:var(--t-s2);border:1px solid rgba(var(--t-s2-rgb),.35);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">🕐 Ya sonó</button><span id="contador" style="color:#888;font-weight:400;font-size:12px"></span></span></div>
+  <div id="ahora"></div>
   <div id="lista"><div class="empty spin">Cargando...</div></div>
 
   <div class="staff-link"><button onclick="toggleStaff()">· staff ·</button></div>
@@ -101,8 +113,9 @@ select.inp{color:var(--tinta)}select.inp option{background:var(--t-b1);color:#ff
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="negocio.js?v=2026-11-18b"></script>
-<script src="comun.js?v=2026-11-18b"></script>
+<script src="negocio.js?v=2026-11-18d"></script>
+<script src="comun.js?v=2026-11-18d"></script>
+<script src="rocola-reglas.js?v=2026-11-18d"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -119,6 +132,7 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 var STAFF_PIN=String(NEGOCIO.rocolaPinStaff||"");
 var staffMode=false, pedidos=[], historial=[], YT_KEY='';
+var VETADAS={}, VOTOS={}, AHORA=null, _durs={};   // vetadas por el DJ, votos de las mesas, lo que suena y duración de los videos
 var YT_KEYS=[], _keyIdx=0;
 function setActiveKey(){YT_KEY=YT_KEYS[_keyIdx]||'';}
 function rotarKey(){if(_keyIdx<YT_KEYS.length-1){_keyIdx++;setActiveKey();return true;}return false;}
@@ -186,13 +200,33 @@ function pintarResultados(items){
   var cont=document.getElementById('resultados');
   if(!items||!items.length){cont.innerHTML='<div class="spin">Sin resultados. Prueba con otro nombre.</div>';return;}
   cont.innerHTML='<div class="label" style="margin-top:6px">👇 Toca la correcta para pedirla</div>'+items.map(function(it){
-    return'<div class="result" onclick="pedir(\''+it.v+'\',\''+encodeURIComponent(it.titulo)+'\',\''+encodeURIComponent(it.canal)+'\')">'
+    var no=motivoNo(it.v,it.titulo);
+    return'<div class="result'+(no?' off':'')+'"'+(no?'':' onclick="pedir(\''+it.v+'\',\''+encodeURIComponent(it.titulo)+'\',\''+encodeURIComponent(it.canal)+'\')"')+'>'
       +'<img src="'+it.thumb+'">'
-      +'<div><div class="rt">'+esc(it.titulo)+'</div><div class="rc">'+esc(it.canal)+'</div></div>'
+      +'<div><div class="rt">'+esc(it.titulo)+'</div><div class="rc">'+esc(it.canal)+(it.dur?' · '+rrMin(it.dur):'')+'</div>'+(no?'<div class="motivo">'+esc(no)+'</div>':'')+'</div>'
     +'</div>';
   }).join('');
 }
 
+// Duración de cada video (1 sola consulta para los 6): los muy largos no se pueden pedir
+function conDuracion(items,cb){
+  var faltan=items.filter(function(it){return !(it.dur>0);});
+  faltan.forEach(function(it){if(_durs[it.v])it.dur=_durs[it.v];});
+  faltan=faltan.filter(function(it){return !(it.dur>0);});
+  if(!faltan.length||!YT_KEY){items.forEach(function(it){if(it.dur)_durs[it.v]=it.dur;});cb();return;}
+  fetch('https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id='+faltan.map(function(it){return it.v;}).join(',')+'&key='+YT_KEY)
+    .then(function(r){return r.json();}).then(function(d){
+      (d.items||[]).forEach(function(v){var s=rrSegundos(v.contentDetails&&v.contentDetails.duration);faltan.forEach(function(it){if(it.v===v.id)it.dur=s;});});
+      items.forEach(function(it){if(it.dur)_durs[it.v]=it.dur;});cb();
+    }).catch(function(){cb();});
+}
+// Por qué no se puede pedir (o '' si sí se puede)
+function motivoNo(v,titulo){
+  if(VETADAS[v]||rrPalabra(titulo))return '🚫 No disponible en este lugar';
+  var d=_durs[v]||0;
+  if(RR.maxMin>0&&d>RR.maxMin*60+30)return '⏱ Muy larga ('+rrMin(d)+'). Busca la versión normal, de máximo '+RR.maxMin+' min';
+  return '';
+}
 function buscar(){
   var q=document.getElementById('busqueda').value.trim();
   if(!q){toast('✍️ Escribe el nombre de la canción','#ff3b5c');return;}
@@ -200,7 +234,7 @@ function buscar(){
   var cont=document.getElementById('resultados');
   // 1) Si ya se buscó lo mismo, usar caché (no gasta cuota)
   var cached=cacheGet(q);
-  if(cached){pintarResultados(cached);return;}
+  if(cached){conDuracion(cached,function(){pintarResultados(cached);});return;}
   cont.innerHTML='<div class="spin">🔎 Buscando...</div>';
   var url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&safeSearch=moderate&maxResults=6&q='+encodeURIComponent(q+' música')+'&key='+YT_KEY;
   fetch(url).then(function(r){return r.json();}).then(function(data){
@@ -215,8 +249,7 @@ function buscar(){
       var sn=it.snippet;
       return {v:it.id.videoId,titulo:sn.title.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'"),canal:sn.channelTitle,thumb:sn.thumbnails.default.url};
     });
-    cacheSet(q,items);  // guardar para no volver a gastar cuota
-    pintarResultados(items);
+    conDuracion(items,function(){cacheSet(q,items);pintarResultados(items);});  // guardar para no volver a gastar cuota
   }).catch(function(){cont.innerHTML='<div class="spin">Error de búsqueda. Intenta de nuevo.</div>';});
 }
 
@@ -226,6 +259,11 @@ function pedir(videoId,tituloEnc,canalEnc){
   if(!genero){toast('🎸 Elige el género antes de pedirla','#ff3b5c');document.getElementById('genero').focus();return;}
   var nombre=document.getElementById('nombre').value.trim();
   if(!nombre){toast('🙋 Escribe quién la pide','#ff3b5c');document.getElementById('nombre').focus();return;}
+  var titulo0=decodeURIComponent(tituloEnc),no=motivoNo(videoId,titulo0);
+  if(no){toast(esc(no),'#ff3b5c');return;}
+  // Turno justo: cada mesa (o persona, si no entró con el QR) tiene un tope de canciones en la fila
+  var mias=pedidos.filter(function(p){return !p.played&&(MESA?String(p.mesa||'')===String(MESA):String(p.nombre||'').toLowerCase()===nombre.toLowerCase());});
+  if(mias.length>=RR.maxPorMesa){toast('🪑 '+(MESA?'Tu mesa':'Tú')+' ya tiene '+mias.length+' canciones en la fila.<br>Cuando suene una, puedes pedir otra.','var(--t-p3)');return;}
   var ultimo=parseInt(localStorage.getItem('a52_ultPedido')||'0');
   if(Date.now()-ultimo<20000){toast('⏳ Espera un momento antes de pedir otra','var(--t-p3)');return;}
   // No repetir la misma canción si ya se pidió o sonó en la última hora y media
@@ -249,7 +287,8 @@ function pedir(videoId,tituloEnc,canalEnc){
     toast('🎶 ¡Pedida! Pronto sonará');
   }).catch(function(){toast('❌ Error, intenta de nuevo','#ff3b5c');});
   // Guardar en el historial permanente (para el bloqueo de 1.5h aunque limpien la fila)
-  db.ref('historialRocola').push({videoId:videoId,cancion:titulo,artista:canal,nombre:nombre,genero:genero,ts:Date.now()});
+  var hr={videoId:videoId,cancion:titulo,artista:canal,nombre:nombre,genero:genero,ts:Date.now()};if(MESA)hr.mesa=MESA;
+  db.ref('historialRocola').push(hr);
 }
 
 function toggleStaff(){
@@ -266,8 +305,12 @@ function limpiarSonadas(){if(!confirm('¿Borrar las ya sonadas?'))return;var avi
 
 function render(){
   var cont=document.getElementById('lista');
-  var pend=pedidos.filter(function(p){return !p.played;});
+  var pend=pedidos.filter(function(p){return !p.played&&!(AHORA&&AHORA.id===p.key)&&!VETADAS[p.videoId];});
   var son=pedidos.filter(function(p){return p.played;});
+  // mismo orden que la consola del DJ (turno por mesas, géneros y 🔥)
+  var orden=(AHORA&&AHORA.cola)?rrLista(AHORA.cola):[];
+  if(orden.length)pend.sort(function(a,b){var ia=orden.indexOf(a.key),ib=orden.indexOf(b.key);if(ia<0)ia=999;if(ib<0)ib=999;return (ia-ib)||(a.ts-b.ts);});
+  pintarAhora();
   document.getElementById('contador').textContent=pend.length+' en espera';
   if(!pedidos.length){cont.innerHTML='<div class="empty spin">🎵 Aún no hay canciones.<br>¡Sé el primero en pedir!</div>';return;}
   var html='';
@@ -276,6 +319,7 @@ function render(){
       +'<div class="info"><div class="nm">'+esc(p.cancion)+'</div>'
       +(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')
       +'<div style="margin-top:3px">'+(p.genero?'<span class="badge-g">'+esc(p.genero)+'</span>':'')+((p.nombre||p.mesa)?' <span style="font-size:11px;color:var(--t-s2)">'+(p.mesa?'🪑 Mesa '+esc(String(p.mesa))+' · ':'')+'🙋 '+esc(p.nombre||'')+'</span>':'')+'</div></div>'
+      +botonFuego(p)
       +(staffMode?'<button class="num" style="background:rgba(var(--t-s2-rgb),.12);color:var(--t-s2);border:none;cursor:pointer" onclick="marcarSonada(\''+p.key+'\')">✓</button><button class="num" style="background:rgba(255,59,92,.12);color:#ff3b5c;border:none;cursor:pointer" onclick="borrar(\''+p.key+'\')">✕</button>':'')
     +'</div>';
   });
@@ -284,6 +328,28 @@ function render(){
     son.forEach(function(p){html+='<div class="song played"><div class="num">✓</div><div class="info"><div class="nm">'+esc(p.cancion)+'</div></div><button class="num" style="background:rgba(255,59,92,.12);color:#ff3b5c;border:none;cursor:pointer" onclick="borrar(\''+p.key+'\')">✕</button></div>';});
   }
   cont.innerHTML=html;
+}
+function votosDe(id,val,sinMesa){var v=VOTOS[id]||{};return Object.keys(v).filter(function(m){return v[m]===val&&String(m)!==String(sinMesa==null?'':sinMesa);}).length;}
+function miVoto(id){return MESA?((VOTOS[id]||{})[MESA]||0):0;}
+function botonFuego(p){
+  var n=votosDe(p.key,1,p.mesa),propia=MESA&&String(p.mesa||'')===String(MESA);
+  return '<button class="voto'+(miVoto(p.key)===1?' on':'')+'" '+(propia?'disabled title="Es de tu mesa"':'onclick="votar(\''+p.key+'\',1)" title="¡Que suene antes!"')+'>🔥'+(n?' '+n:'')+'</button>';
+}
+function pintarAhora(){
+  var el=document.getElementById('ahora');if(!el)return;
+  if(!AHORA||!AHORA.cancion){el.innerHTML='';return;}
+  var n=votosDe(AHORA.id,-1,AHORA.mesa),u=AHORA.umbral||2,propia=MESA&&AHORA.mesa&&String(AHORA.mesa)===String(MESA);
+  el.innerHTML='<div class="ahora"><div style="flex:1;min-width:0"><div class="l">▶ SONANDO AHORA</div><div class="nm">'+esc(AHORA.cancion)+'</div>'
+    +(AHORA.artista?'<div class="ar" style="font-size:12px;color:var(--t-l)">'+esc(AHORA.artista)+'</div>':'')
+    +'<div class="n">'+(n?'👎 '+n+' de '+u+' mesas quieren saltarla':'Si no les gusta, voten 👎: con '+u+' mesas se salta')+'</div></div>'
+    +(propia?'':'<button class="voto no'+(miVoto(AHORA.id)===-1?' on':'')+'" onclick="votar(\''+esc(AHORA.id)+'\',-1)" title="No me gusta: saltarla">👎</button>')+'</div>';
+}
+function votar(id,val){
+  if(!MESA){toast('📱 Para votar, escanea el QR de tu mesa','var(--t-p3)');return;}
+  var cur=miVoto(id);
+  db.ref('votos/'+id+'/'+MESA).set(cur===val?null:val).then(function(){
+    if(cur!==val)toast(val===1?'🔥 ¡Voto sumado! Sube en la fila':'👎 Voto registrado');
+  }).catch(function(){toast('❌ No se pudo votar, intenta de nuevo','#ff3b5c');});
 }
 function verHistorial(){
   var cont=document.getElementById('histLista');
@@ -311,6 +377,12 @@ db.ref('musica').on('value',function(snap){
   pedidos=Object.keys(v).map(function(k){var o=v[k];o.key=k;return o;}).sort(function(a,b){return a.ts-b.ts;});
   render();
 });
+
+// Reglas del DJ, canciones vetadas, lo que suena y los votos (todo en vivo)
+db.ref('config/dj').on('value',function(s){rrAplicar(s.val());render();},function(){});
+db.ref('djVetadas').on('value',function(s){VETADAS=s.val()||{};render();},function(){});
+db.ref('djAhora').on('value',function(s){AHORA=s.val();render();},function(){});
+db.ref('votos').on('value',function(s){VOTOS=s.val()||{};render();},function(){});
 
 // Historial permanente (no se borra al limpiar la fila)
 db.ref('historialRocola').on('value',function(snap){

@@ -51,6 +51,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .setup button{background:linear-gradient(90deg,var(--morado),var(--cian));color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:800;cursor:pointer;box-shadow:0 0 12px rgba(var(--t-p3-rgb),.4)}
 .badge{font-size:9px;font-weight:800;padding:1px 7px;border-radius:99px;background:rgba(var(--t-s2-rgb),.14);color:var(--verde);border:1px solid rgba(var(--t-s2-rgb),.35)}
 @media (prefers-reduced-motion:reduce){body::before,.top .nave,.now{animation:none}}
+#ytplayerA,#ytplayerB{transition:opacity 1.2s ease}
+.topb{background:rgba(255,255,255,.07);color:#ddd;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.vb{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;margin-left:6px}
+.vb.f{background:rgba(255,122,47,.18);color:#ff9a5c}.vb.n{background:rgba(255,59,92,.16);color:#ff6b8b}
+#djModal{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.78);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 12px}
+.djm-box{width:100%;max-width:640px;background:var(--t-b1,#12121c);border:1px solid rgba(var(--t-p3-rgb),.45);border-radius:16px;padding:18px;color:#eee;font-size:14px}
+.djm-box h3{margin:0 0 12px;font-size:18px}
+.djm-g{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.djm-g{grid-template-columns:1fr}}
+.djm-box label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#aaa;font-weight:700}
+.djm-box input,.djm-box textarea{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:9px 10px;color:#fff;font-size:14px;font-family:inherit}
+.djm-l{margin-top:12px}
+.djm-n{font-size:12px;color:#999;margin-top:6px;line-height:1.5}
+.djm-err{min-height:18px;font-size:13px;font-weight:700;margin-top:8px;color:#ff6b8b}
+.djm-b{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.djm-f{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.djm-bar{display:grid;grid-template-columns:62px 1fr 150px;gap:8px;align-items:center;font-size:12.5px;margin:4px 0}
+.djm-bar i{display:block;height:14px;border-radius:7px;background:linear-gradient(90deg,var(--verde,#22c55e),var(--cian,#22d3ee))}
+.djm-k{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.djm-k div{background:rgba(255,255,255,.05);border-radius:12px;padding:10px;text-align:center}
+.djm-k b{display:block;font-size:22px}
 </style>
 </head>
 <body>
@@ -58,9 +79,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   <img data-m-src="logo" alt="">
   <h1>DJ · ROCOLA <span data-m="nombre"></span></h1>
   <span class="nave" data-m="emoji"></span>
-  <div style="margin-left:auto;font-size:11px;color:#666" id="estado">●</div>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center"><button class="topb" onclick="verNoche()">📊 La noche</button><button class="topb" onclick="verReglas()">⚙️ Reglas</button><span style="font-size:11px;color:#666" id="estado">●</span></div>
 </div>
 
+<div id="djModal" onclick="if(event.target===this)djModalCerrar()"></div>
 <div id="setupScreen"></div>
 <div class="layout" id="mainLayout" style="display:none">
   <div class="player-side">
@@ -79,7 +101,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
         <button class="ctrl" onclick="siguiente()">⏭ Siguiente</button>
         <button class="ctrl" onclick="reproducirCola()">🔄 Reanudar cola</button>
         <button class="ctrl" id="btnVideo" onclick="toggleVideoPromo()">🎬 Video promo</button>
+        <button class="ctrl" onclick="vetarActual()" title="No volver a poner esta canción">🚫 Vetar</button>
       </div>
+      <div id="nowVotos" style="font-size:12px;color:#aaa;margin-top:8px"></div>
     </div>
     <div class="now">
       <div class="lbl" style="display:flex;justify-content:space-between;align-items:center;gap:6px">🎵 Poner música (DJ)<span style="display:flex;gap:5px">
@@ -111,8 +135,9 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   </div>
 </div>
 
-<script src="negocio.js?v=2026-11-18b"></script>
-<script src="comun.js?v=2026-11-18b"></script>
+<script src="negocio.js?v=2026-11-18d"></script>
+<script src="comun.js?v=2026-11-18d"></script>
+<script src="rocola-reglas.js?v=2026-11-18d"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -370,7 +395,7 @@ function togglePlay(){
 // ---------- COLA AGRUPADA POR GÉNERO ----------
 function colaOrdenada(){
   // pendientes (no sonadas y no bloqueadas)
-  var pend=pedidos.filter(function(p){return !p.played && !_descartados[p.key] && !(p.videoId&&_videosBloqueados[p.videoId]) && !(p.key&&videoCache[p.key]&&_videosBloqueados[videoCache[p.key]]);});
+  var pend=pedidos.filter(function(p){return !p.played && !prohibida(p) && !_descartados[p.key] && !(p.videoId&&_videosBloqueados[p.videoId]) && !(p.key&&videoCache[p.key]&&_videosBloqueados[videoCache[p.key]]);});
   return _ordenarPorGenero(pend);
 }
 // Cola SOLO para decidir qué reproducir/precargar: excluye la que está sonando
@@ -389,7 +414,7 @@ function _ordenarPorGenero(pend){
   // Agrupar por género (cada grupo ordenado por llegada)
   var grupos={};
   pend.forEach(function(p){var g=p.genero||'Otro';(grupos[g]=grupos[g]||[]).push(p);});
-  Object.keys(grupos).forEach(function(g){grupos[g].sort(function(a,b){return a.ts-b.ts;});});
+  Object.keys(grupos).forEach(function(g){grupos[g]=ordenJusto(grupos[g]);});   // turno justo entre mesas + 🔥 votos + ajustes del DJ
 
   // Rueda de géneros por prioridad
   var generos=Object.keys(grupos);
@@ -480,7 +505,7 @@ function reproducirCola(){
 }
 
 function reproducirMasSonadas(){
-  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId&&(h.veces||0)>0&&!_videosBloqueados[h.videoId];});
+  var lista=Object.values(historialMusica||{}).filter(function(h){return h&&h.videoId&&(h.veces||0)>0&&!_videosBloqueados[h.videoId]&&!VETADAS[h.videoId]&&!rrPalabra(h.cancion);});
   if(!lista.length){
     document.getElementById('nowTitle').textContent='Cola vacía';
     document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
@@ -489,7 +514,7 @@ function reproducirMasSonadas(){
   /* Mezcla de TODO el historial (antes solo daba vueltas sobre las 40 más sonadas y por eso se repetían tanto):
      · ninguna canción vuelve a sonar antes de SIN_REPETIR_H horas (pedida o automática, en cualquier equipo)
      · las más pedidas tienen algo más de probabilidad, pero poca: 100 pedidos pesan ~4 veces lo que pesa 1 pedido */
-  var SIN_REPETIR_H=(window.NEGOCIO&&NEGOCIO.djSinRepetirHoras)||8,ahora=Date.now(),lim=ahora-SIN_REPETIR_H*3600000;
+  var SIN_REPETIR_H=RR.sinRepetirHoras||(window.NEGOCIO&&NEGOCIO.djSinRepetirHoras)||8,ahora=Date.now(),lim=ahora-SIN_REPETIR_H*3600000;
   var sono={};
   (historialRocola||[]).forEach(function(p){if(p&&p.videoId)sono[p.videoId]=Math.max(sono[p.videoId]||0,p.ts||0);});
   (pedidos||[]).forEach(function(p){if(p&&p.videoId)sono[p.videoId]=Math.max(sono[p.videoId]||0,p.ts||ahora);});
@@ -500,6 +525,9 @@ function reproducirMasSonadas(){
     pool=lista.filter(function(h){return h.videoId!==_ultimaAutoVid;}).sort(function(a,b){return ultimaVez(a)-ultimaVez(b);}).slice(0,15);
     if(!pool.length)pool=lista;
   }
+  // 🕐 Franja de la hora: si hay canciones de sus géneros, se escoge entre ellas
+  var fr=rrFranja();
+  if(fr&&fr.generos&&fr.generos.length){var pf=pool.filter(function(h){return fr.generos.indexOf(h.genero||'Otro')>=0;});if(pf.length)pool=pf;}
   var pesos=pool.map(function(h){return 1+Math.log(1+(h.veces||0))/Math.LN2;}),suma=pesos.reduce(function(a,b){return a+b;},0),r=Math.random()*suma,k=0;
   while(k<pool.length-1&&(r-=pesos[k])>0)k++;
   var h=pool[k];
@@ -511,10 +539,11 @@ function reproducirMasSonadas(){
   // Guardar valores LIMPIOS en actual; decorar solo lo que se muestra
   actual={cancion:limpiarTexto(h.cancion),artista:limpiarTexto(h.artista),genero:h.genero||'Otro',videoId:h.videoId,auto:true};
   document.getElementById('nowTitle').textContent='🔁 '+actual.cancion;
-  document.getElementById('nowArtist').textContent=(actual.artista||'')+' · Auto (mezcla del historial)';
+  document.getElementById('nowArtist').textContent=(actual.artista||'')+' · Auto'+(fr?' · '+fr.nombre:' (mezcla del historial)');
   mostrarActivo();
   var p=P();
-  if(p&&p.loadVideoById){p.loadVideoById(h.videoId);p.playVideo();}
+  if(p&&p.loadVideoById){try{p.setVolume(100);}catch(e){}p.loadVideoById(h.videoId);p.playVideo();}
+  render();
   render();
 }
 function reproducirPedido(pedido){
@@ -526,7 +555,7 @@ function reproducirPedido(pedido){
   mostrarActivo();
   buscarVideo(pedido,function(vid){
     var p=P();
-    if(vid&&p&&p.loadVideoById){p.loadVideoById(vid);p.playVideo();}
+    if(vid&&p&&p.loadVideoById){try{p.setVolume(100);}catch(e){}p.loadVideoById(vid);p.playVideo();}
     else{document.getElementById('nowTitle').textContent='⚠️ No encontrada: '+pedido.cancion;setTimeout(marcarYsiguiente,800);}
   });
   render();
@@ -541,6 +570,7 @@ function mostrarActivo(){
 }
 
 function precargarSiguiente(){
+  if(_fundiendo)return;
   var cola=colaParaReproducir();
   var prox=cola[0];
   if(!prox||prox.played){siguientePreload=null;return;}
@@ -573,10 +603,27 @@ var _monitorFin=null;
 var _avanzando=false;  // seguro para no saltar varias canciones de golpe
 function iniciarMonitorFin(){
   clearInterval(_monitorFin);
+  var revisoDur=false;
   _monitorFin=setInterval(function(){
     var p=P();
     if(!p||!p.getCurrentTime||!p.getDuration)return;
     var dur=p.getDuration(), cur=p.getCurrentTime();
+    // ⏱ Tope de duración: mixes y conciertos largos se saltan (las que pone el DJ sí pueden ser largas)
+    if(!revisoDur&&dur>0){
+      revisoDur=true;
+      if(actual&&!actual.played&&actual.nombre!=='DJ'&&RR.maxMin>0&&dur>RR.maxMin*60+30){
+        var lar=actual;lar._noContar=true;if(lar.videoId)_videosBloqueados[lar.videoId]=true;
+        clearInterval(_monitorFin);
+        document.getElementById('nowTitle').textContent='⏱ Muy larga ('+rrMin(Math.round(dur))+'), pasando a la siguiente...';
+        var idl=idDe(lar);setTimeout(function(){if(actual&&!actual.played&&idDe(actual)===idl){actual._noContar=true;_avanzando=false;siguiente();}},1500);
+        return;
+      }
+    }
+    // 🎚️ Fundido: la siguiente entra subiendo el volumen mientras esta baja
+    var F=Math.max(0,Number(RR.fundido)||0);
+    if(F>0&&dur>F*4&&(dur-cur)<=F&&p.getPlayerState()===YT.PlayerState.PLAYING&&puedeFundir()){
+      clearInterval(_monitorFin);fundirAlSiguiente(F);return;
+    }
     if(dur>0 && (dur-cur)<=0.4 && p.getPlayerState()===YT.PlayerState.PLAYING){
       clearInterval(_monitorFin);
       marcarYsiguiente();
@@ -584,6 +631,26 @@ function iniciarMonitorFin(){
   },300);
 }
 
+function puedeFundir(){
+  var prox=siguientePreload;if(!prox||prox.played)return false;
+  var cola=colaParaReproducir();if(!cola.length||cola[0].key!==prox.key)return false;
+  var pin=PInact();
+  try{return !!(pin&&pin.setVolume&&pin.getPlayerState&&pin.getPlayerState()===YT.PlayerState.CUED);}catch(e){return false;}
+}
+var _fundiendo=false;
+function fundirAlSiguiente(F){
+  var viejo=P(),nuevo=PInact();
+  try{nuevo.setVolume(0);}catch(e){}
+  _fundiendo=true;      // mientras dura el fundido no se precarga nada en el reproductor que va saliendo
+  marcarYsiguiente();   // cambia al reproductor que ya tiene la siguiente cargada
+  if(P()!==nuevo){_fundiendo=false;try{nuevo.setVolume(100);viejo.setVolume(100);}catch(e){}return;}
+  var t0=Date.now(),ms=F*1000;
+  var iv=setInterval(function(){
+    var k=Math.min(1,(Date.now()-t0)/ms);
+    try{nuevo.setVolume(Math.round(100*k));viejo.setVolume(Math.round(100*(1-k)));}catch(e){}
+    if(k>=1){clearInterval(iv);try{viejo.stopVideo();viejo.setVolume(100);}catch(e){}_fundiendo=false;precargarSiguiente();}
+  },100);
+}
 function marcarYsiguiente(){
   if(_avanzando)return;
   _avanzando=true;
@@ -687,6 +754,7 @@ function importarHistorialExcel(inp){
 }
 function registrarReproduccion(p){
   if(!p||!p.videoId)return;
+  if(p._noContar)return;   // saltada por votos, por larga o vetada: no cuenta
   if(p.auto)return;  // el modo automático NO suma al contador: solo cuentan pedidos reales (evita que las mismas 5 se repitan siempre)
   var cancionLimpia=limpiarTexto(p.cancion);
   var artistaLimpio=limpiarTexto(p.artista);
@@ -700,6 +768,127 @@ function registrarReproduccion(p){
   });
 }
 function siguiente(){marcarYsiguiente();}
+
+// ═══ 🧑‍🤝‍🧑 Turno justo, votos de las mesas, vetadas, reglas y estadísticas ═══
+var VETADAS={},VOTOS={},MESAS_ACTIVAS=0,_saltadas={};
+db.ref('config/dj').on('value',function(s){rrAplicar(s.val());render();},function(){});
+db.ref('djVetadas').on('value',function(s){VETADAS=s.val()||{};render();if(actual&&!actual.played&&actual.videoId&&VETADAS[actual.videoId]){actual._noContar=true;siguiente();}},function(){});
+db.ref('cuentaPublica').on('value',function(s){MESAS_ACTIVAS=Object.keys(s.val()||{}).length;publicarAhora();revisarSalto();},function(){});
+db.ref('votos').on('value',function(s){VOTOS=s.val()||{};render();revisarSalto();limpiarVotos();},function(){});
+function idDe(p){if(!p)return '';if(!p._id)p._id=p.key||('a'+Date.now().toString(36));return p._id;}
+// votos de mesas distintas (cada mesa vota una vez); la mesa que pidió la canción no cuenta
+function votosDe(id,val,sinMesa){var v=VOTOS[id]||{};return Object.keys(v).filter(function(m){return v[m]===val&&String(m)!==String(sinMesa==null?'':sinMesa);}).length;}
+function umbralSalto(){return Math.max(2,Math.ceil(MESAS_ACTIVAS/2));}
+function revisarSalto(){
+  if(!actual||actual.played)return;
+  var id=idDe(actual);if(_saltadas[id])return;
+  if(votosDe(id,-1,actual.mesa)>=umbralSalto()){
+    _saltadas[id]=true;actual._noContar=true;
+    document.getElementById('nowTitle').textContent='👎 Las mesas votaron saltar: '+limpiarTexto(actual.cancion);
+    setTimeout(function(){if(actual&&!actual.played&&idDe(actual)===id){actual._noContar=true;_avanzando=false;siguiente();}},1200);
+  }
+}
+function pintarVotosAhora(){
+  var el=document.getElementById('nowVotos');if(!el)return;
+  if(!actual||actual.played){el.textContent='';return;}
+  var n=votosDe(idDe(actual),-1,actual.mesa);
+  el.textContent=n?('👎 '+n+' de '+umbralSalto()+' mesas quieren saltarla'):'';
+}
+var _limpVotosT=0;
+function limpiarVotos(){
+  if(Date.now()-_limpVotosT<60000)return;_limpVotosT=Date.now();
+  var vivos={};pedidos.forEach(function(p){if(!p.played)vivos[p.key]=1;});if(actual)vivos[idDe(actual)]=1;
+  Object.keys(VOTOS).forEach(function(k){if(!vivos[k])db.ref('votos/'+k).remove().catch(function(){});});
+}
+function prohibida(p){return !!(p&&((p.videoId&&VETADAS[p.videoId])||rrPalabra(p.cancion)));}
+function quienPide(p){return p.mesa?'m'+p.mesa:(p.nombre?'n'+rrNorm(p.nombre):'k'+p.key);}
+// Turno justo: la 1.ª de cada mesa va antes que la 2.ª de cualquier mesa, y así. Cada 🔥 de otra mesa la adelanta un turno (máx. 2)
+function ordenJusto(lista){
+  // el turno cuenta también lo que esa mesa ya escuchó en las últimas 4 horas
+  var por={},ron={},lim=Date.now()-4*3600000;
+  pedidos.filter(function(p){return (p.ts||0)>=lim||lista.indexOf(p)>=0;}).sort(function(a,b){return a.ts-b.ts;}).forEach(function(p){var q=quienPide(p);ron[p.key]=por[q]||0;por[q]=ron[p.key]+1;});
+  lista.forEach(function(p){p._ronda=ron[p.key]||0;});
+  lista.forEach(function(p){p._ef=p._ronda-Math.min(2,votosDe(p.key,1,p.mesa))-(Number(p.sube)||0);});
+  return lista.sort(function(a,b){return (a._ef-b._ef)||(a.ts-b.ts);});
+}
+// Lo que suena y el orden de la fila, para la página de los clientes
+var _ahoraJ='';
+function publicarAhora(){
+  var o={umbral:umbralSalto(),cola:colaOrdenada().filter(function(p){return !(actual&&p.key===actual.key);}).slice(0,40).map(function(p){return p.key;})};
+  if(actual&&!actual.played){o.id=idDe(actual);o.cancion=limpiarTexto(actual.cancion).slice(0,200);o.artista=limpiarTexto(actual.artista).slice(0,120);o.auto=!!actual.auto;if(actual.mesa)o.mesa=String(actual.mesa);}
+  var j=JSON.stringify(o);if(j===_ahoraJ)return;_ahoraJ=j;
+  db.ref('djAhora').set(o).catch(function(){});
+}
+function vetar(videoId,cancion){
+  if(!videoId)return;
+  if(!confirm('🚫 Vetar "'+limpiarTexto(cancion)+'"\n\nNo se podrá volver a pedir ni sonará en automático. El veto se quita en ⚙️ Reglas.'))return;
+  db.ref('djVetadas/'+videoId).set({cancion:limpiarTexto(cancion).slice(0,200),ts:Date.now()});
+  pedidos.forEach(function(p){if(!p.played&&p.videoId===videoId&&p.key&&!(actual&&actual.key===p.key)){p.played=true;db.ref('musica/'+p.key+'/played').set(true);}});
+  if(actual&&actual.videoId===videoId&&!actual.played){actual._noContar=true;_videosBloqueados[videoId]=true;siguiente();}
+}
+function vetarActual(){if(actual&&!actual.played)vetar(actual.videoId,actual.cancion);}
+
+function djModal(html){var m=document.getElementById('djModal');m.innerHTML='<div class="djm-box">'+html+'</div>';m.style.display='flex';}
+function djModalCerrar(){document.getElementById('djModal').style.display='none';}
+function verReglas(){
+  var vs=Object.keys(VETADAS).map(function(k){return {v:k,c:(VETADAS[k]||{}).cancion||k,ts:(VETADAS[k]||{}).ts||0};}).sort(function(a,b){return b.ts-a.ts;});
+  djModal('<h3>⚙️ Reglas de la rocola</h3>'
+    +'<div class="djm-g">'
+    +'<label>Minutos máximos por canción<input id="rr-max" type="number" min="3" max="60" value="'+RR.maxMin+'"></label>'
+    +'<label>Canciones en la fila por mesa<input id="rr-mesa" type="number" min="1" max="20" value="'+RR.maxPorMesa+'"></label>'
+    +'<label>Horas sin repetir (música automática)<input id="rr-horas" type="number" min="0" max="48" value="'+RR.sinRepetirHoras+'"></label>'
+    +'<label>Segundos de fundido entre canciones<input id="rr-fund" type="number" min="0" max="8" value="'+RR.fundido+'"></label>'
+    +'</div>'
+    +'<label class="djm-l">Palabras prohibidas en los títulos (una por línea)<textarea id="rr-pal" rows="4">'+esc(RR.palabras.join('\n'))+'</textarea></label>'
+    +'<label class="djm-l">Música automática por hora (una franja por línea → inicio-fin nombre: géneros)<textarea id="rr-fr" rows="4">'+esc(rrFranjasTxt(RR.franjas))+'</textarea></label>'
+    +'<div class="djm-n">Horas de 0 a 23 (23-3 = de 11 pm a 3 am). Géneros: '+GENRE_ORDER.join(', ')+'. Fuera de las franjas suena de todo. Las canciones que pone el DJ pueden pasar del tope de minutos.</div>'
+    +'<div class="djm-err" id="rr-err"></div>'
+    +'<div class="djm-b"><button class="ctrl play" onclick="guardarReglas()">💾 Guardar</button><button class="ctrl" onclick="restaurarReglas()">↺ Valores de fábrica</button><button class="ctrl" onclick="djModalCerrar()">Cerrar</button></div>'
+    +'<h3 style="margin-top:18px">🚫 Canciones vetadas ('+vs.length+')</h3>'
+    +(vs.length?vs.map(function(x){return '<div class="djm-f"><span>'+esc(x.c)+'</span><button class="ctrl" onclick="quitarVeto(\''+esc(x.v)+'\')">Quitar veto</button></div>';}).join(''):'<div class="djm-n">Ninguna. Use 🚫 en lo que suena o en la fila.</div>'));
+}
+function guardarReglas(){
+  var v=function(i){return document.getElementById(i).value;},err=document.getElementById('rr-err');
+  var fr=rrFranjasLeer(v('rr-fr'));if(fr.error){err.style.color='#ff6b8b';err.textContent=fr.error;return;}
+  var o={maxMin:Number(v('rr-max')),maxPorMesa:Number(v('rr-mesa')),sinRepetirHoras:Number(v('rr-horas')),fundido:Number(v('rr-fund')),
+    palabras:v('rr-pal').split(/\n|,/).map(function(x){return x.trim();}).filter(Boolean),franjas:fr.franjas};
+  if(!(o.maxMin>=3)){err.style.color='#ff6b8b';err.textContent='El tope de minutos debe ser 3 o más.';return;}
+  if(!(o.maxPorMesa>=1)){err.style.color='#ff6b8b';err.textContent='Cada mesa debe poder pedir al menos 1 canción.';return;}
+  if(!o.palabras.length)o.palabras=[''];
+  if(!o.franjas.length)o.franjas=[{ini:0,fin:0,nombre:'',generos:['']}];
+  db.ref('config/dj').set(o).then(function(){err.style.color='#22c55e';err.textContent='✅ Guardado. Ya aplica en la rocola de los clientes y aquí.';})
+    .catch(function(){err.style.color='#ff6b8b';err.textContent='No se pudo guardar: este equipo no está autorizado en el POS.';});
+}
+function restaurarReglas(){if(!confirm('¿Volver a los valores de fábrica?'))return;db.ref('config/dj').remove().then(function(){setTimeout(verReglas,300);});}
+function quitarVeto(v){db.ref('djVetadas/'+v).remove().then(function(){setTimeout(verReglas,300);});}
+function hora12(h){var ap=h>=12?'pm':'am',x=h%12;return (x===0?12:x)+' '+ap;}
+function verNoche(){
+  var h=historialRocola.filter(function(x){return x&&x.ts&&x.nombre!=='DJ';}).sort(function(a,b){return a.ts-b.ts;});
+  var cerrar='<div class="djm-b" style="margin-top:14px"><button class="ctrl" onclick="djModalCerrar()">Cerrar</button></div>';
+  if(!h.length){djModal('<h3>📊 La noche</h3><div class="djm-n">Aún no hay canciones pedidas por los clientes en las últimas 24 horas.</div>'+cerrar);return;}
+  var horas=[],ph={},gen={},mes={},can={},sinMesa=0;
+  h.forEach(function(x){
+    var hr=new Date(x.ts).getHours();if(!ph[hr]){ph[hr]={n:0,g:{}};horas.push(hr);}
+    var g=x.genero||'Otro';ph[hr].n++;ph[hr].g[g]=(ph[hr].g[g]||0)+1;gen[g]=(gen[g]||0)+1;
+    if(x.mesa)mes[x.mesa]=(mes[x.mesa]||0)+1;else sinMesa++;
+    var c=limpiarTexto(x.cancion);if(c)can[c]=(can[c]||0)+1;
+  });
+  function top(o,n){return Object.keys(o).map(function(k){return [k,o[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,n);}
+  var max=Math.max.apply(null,horas.map(function(x){return ph[x].n;})),pico=horas.filter(function(x){return ph[x].n===max;})[0];
+  var mt=top(mes,8),gt=top(gen,9),ct=top(can,5),mx=mt.length?mt[0][1]:1,gx=gt[0][1];
+  djModal('<h3>📊 La noche · últimas 24 horas</h3>'
+    +'<div class="djm-k"><div><b>'+h.length+'</b>canciones pedidas</div><div><b>'+hora12(pico)+'</b>hora pico ('+max+')</div><div><b>'+Object.keys(mes).length+'</b>mesas pidieron</div></div>'
+    +'<div style="font-weight:800;margin:6px 0">Pedidos por hora y el género que más se pidió</div>'
+    +horas.map(function(x){var g=top(ph[x].g,1)[0];return '<div class="djm-bar"><span>'+hora12(x)+'</span><i style="width:'+Math.max(4,Math.round(ph[x].n/max*100))+'%"></i><span>'+ph[x].n+' · '+esc(g[0])+'</span></div>';}).join('')
+    +'<div style="font-weight:800;margin:14px 0 6px">Géneros más pedidos</div>'
+    +gt.map(function(g){return '<div class="djm-bar"><span>'+esc(g[0])+'</span><i style="width:'+Math.max(4,Math.round(g[1]/gx*100))+'%"></i><span>'+g[1]+' ('+Math.round(g[1]/h.length*100)+'%)</span></div>';}).join('')
+    +'<div style="font-weight:800;margin:14px 0 6px">Mesas que más piden</div>'
+    +(mt.length?mt.map(function(m){return '<div class="djm-bar"><span>Mesa '+esc(m[0])+'</span><i style="width:'+Math.max(4,Math.round(m[1]/mx*100))+'%"></i><span>'+m[1]+'</span></div>';}).join(''):'<div class="djm-n">Todavía nadie ha pedido desde el QR de una mesa.</div>')
+    +(sinMesa?'<div class="djm-n">'+sinMesa+' pedidas sin QR de mesa.</div>':'')
+    +'<div style="font-weight:800;margin:14px 0 6px">Las más pedidas</div>'
+    +ct.map(function(c){return '<div class="djm-f"><span>'+esc(c[0])+'</span><b>'+c[1]+'</b></div>';}).join('')
+    +cerrar);
+}
 
 function detectarGenero(titulo,canal){
   var t=' '+((titulo||'')+' '+(canal||'')).toLowerCase()+' ';
@@ -843,17 +1032,12 @@ function moverCancion(key,dir){
   var cola=colaOrdenada();
   var idx=cola.findIndex(function(p){return p.key===key;});
   if(idx<0)return;
-  var vecinoIdx=idx+dir;
-  if(vecinoIdx<0||vecinoIdx>=cola.length)return;
-  var a=cola[idx], b=cola[vecinoIdx];
-  if(!a.key||!b.key)return;
-  // Intercambiar el timestamp (orden de llegada) entre las dos canciones
-  var tsA=a.ts, tsB=b.ts;
-  // Si quedaran iguales, separar levemente
-  if(tsA===tsB){tsB=tsA+(dir>0?1:-1);}
-  db.ref('musica/'+a.key+'/ts').set(tsB);
-  db.ref('musica/'+b.key+'/ts').set(tsA);
-  // Si cambian de género entre sí no se moverá fuera del bloque; dentro del mismo género sí reordena.
+  var a=cola[idx], b=cola[idx+dir];
+  if(!a||!b||!a.key)return;
+  if((a.genero||'Otro')!==(b.genero||'Otro'))return;   // la cola va por bloques de género: se mueve dentro del bloque
+  // Ajuste del DJ: deja esta canción justo antes (o después) de la vecina, sin tocar el turno de las demás mesas
+  var meta=b._ef+(dir<0?-0.5:0.5);
+  db.ref('musica/'+a.key+'/sube').set((Number(a.sube)||0)+(a._ef-meta));
 }
 
 function quitar(key){db.ref('musica/'+key).remove();}
@@ -875,7 +1059,7 @@ function reproducirYa(key){
 function render(){
   var cont=document.getElementById('colaLista');
   var cola=colaOrdenada();
-  if(!cola.length&&!actual){cont.innerHTML='<div class="empty">🎵 No hay canciones en la cola</div>';return;}
+  if(!cola.length&&!actual){cont.innerHTML='<div class="empty">🎵 No hay canciones en la cola</div>';pintarVotosAhora();publicarAhora();return;}
   // Agrupar visualmente por género respetando el orden
   var html='';
   var lastG=null;
@@ -893,14 +1077,18 @@ function render(){
         +'<button onclick="moverCancion(\''+p.key+'\',-1)" '+(puedeSubir&&!esActual?'':'disabled')+' style="background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer;font-size:12px;opacity:'+(puedeSubir&&!esActual?'1':'.25')+'">▲</button>'
         +'<button onclick="moverCancion(\''+p.key+'\',1)" '+(puedeBajar&&!esActual?'':'disabled')+' style="background:rgba(255,255,255,.08);color:#fff;border:none;border-radius:5px;width:26px;height:22px;cursor:pointer;font-size:12px;opacity:'+(puedeBajar&&!esActual?'1':'.25')+'">▼</button>'
       +'</div>'
-      +'<div class="info"><div class="nm">'+(esActual?'▶ ':'')+esc(p.cancion)+'</div>'
+      +'<div class="info"><div class="nm">'+(esActual?'▶ ':'')+esc(p.cancion)+(votosDe(p.key,1,p.mesa)?'<span class="vb f">🔥 '+votosDe(p.key,1,p.mesa)+'</span>':'')+'</div>'
       +(p.artista?'<div class="ar">'+esc(p.artista)+'</div>':'')
       +((p.nombre||p.mesa)?'<div class="by">'+(p.mesa?'🪑 Mesa '+esc(String(p.mesa))+' · ':'')+'🙋 '+esc(p.nombre||'')+'</div>':'')+'</div>'
       +'<button class="play-now" onclick="reproducirYa(\''+p.key+'\')" title="Reproducir ya">▶</button>'
+      +'<button onclick="vetar(\''+esc(p.videoId||'')+'\',decodeURIComponent(\''+encodeURIComponent(p.cancion||'')+'\'))" title="Vetar: no volver a poner">🚫</button>'
       +'<button onclick="quitar(\''+p.key+'\')">✕</button>'
     +'</div>';
   });
   cont.innerHTML=html;
+  pintarVotosAhora();publicarAhora();
+  // si la fila cambió (votos, nuevos pedidos), dejar lista la que de verdad sigue: así el fundido funciona
+  if(playerReady&&actual&&!actual.played&&typeof YT!=='undefined')precargarSiguiente();
 }
 
 function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -931,7 +1119,7 @@ db.ref('musica').on('value',function(snap){
   document.getElementById('estado').textContent='● '+pedidos.filter(function(p){return !p.played;}).length+' en cola';
   render();
   // Si no hay nada sonando y llegó algo, arrancar
-  if(playerReady&&(!actual||actual.played))reproducirCola();
+  if(playerReady&&!_avanzando&&(!actual||actual.played))reproducirCola();   // si está cambiando de canción, el cambio ya se encarga (si no, se perdía la precargada y el fundido)
 });
 
 // Cargar llaves: primero las locales, si no hay, las de Firebase (equipo nuevo)
