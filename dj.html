@@ -111,8 +111,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;bac
   </div>
 </div>
 
-<script src="negocio.js?v=2026-11-18a"></script>
-<script src="comun.js?v=2026-11-18a"></script>
+<script src="negocio.js?v=2026-11-18b"></script>
+<script src="comun.js?v=2026-11-18b"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -486,27 +486,32 @@ function reproducirMasSonadas(){
     document.getElementById('nowArtist').textContent='Aún no hay historial para reproducir';
     return;
   }
-  // Tomar el top de las más sonadas y elegir AL AZAR, sin repetir las ya puestas
-  lista.sort(function(a,b){return (b.veces||0)-(a.veces||0);});
-  var top=lista.slice(0,40);
-  // Quitar del pool las que ya se pusieron recientemente en autoplay
-  var pool=top.filter(function(x){return _autoRecientes.indexOf(x.videoId)===-1;});
-  // Si ya se pusieron todas, reiniciar el ciclo (evitando repetir de una la última)
+  /* Mezcla de TODO el historial (antes solo daba vueltas sobre las 40 más sonadas y por eso se repetían tanto):
+     · ninguna canción vuelve a sonar antes de SIN_REPETIR_H horas (pedida o automática, en cualquier equipo)
+     · las más pedidas tienen algo más de probabilidad, pero poca: 100 pedidos pesan ~4 veces lo que pesa 1 pedido */
+  var SIN_REPETIR_H=(window.NEGOCIO&&NEGOCIO.djSinRepetirHoras)||8,ahora=Date.now(),lim=ahora-SIN_REPETIR_H*3600000;
+  var sono={};
+  (historialRocola||[]).forEach(function(p){if(p&&p.videoId)sono[p.videoId]=Math.max(sono[p.videoId]||0,p.ts||0);});
+  (pedidos||[]).forEach(function(p){if(p&&p.videoId)sono[p.videoId]=Math.max(sono[p.videoId]||0,p.ts||ahora);});
+  function ultimaVez(h){return Math.max(h.sono||0,h.ultima||0,sono[h.videoId]||0);}
+  var pool=lista.filter(function(h){return ultimaVez(h)<lim&&_autoRecientes.indexOf(h.videoId)===-1;});
   if(!pool.length){
-    _autoRecientes=[];_guardarAutoRecientes();
-    pool=top.filter(function(x){return x.videoId!==_ultimaAutoVid;});
-    if(!pool.length)pool=top;
+    // ya sonó todo en estas horas: elegir entre las que llevan más tiempo sin sonar
+    pool=lista.filter(function(h){return h.videoId!==_ultimaAutoVid;}).sort(function(a,b){return ultimaVez(a)-ultimaVez(b);}).slice(0,15);
+    if(!pool.length)pool=lista;
   }
-  var h=pool[Math.floor(Math.random()*pool.length)];
+  var pesos=pool.map(function(h){return 1+Math.log(1+(h.veces||0))/Math.LN2;}),suma=pesos.reduce(function(a,b){return a+b;},0),r=Math.random()*suma,k=0;
+  while(k<pool.length-1&&(r-=pesos[k])>0)k++;
+  var h=pool[k];
   _ultimaAutoVid=h.videoId;
   _autoRecientes.push(h.videoId);
-  // No dejar crecer la memoria más allá del tamaño del top
-  if(_autoRecientes.length>top.length)_autoRecientes.shift();
+  if(_autoRecientes.length>Math.min(150,Math.floor(lista.length*0.8)))_autoRecientes.shift();
   _guardarAutoRecientes();
+  try{db.ref('historialMusica/'+h.videoId+'/sono').set(ahora);}catch(e){}   // la marca la ven todos los equipos
   // Guardar valores LIMPIOS en actual; decorar solo lo que se muestra
   actual={cancion:limpiarTexto(h.cancion),artista:limpiarTexto(h.artista),genero:h.genero||'Otro',videoId:h.videoId,auto:true};
   document.getElementById('nowTitle').textContent='🔁 '+actual.cancion;
-  document.getElementById('nowArtist').textContent=(actual.artista||'')+' · Auto (más sonadas)';
+  document.getElementById('nowArtist').textContent=(actual.artista||'')+' · Auto (mezcla del historial)';
   mostrarActivo();
   var p=P();
   if(p&&p.loadVideoById){p.loadVideoById(h.videoId);p.playVideo();}
