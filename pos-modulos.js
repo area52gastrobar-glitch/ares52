@@ -213,12 +213,19 @@ function a52HerrMenuHtml(){
         +'<span style="font-size:22px">'+h.emoji+'</span><span style="font-size:10px;font-weight:700;color:var(--text)">'+esc(h.titulo)+'</span></button>';
     }).join('')+'</div>';
 }
+// Borde de arriba: en Android 15 o más la app ocupa también la franja de la hora y la batería.
+// Se usa el espacio que informa el teléfono y, si la app no lo informa, un margen fijo para que nada quede debajo de esa franja.
+function a52Sup(extra){
+  var fb=0;try{var C=window.Capacitor,an=(navigator.userAgent.match(/Android (\d+)/)||[])[1];if(C&&C.isNativePlatform&&C.isNativePlatform()&&+an>=15)fb=34;}catch(e){}
+  return 'calc('+(extra||0)+'px + max(env(safe-area-inset-top), '+fb+'px))';
+}
+try{document.documentElement.style.setProperty('--a52-top',a52Sup(10));}catch(e){}
 function a52Herramienta(id){
   var h=A52_HERR.filter(function(x){return x.id===id;})[0];if(!h)return;
   a52HerramientaCerrar();
   var o=document.createElement('div');o.id='a52-herr';
   o.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:9500;background:#07070e;display:flex;flex-direction:column';
-  o.innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0d0d18;border-bottom:1px solid #22223a;color:#e8e8f5">'
+  o.innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;padding-top:'+a52Sup(8)+';background:#0d0d18;border-bottom:1px solid #22223a;color:#e8e8f5">'
     +'<button onclick="a52HerramientaCerrar()" style="background:#a855f7;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer">← Volver al POS</button>'
     +'<b style="flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+h.emoji+' '+esc(h.titulo)+'</b>'
     +'<button onclick="window.open(\''+h.url+'\',\'_blank\')" title="Abrir en otra pestaña (para dejarla fija en un equipo)" style="background:none;color:#8a8ab5;border:1px solid #2a2a45;border-radius:9px;padding:8px 10px;font-size:12px;cursor:pointer">↗ Abrir aparte</button></div>'
@@ -463,7 +470,7 @@ var A52APP=(function(){
     var caja=document.createElement('div');
     caja.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#fff;display:flex;flex-direction:column';
     var barra=document.createElement('div');
-    barra.style.cssText='display:flex;gap:10px;justify-content:flex-end;padding:10px;padding-top:calc(10px + env(safe-area-inset-top));background:#111;border-bottom:1px solid #333';
+    barra.style.cssText='display:flex;gap:10px;justify-content:flex-end;padding:10px;padding-top:'+a52Sup(10)+';background:#111;border-bottom:1px solid #333';
     var cerrar=document.createElement('button');cerrar.textContent='✕ Cerrar';
     cerrar.style.cssText='font-size:16px;font-weight:700;padding:10px 18px;border-radius:10px;border:0;background:#c9a84c;color:#111';
     barra.appendChild(cerrar);
@@ -641,7 +648,7 @@ function a52QrMostrar(id){
   f.style.cssText='position:fixed;inset:0;z-index:2147483500;background:#fff;color:#111;display:flex;flex-direction:column;touch-action:none;user-select:none;-webkit-user-select:none';
   var tabs=lista.length>1?'<div style="display:flex;gap:6px;padding:0 12px 8px;flex-wrap:wrap">'+lista.map(function(x){var sel=x.id===q.id;
     return'<button data-qr="'+esc(x.id)+'" style="flex:1;background:'+(sel?'#111':'#f1f1f1')+';color:'+(sel?'#fff':'#333')+';border:1px solid '+(sel?'#111':'#ddd')+';border-radius:9px;padding:9px 6px;font-size:13px;font-weight:800;cursor:pointer">'+esc(x.nombre)+'</button>';}).join('')+'</div>':'';
-  f.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 12px 8px">'
+  f.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;padding:'+a52Sup(10)+' 12px 8px">'
       +'<div style="font-weight:900;font-size:18px">📱 '+esc(q.nombre)+'</div>'
       +'<button id="a52-qr-cerrar" style="background:#111;color:#fff;border:0;border-radius:9px;padding:9px 16px;font-size:14px;font-weight:800;cursor:pointer">✕ Cerrar</button>'
     +'</div>'+tabs

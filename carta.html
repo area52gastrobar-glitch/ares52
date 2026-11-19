@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Carta · {nombre}</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet"/>
-<script src="negocio.js?v=2026-11-18e"></script>
-<script src="comun.js?v=2026-11-18e"></script>
+<script src="negocio.js?v=2026-11-18f"></script>
+<script src="comun.js?v=2026-11-18f"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -475,8 +475,42 @@ function setModo(modo){
 function toggleFondo(){
   setModo(document.body.classList.contains('modo-claro')?'oscuro':'claro');
 }
+// En la app de Android el botón de imprimir del navegador interno no hace nada: allí se arma un PDF de la carta
+// y se entrega a la app, que lo guarda en Descargas y lo abre; desde ese PDF se imprime o se envía.
+function capApp(){var C=null;try{C=window.Capacitor;if(!(C&&C.isNativePlatform&&C.isNativePlatform())&&window.parent&&window.parent!==window)C=window.parent.Capacitor;}catch(e){}return (C&&C.isNativePlatform&&C.isNativePlatform())?C:null;}
+function cargarJs(src){return new Promise(function(ok,no){if(window.html2pdf)return ok();var s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);});}
+function avisoCarta(t,ok){var s=document.getElementById('status');if(s){s.style.display='block';s.textContent=t;s.style.color=ok===false?'#ff6b6b':'';}}
+function imprimirEnApp(C){
+  var doc=document.getElementById('doc');if(!doc)return;
+  avisoCarta('⏳ Armando el PDF de la carta para imprimir…');
+  cargarJs('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js').then(function(){
+    // copia de la carta a ancho de hoja carta/A4, fuera de la pantalla, para que en el celular no salga cortada
+    var caja=document.createElement('div');caja.style.cssText='position:fixed;left:-12000px;top:0;width:760px';
+    try{var fb=getComputedStyle(document.body);caja.style.background=document.body.classList.contains('modo-claro')?'#fff':(fb.backgroundColor&&fb.backgroundColor!=='rgba(0, 0, 0, 0)'?fb.backgroundColor:'#0b0a12');}catch(e){}
+    var copia=doc.cloneNode(true);copia.style.cssText='width:760px;max-width:760px;margin:0;border-radius:0';
+    doc.id='doc-pantalla';caja.appendChild(copia);document.body.appendChild(caja);   // la copia conserva el id «doc» para llevar los mismos estilos
+    var fin=function(){try{caja.remove();}catch(e){}doc.id='doc';};
+    // el generador del PDF no entiende los colores escritos con variables: se le pasan ya resueltos
+    [].forEach.call(copia.querySelectorAll('*'),function(el){try{var cs=getComputedStyle(el);if(cs.backgroundImage&&cs.backgroundImage!=='none')el.style.backgroundImage=cs.backgroundImage;if(cs.backgroundColor&&cs.backgroundColor!=='rgba(0, 0, 0, 0)')el.style.backgroundColor=cs.backgroundColor;el.style.color=cs.color;}catch(e){}});
+    if(!document.body.classList.contains('modo-claro'))[].forEach.call(copia.querySelectorAll('.menu-pages'),function(el){el.style.backgroundColor='#0d0620';});
+    var nombre='Carta-'+String(NEGOCIO.nombreCorto||NEGOCIO.nombre||'negocio').replace(/[^A-Za-z0-9]+/g,'-')+'.pdf';
+    return html2pdf().set({margin:[6,6,6,6],filename:nombre,image:{type:'jpeg',quality:0.95},
+      html2canvas:{scale:2,useCORS:true,backgroundColor:document.body.classList.contains('modo-claro')?'#ffffff':'#0b0a12',width:760,windowWidth:760,scrollX:0,scrollY:0,ignoreElements:function(el){return el.id&&/^tema-/.test(el.id);}},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+      pagebreak:{mode:['css','legacy'],avoid:['.menu-item','.subcat-block','.cat-chica','.cat-header']}})
+      .from(copia).outputPdf('datauristring').then(function(uri){
+        fin();
+        var b64=String(uri).split(',')[1]||'',o=C.Plugins&&C.Plugins.Archivos;
+        var p=(o&&o.guardar)?o.guardar({nombre:nombre,base64:b64,tipo:'application/pdf'}):(C.nativePromise?C.nativePromise('Archivos','guardar',{nombre:nombre,base64:b64,tipo:'application/pdf'}):Promise.reject());
+        return p.then(function(){avisoCarta('✅ PDF listo: quedó en Descargas. Ábralo y toque Imprimir (⋮ → Imprimir) o envíelo.');},
+          function(){avisoCarta('Esta versión de la app no sabe guardar archivos. Imprima la carta desde Chrome o el computador.',false);});
+      },function(e){fin();throw e;});
+  }).catch(function(){avisoCarta('No se pudo armar el PDF. Revise el internet e intente de nuevo, o imprima desde Chrome.',false);});
+}
 function imprimirModo(){
   document.body.offsetHeight;
+  var C=capApp();
+  if(C){imprimirEnApp(C);return;}
   window.print();
 }
 function imprimirConFondo(){aplicarFondo(true);toggleFondo();imprimirModo();}
