@@ -235,6 +235,46 @@ function a52Herramienta(id){
 }
 function a52HerramientaCerrar(){var o=document.getElementById('a52-herr');if(o)o.remove();try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}}
 
+/* ═══ ▸ SECCIONES PLEGABLES ═══
+   En Caja, Admin, Gastos y los demás menús cada recuadro se abre y se cierra tocando su título, para no tener que bajar tanto.
+   Arrancan cerrados; queda abierto solo lo principal de cada menú (los totales de arriba o, si no hay, el primer recuadro).
+   Lo que cada persona abra o cierre se recuerda en ese equipo. */
+var _pleg=(function(){try{return JSON.parse(localStorage.getItem('a52_pleg')||'{}')||{};}catch(e){return {};}})();
+function a52Plegar(c,tab){
+  if(!c)return;
+  // si el recuadro trae todo dentro de un solo bloque, se pliega ese bloque
+  var cs=[].filter.call(c.querySelectorAll('.card'),function(x){return !(x.parentElement&&x.parentElement.closest('.card'));})
+    .map(function(x){return (x.children.length===1&&x.firstElementChild.children.length>=2)?x.firstElementChild:x;})
+    .filter(function(x){return x.children.length>=2;});
+  if(!cs.length)return;
+  var hayPrincipal=[].some.call(c.querySelectorAll('.card2,.kpi-grid'),function(x){return !x.closest('.card');});
+  var n=0;
+  cs.forEach(function(card){
+    var cab=card.firstElementChild;if(!cab)return;
+    var tit=(cab.textContent||'').trim();
+    // los que ya tienen su propio ▶/▼ se dejan como están
+    if(!tit||/^[▶▼▸▾]/.test(tit)||cab.hasAttribute('onclick')||cab.hasAttribute('data-act')||cab.querySelector('[data-sec],[data-act="toggle-sec"]'))return;
+    var k=tab+'|'+tit.replace(/[\d$.,()·:%\s]+/g,' ').trim().slice(0,32);
+    var abierto=(k in _pleg)?_pleg[k]:(!hayPrincipal&&n===0);
+    n++;
+    card.classList.add('plegable');card.classList.toggle('plegada',!abierto);   // «card» es el recuadro o su bloque interno
+    cab.classList.add('pleg-cab');
+    var dondeFl=cab;try{var f1=cab.firstElementChild;if(f1&&f1.textContent.trim()&&!/^(BUTTON|INPUT|SELECT|TEXTAREA|A|LABEL)$/.test(f1.tagName)&&(getComputedStyle(cab).display.indexOf('flex')>=0||getComputedStyle(f1).display==='block'))dondeFl=f1;}catch(e){}
+    dondeFl.insertAdjacentHTML('afterbegin','<span class="pleg-fl" aria-hidden="true">'+(abierto?'▾':'▸')+'</span>');
+    cab.setAttribute('role','button');cab.setAttribute('aria-expanded',abierto);cab.tabIndex=0;
+    var cambiar=function(e){
+      if(e.target.closest&&e.target.closest('button,input,select,textarea,a,label'))return;
+      if(e.type==='keydown'&&e.key!=='Enter'&&e.key!==' ')return;
+      if(e.type==='keydown')e.preventDefault();
+      var ab=card.classList.contains('plegada');
+      card.classList.toggle('plegada',!ab);_pleg[k]=ab;
+      cab.setAttribute('aria-expanded',ab);var fl=cab.querySelector('.pleg-fl');if(fl)fl.textContent=ab?'▾':'▸';
+      try{localStorage.setItem('a52_pleg',JSON.stringify(_pleg));}catch(er){}
+    };
+    cab.addEventListener('click',cambiar);cab.addEventListener('keydown',cambiar);
+  });
+}
+
 /* ═══ 🎨 TEMA ═══ el administrador elige el aspecto de todas las pantallas (clientes y personal) */
 function a52TemaHtml(){
   var act=MarcaTemaActual();

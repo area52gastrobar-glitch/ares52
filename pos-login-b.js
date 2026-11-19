@@ -265,6 +265,7 @@ function render(){
   if(tabActual==='saneamiento'){c.innerHTML=renderSaneamiento();}
   if(tabActual==='cocina')    {c.innerHTML=renderCocina();bindCocinaEvents();}
   if(tabActual==='admin')     c.innerHTML=renderAdmin();
+  if(tabActual!=='mesas'&&tabActual!=='cocina'&&typeof a52Plegar==='function')a52Plegar(c,tabActual);
   bindMapaEvents();
   setTimeout(bindComboEvents, 50);
   setTimeout(bindAdminEvents, 50);

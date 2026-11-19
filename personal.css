@@ -138,3 +138,9 @@ select.inp{cursor:pointer}
 .prod-card{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:11px 13px;display:flex;gap:10px;transition:border-color .15s}
 .prod-card:hover{border-color:var(--accent)}
 .hist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+
+/* Secciones plegables (Caja, Admin, Gastos…) */
+.plegada>:not(.pleg-cab){display:none!important}
+.pleg-cab{cursor:pointer;user-select:none;-webkit-user-select:none}
+.pleg-cab .pleg-fl{display:inline-block;width:18px;color:var(--muted);font-size:14px;flex:none}
+.plegada>.pleg-cab{margin-bottom:0!important}
