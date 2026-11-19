@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
 <title>{nombre} {tipo}</title>
-<script src="negocio.js?v=2026-11-16m"></script>
-<script src="comun.js?v=2026-11-16m"></script>
+<script src="negocio.js?v=2026-11-18a"></script>
+<script src="comun.js?v=2026-11-18a"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@200;300;400;600&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -436,6 +436,16 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 .cll-ok{width:100%;background:var(--t-o2);color:#1a1200;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer}
 .cll-ok:disabled{opacity:.55}
 .cll-no{width:100%;background:none;color:rgba(255,255,255,.6);border:none;padding:12px;font-size:13px;font-family:inherit;cursor:pointer}
+.aviso-mesa{display:none;margin:14px auto 4px;max-width:460px;border:1px solid rgba(var(--t-p-rgb),.55);background:rgba(var(--t-p-rgb),.12);border-radius:14px;padding:12px 14px;color:#fff;font-size:13px;line-height:1.5;text-align:left}
+.aviso-mesa b{color:var(--t-o2);font-size:15px}
+.cta-l{max-height:46vh;overflow:auto;margin:4px 0 10px}
+.cta-z{font-size:11px;font-weight:800;letter-spacing:1px;color:rgba(255,255,255,.55);margin:10px 0 4px;text-transform:uppercase}
+.cta-f{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:14px}
+.cta-f .q{min-width:28px;color:var(--t-o2);font-weight:800}
+.cta-f .n{flex:1}
+.cta-f .v{font-weight:700;white-space:nowrap}
+.cta-t{display:flex;justify-content:space-between;font-size:19px;font-weight:800;padding:12px 2px 4px;border-top:2px solid rgba(var(--t-p-rgb),.6);margin-top:4px}
+.cta-vacia{text-align:center;color:rgba(255,255,255,.7);font-size:14px;line-height:1.5;padding:18px 4px}
 .cll-est{text-align:center;padding:8px 0 4px}
 .cll-est .e{font-size:44px}
 .cll-est .a{font-size:17px;font-weight:800;margin:6px 0 4px}
@@ -458,6 +468,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
   <div class="sub" id="c-sub"></div>
   <div class="bio" id="c-bio"></div>
   <div class="rule"></div>
+  <div class="aviso-mesa" id="aviso-mesa"></div>
 
   <!-- 🔥 Promociones (se llena solo desde Firebase) -->
   <div class="promo-zone" id="promo-zone" style="display:none"></div>
@@ -480,6 +491,14 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
       <div class="link-text">
         <span class="link-title">Rocola · Pide tu canción</span>
         <span class="link-desc">Elige la música que quieres escuchar</span>
+      </div>
+      <span class="link-arrow">›</span>
+    </a>
+    <a href="#" class="link-btn featured" id="c-l-cuenta" data-cuenta style="display:none">
+      <div class="link-icon">🧾</div>
+      <div class="link-text">
+        <span class="link-title">Mi cuenta</span>
+        <span class="link-desc" id="c-l-cuenta-d">Lo que has pedido y cuánto va</span>
       </div>
       <span class="link-arrow">›</span>
     </a>
@@ -654,8 +673,21 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
   <a href="#inicio" data-v="inicio"><i data-ic="inicio">🏠</i><span>Inicio</span></a>
   <a href="#carta" data-v="carta"><i data-ic="carta">📋</i><span>Carta</span></a>
   <a href="#rocola" data-v="rocola" id="cnav-rocola"><i data-ic="rocola">🎵</i><span>Rocola</span></a>
+  <a href="#" id="cnav-cuenta" data-cuenta style="display:none"><i>🧾</i><span>Mi cuenta</span></a>
   <a href="#" class="llamar" id="cnav-llamar" data-llamar style="display:none"><i data-ic="mesera">🔔</i><span>Mesera</span></a>
 </nav>
+
+<!-- Mi cuenta (solo cuando se entra con el QR de una mesa) -->
+<div id="cta" class="cll">
+  <div class="cll-box">
+    <div class="cll-t">🧾 Mi cuenta</div>
+    <div class="cll-m">MESA <span id="cta-mesa"></span></div>
+    <div class="cta-l" id="cta-l"><div class="cta-vacia">Cargando...</div></div>
+    <div class="cll-n" id="cta-n"></div>
+    <button class="cll-ok" id="cta-llamar" data-llamar style="display:none">🔔 Pedir la cuenta</button>
+    <button class="cll-no" id="cta-no">Cerrar</button>
+  </div>
+</div>
 
 <!-- Llamar a la mesera (solo cuando se entra con el QR de una mesa) -->
 <div id="cll" class="cll">
@@ -757,6 +789,39 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
         if(v&&v.atendido){estado('👍','Ya van para tu mesa',(v.por?v.por+' recibió tu llamado.':'Recibieron tu llamado.'));escucha.off();escucha=null;}
       },function(){});
     },function(){b.disabled=false;b.textContent='Llamar';err.textContent='No se pudo avisar. Intenta de nuevo.';});
+  }
+  // ── Mi cuenta: lo pedido en la mesa, en vivo (copia que publica el POS)
+  function fmtP(n){return '$'+Math.round(n||0).toLocaleString('es-CO');}
+  function escH(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  var ctaRef=null;
+  function ctaPintar(v){
+    var cs=(v&&v.c)?(Array.isArray(v.c)?v.c:Object.values(v.c)):[];
+    if(!cs.length){$('cta-l').innerHTML='<div class="cta-vacia">Todavía no hay pedidos registrados en la mesa '+escH(MESA)+'.<br><br>Si ya pediste y te cambiaste de mesa, avísale a quien te atiende para que traslade tu pedido.</div>';$('cta-n').textContent='';$('cta-llamar').style.display='none';return;}
+    var tot=0,h='';
+    cs.forEach(function(c){var its=c.it?(Array.isArray(c.it)?c.it:Object.values(c.it)):[];
+      if(cs.length>1)h+='<div class="cta-z">'+escH(c.m)+(c.z?' · '+escH(c.z):'')+'</div>';
+      its.forEach(function(x){h+='<div class="cta-f"><span class="q">'+escH(x.q)+'×</span><span class="n">'+escH(x.n)+'</span><span class="v">'+(x.v>0?fmtP(x.v*x.q):'Gratis')+'</span></div>';});
+      tot+=c.t||0;});
+    $('cta-l').innerHTML=h+'<div class="cta-t"><span>Total hasta ahora</span><span>'+fmtP(tot)+'</span></div>';
+    $('cta-n').textContent=(cs.length>1?'Hay más de una mesa '+MESA+'; busca la tuya por la zona. ':'')+'Si ves algo que no pediste, o te cambiaste de mesa, avísale a quien te atiende antes de pagar.';
+    $('cta-llamar').style.display=(mod.llamar!==false)?'':'none';
+  }
+  function ctaAbrir(){
+    $('cta-mesa').textContent=MESA;$('cta').classList.add('on');
+    var db=window._cxDb;
+    if(!db){$('cta-l').innerHTML='<div class="cta-vacia">Sin conexión. Revisa el internet e intenta de nuevo.</div>';return;}
+    if(!ctaRef){ctaRef=db.ref('cuentaPublica/'+MESA);ctaRef.on('value',function(s){ctaPintar(s.val());},function(){$('cta-l').innerHTML='<div class="cta-vacia">Por ahora no podemos mostrar la cuenta. Pídela a quien te atiende.</div>';});}
+  }
+  function ctaCerrar(){$('cta').classList.remove('on');}
+  if(MESA){
+    var av=$('aviso-mesa');av.style.display='block';
+    av.innerHTML='📍 <b>Estás en la mesa '+escH(MESA)+'</b><br>Revisa que este sea el número de tu mesa: tus pedidos se anotan a esa mesa. Si te cambias de mesa, avísale a quien te atiende para trasladar tu pedido.';
+  }
+  if(MESA&&mod.cuentaMesa!==false){
+    $('c-l-cuenta').style.display='';$('cnav-cuenta').style.display='';$('c-l-cuenta-d').textContent='Mesa '+MESA+' · lo que has pedido y cuánto va';
+    document.querySelectorAll('[data-cuenta]').forEach(function(a){a.addEventListener('click',function(ev){ev.preventDefault();ctaAbrir();});});
+    $('cta-no').onclick=ctaCerrar;$('cta').addEventListener('click',function(ev){if(ev.target===$('cta'))ctaCerrar();});
+    $('cta-llamar').addEventListener('click',function(){ctaCerrar();try{sel=Math.max(0,motivos.findIndex(function(m){return /cuenta/i.test(m);}));}catch(e){}},true);
   }
   if(MESA&&mod.llamar!==false){
     $('cnav-llamar').style.display='';$('c-l-llamar').style.display='';$('c-l-llamar-d').textContent='Mesa '+MESA+' · alguien se acerca y confirma contigo';

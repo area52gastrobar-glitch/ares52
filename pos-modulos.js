@@ -123,6 +123,37 @@ function a52PublicarCarta(){
   },1500);
 }
 
+/* ═══ 🧾 CUENTA DE LA MESA PARA EL CLIENTE ═══
+   Copia mínima de lo pedido en cada mesa (producto, cantidad y valor; sin nombres de meseros ni notas),
+   para que el cliente la vea desde el QR de su mesa. La clave es el número de la mesa (el mismo que lleva el QR).
+   Si la mesa se traslada, la cuenta pasa a la mesa nueva y la vieja queda vacía. */
+var _cuRemoto=null,_cuReloj=null;
+function a52CuentaTxt(it){var s='',c={};Object.keys(it).forEach(function(k){if(!/^(nota|notas|obs|comentario|mesero|por|usuario|cliente)$/i.test(k))c[k]=it[k];});try{s=nombreItemPed(c);}catch(e){s=it.nombre||'';}s=String(s).split('📝')[0];return String(s).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,80);}
+function a52CuentasArmar(){
+  var o={};
+  if(window.NEGOCIO&&NEGOCIO.modulos&&NEGOCIO.modulos.cuentaMesa===false)return o;
+  (mesas||[]).forEach(function(m){
+    var ped=(pedidos[m.id]||pedidos[String(m.id)]||[]).filter(function(it){return it&&it.qty>0;});
+    if(!ped.length)return;
+    var k=String(m.num!=null?m.num:m.id).replace(/[^0-9A-Za-z -]/g,'').slice(0,6);if(!k)return;
+    var g={};ped.forEach(function(it){var n=a52CuentaTxt(it),v=Math.round(precioItem(it)),c=n+'|'+v;if(!g[c])g[c]={n:n,q:0,v:v};g[c].q+=it.qty;});
+    var its=Object.keys(g).map(function(c){return g[c];});
+    var z=(typeof ZONAS!=='undefined'&&ZONAS||[]).filter(function(x){return x.id===m.zona;})[0];
+    if(!o[k])o[k]={c:[]};
+    o[k].c.push({m:String(m.nombre||('Mesa '+(m.num!=null?m.num:m.id))).slice(0,40),z:z&&z.label?String(z.label).slice(0,30):'',it:its,t:its.reduce(function(a,x){return a+x.v*x.q;},0)});
+  });
+  return o;
+}
+function a52PublicarCuentas(){
+  clearTimeout(_cuReloj);
+  _cuReloj=setTimeout(function(){
+    if(!getDb()||!usuarioActivo||_cuRemoto===null)return;
+    var o=a52CuentasArmar(),j=JSON.stringify(o);
+    if(j===_cuRemoto)return;
+    _cuRemoto=j;fbSet('cuentaPublica',Object.keys(o).length?o:null);
+  },1200);
+}
+
 /* ═══ 🔔 LLAMADOS DESDE LA MESA ═══
    El cliente escanea el QR de su mesa y toca «Llamar a la mesera» (puede decir qué necesita).
    No es un pedido: es un aviso para que alguien se acerque y lo confirme. */

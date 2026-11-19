@@ -57,6 +57,8 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
   var TEMAS=window.TEMAS={
     espacial:{nombre:'Espacial',desc:'Neón violeta y verde sobre noche',muestra:['#a855f7','#7cffb2','#4de1ff','#05030d'],decoracion:true,emoji:'🛸',emoji2:'👽',
       v:{p:'168,85,247',p2:'123,47,247',p3:'176,38,255',s:'124,255,178',s2:'57,255,20',c:'77,225,255',c2:'34,211,238',c3:'0,229,255',k:'255,94,200',k2:'255,77,141',o:'201,168,76',o2:'240,192,64',b0:'5,3,13',b1:'10,6,24',b2:'20,10,40',tx:'236,231,255',mu:'154,122,192',l:'185,166,255'}},
+    nevado:{nombre:'Espacial con nieve',desc:'Los colores de siempre, con luces de Navidad y nieve cayendo',muestra:['#a855f7','#7cffb2','#4de1ff','#05030d'],decoracion:true,nieve:true,emoji:'🛸',emoji2:'❄️',
+      v:{p:'168,85,247',p2:'123,47,247',p3:'176,38,255',s:'124,255,178',s2:'57,255,20',c:'77,225,255',c2:'34,211,238',c3:'0,229,255',k:'255,94,200',k2:'255,77,141',o:'201,168,76',o2:'240,192,64',b0:'5,3,13',b1:'10,6,24',b2:'20,10,40',tx:'236,231,255',mu:'154,122,192',l:'185,166,255'}},
     pub:{nombre:'Pub',desc:'Madera oscura, latón y crema',muestra:['#d9a441','#aac48c','#f4ead6','#0e0a07'],decoracion:false,emoji:'🍺',emoji2:'🍻',
       fuente:{familia:"'Abril Fatface'"},
       pos:{bg:'#0e0a07',panel:'#15100a',card:'#1c150e',card2:'#241b12',border:'#3a2c1c',accent:'#d9a441',text:'#f4ead6',muted:'#8f7a5c',dim:'#33271a'},
@@ -89,7 +91,7 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
       fuente:{familia:"'Unbounded'"},
       pos:{bg:'#120807',panel:'#1a0c0a',card:'#22100d',card2:'#2d1612',border:'#4a2620',accent:'#e8502a',text:'#ffe3c8',muted:'#a8827a',dim:'#3a1e19'},
       v:{p:'232,80,42',p2:'180,35,46',p3:'232,80,42',s:'255,190,60',s2:'255,190,60',c:'255,150,100',c2:'255,150,100',c3:'255,150,100',k:'180,35,46',k2:'180,35,46',o:'255,170,60',o2:'255,200,90',b0:'18,8,7',b1:'26,12,10',b2:'45,22,18',tx:'255,227,200',mu:'168,130,122',l:'255,190,160'}},
-    navidad:{nombre:'Navidad',desc:'Rojo Papá Noel, verde pino y dorado, con trineo, renos, duendes, luces y nieve',muestra:['#c8102e','#1fae5b','#ffd166','#3a060c'],decoracion:false,nieve:true,emoji:'🎅',emoji2:'🦌',
+    navidad:{nombre:'Navidad',desc:'Rojo Papá Noel, verde pino y dorado, con trineo, renos, duendes, luces y nieve',muestra:['#c8102e','#1fae5b','#ffd166','#3a060c'],decoracion:false,nieve:true,trineo:true,emoji:'🎅',emoji2:'🦌',
       pos:{bg:'#33060b',panel:'#47090f',card:'#5a0d15',card2:'#70131c',border:'#a8323c',accent:'#1fae5b',text:'#fff6e6',muted:'#f0b9ae',dim:'#7d1a24'},
       v:{p:'224,30,55',p2:'170,14,36',p3:'255,70,90',s:'60,200,120',s2:'110,235,160',c:'255,209,102',c2:'255,209,102',c3:'255,230,160',k:'255,209,102',k2:'255,225,150',o:'255,209,102',o2:'255,225,150',b0:'51,6,11',b1:'71,9,15',b2:'112,19,28',tx:'255,246,230',mu:'240,185,174',l:'255,214,150'}}
   };
@@ -108,6 +110,7 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
     cantina:{mesas:'🌶️',carta:'🌮',rocola:'🎸',llamar:'🔔',inicio:'🏠',caja:'💰',gastos:'🧾',ventas:'📈',admin:'⚙️',mesera:'🎺',nuestracarta:'🌮',encuentranos:'📍',video:'🎬'},
     navidad:{mesas:'🎄',inventario:'🎁',carta:'📜',combos:'🧦',caja:'🔔',gastos:'🧾',ventas:'⭐',rappi:'🛷',socios:'🎅',empleados:'🧝',creditos:'✉️',saneamiento:'⛄',cocina:'🍪',admin:'🕯️',inicio:'🏠',rocola:'🎶',llamar:'🔔',mesera:'🧝',nuestracarta:'🍗',encuentranos:'🦌',video:'🎬'}
   };
+  ICONOS_TEMA.nevado=ICONOS_TEMA.espacial;
   window.MarcaIcono=function(k){var j=ICONOS_TEMA[temaActual]||{};return j[k]||ICONOS_BASE[k]||'';};
   // Iconos: los del tema, salvo que el negocio fije los suyos (emojiFijo en negocio.js)
   function emojiDe(i){var T=TEMAS[temaActual]||{},marca=i?(EM2||EM0):EM0;if(N.emojiFijo&&marca)return marca;return(i?T.emoji2:T.emoji)||marca||'🍽️';}
@@ -142,6 +145,8 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
         +'#tema-nieve{position:fixed;left:0;top:0;width:100%;height:100%;z-index:2147482999;pointer-events:none;overflow:hidden}'
         +'#tema-nieve i{position:absolute;top:-5vh;color:#fff;font-style:normal;opacity:.5;animation:temaNieve linear infinite}'
         +'@keyframes temaNieve{to{transform:translate3d(4vw,110vh,0) rotate(180deg)}}'
+        +'@media (prefers-reduced-motion:reduce){#tema-nieve{display:none}#tema-luces{animation:none}}';
+      if(T.trineo)css+=''
         // Navidad de verdad: fondo rojo, bastón de caramelo, nieve sobre las tarjetas, trineo con renos y duendes en la esquina
         +'html[data-tema="'+id+'"] body{background:radial-gradient(ellipse at 50% -10%,#8f1320 0,transparent 60%),radial-gradient(ellipse at 100% 100%,#0f4a2a 0,transparent 45%),radial-gradient(ellipse at 0 100%,#0f4a2a 0,transparent 40%),#33060b!important;background-attachment:fixed!important}'
         +'html[data-tema="'+id+'"] #header{border-bottom:6px solid transparent!important;border-image:repeating-linear-gradient(135deg,#fff 0 10px,#e01e37 10px 20px) 6!important;background:linear-gradient(180deg,#7a0f1b,#47090f)!important}'
@@ -153,8 +158,7 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
         +'html:not([data-app="pos"]) #tema-esquina{bottom:70px;font-size:30px;opacity:.9}'
         +'#tema-esquina b{display:inline-block;font-weight:400;animation:temaSalta 2.4s ease-in-out infinite}#tema-esquina b:nth-child(2){animation-delay:.5s;font-size:30px}#tema-esquina b:nth-child(3){animation-delay:1s;font-size:30px}'
         +'@keyframes temaSalta{50%{transform:translateY(-5px) rotate(-4deg)}}'
-        +'@media (prefers-reduced-motion:reduce){#tema-trineo{display:none}#tema-esquina b{animation:none}}'
-        +'@media (prefers-reduced-motion:reduce){#tema-nieve{display:none}#tema-luces{animation:none}}';
+        +'@media (prefers-reduced-motion:reduce){#tema-trineo{display:none}#tema-esquina b{animation:none}}';
     }
     (function(){
       var poner=function(){
@@ -166,6 +170,7 @@ function a52Ahora(){return new Date().getTime()+(window._a52Off||0);}
           var cuantos=r.getAttribute('data-app')==='pos'?16:26,h='';
           for(var k=0;k<cuantos;k++)h+='<i style="left:'+((k*97+13)%100)+'%;font-size:'+(9+(k*7)%10)+'px;animation-duration:'+(9+(k*5)%9)+'s;animation-delay:-'+((k*3)%11)+'s">❄</i>';
           n.innerHTML=h;document.body.appendChild(n);}
+        if(!T.trineo){if(tr)tr.remove();if(es)es.remove();return;}
         if(!tr){tr=document.createElement('div');tr.id='tema-trineo';tr.setAttribute('aria-hidden','true');tr.textContent='🦌🦌🦌🛷🎅';document.body.appendChild(tr);}
         if(!es){es=document.createElement('div');es.id='tema-esquina';es.setAttribute('aria-hidden','true');es.innerHTML='<b>🎄</b><b>🧝</b><b>🦌</b>';document.body.appendChild(es);}
       };

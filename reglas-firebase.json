@@ -19,6 +19,10 @@
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
     },
+    "cuentaPublica": {
+      ".read": true,
+      ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"
+    },
     "combos": {
       ".read": true,
       ".write": "auth != null && root.child('equipos').child(auth.uid).child('ok').val() === true"

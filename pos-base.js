@@ -463,7 +463,9 @@ function iniciarSync(){
     _notifChequearPedidos();
     renderSoloPedido();updateHeader();actualizarColorMesas();
     try{A52APP.refrescar();}catch(e){}
+    a52PublicarCuentas();
   });
+  fbOn('cuentaPublica',function(v){_cuRemoto=JSON.stringify(v||{});a52PublicarCuentas();});
   fbOn('ventas',function(v){ventas=v?Object.keys(v).map(function(k){var o=v[k];o._fbkey=k;return o;}):[];_sndChequearVentas();updateHeader();try{A52APP.refrescar();}catch(e){}if(tabActual==='ventas'||tabActual==='caja')render();});
   fbOn('gastos',function(v){gastos=v?Object.values(v):[];if(tabActual==='gastos'||tabActual==='caja')render();});
   fbOn('menu',function(v){window._menuSrv=v?JSON.parse(JSON.stringify(v)):null;_cpMenuListo=!!v;setTimeout(a52PublicarCarta,0);if(v){menu=Object.values(v);menu.forEach(function(m){if(m.stock==null||isNaN(parseInt(m.stock)))m.stock=0;else m.stock=parseInt(m.stock);});}if(usuarioActivo&&usuarioActivo.rol==='admin'&&typeof recalcularCombos==='function'){clearTimeout(window._rcT);window._rcT=setTimeout(function(){try{recalcularCombos('precios de la carta',true);}catch(e){}},2500);}if(tabActual==='carta'||tabActual==='inventario')render();});
@@ -478,7 +480,7 @@ function iniciarSync(){
     ingredientes.forEach(function(i){if(i.stock==null||isNaN(parseInt(i.stock)))i.stock=0;else i.stock=parseInt(i.stock);});
     if(tabActual==='inventario'||tabActual==='cocina')render();
   });
-  fbOn('mesas',function(v){if(v){mesas=Object.values(v);_mesasDeFabrica=false;a52ZonasArmar();}if(tabActual==='mesas')render();});
+  fbOn('mesas',function(v){if(v){mesas=Object.values(v);_mesasDeFabrica=false;a52ZonasArmar();}if(tabActual==='mesas')render();a52PublicarCuentas();});
   fbOn('configBar',function(v){
     if(v&&typeof v.descuentoHabilitado!=='undefined')descuentoHabilitado=!!v.descuentoHabilitado;
     if(v&&v.descuentoPcts)descuentoPcts=Array.isArray(v.descuentoPcts)?v.descuentoPcts:Object.values(v.descuentoPcts);
